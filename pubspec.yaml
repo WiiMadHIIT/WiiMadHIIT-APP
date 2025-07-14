@@ -97,3 +97,17 @@ flutter:
 
   assets:
     - assets/icons/wiimadhiit-w.svg
+    - assets/icons/wiimadhiit-w-active.svg
+    - assets/icons/wiimadhiit-w-inactive.svg
+    - assets/icons/profile-active.svg
+    - assets/icons/profile-inactive.svg
+    - assets/icons/pk-active.svg
+    - assets/icons/pk-inactive.svg
+    - assets/icons/ground-active.svg
+    - assets/icons/ground-inactive.svg
+    - assets/icons/activity-active.svg
+    - assets/icons/activity-inactive.svg
+    - assets/icons/bonus-active.svg
+    - assets/icons/bonus-inactive.svg
+    - assets/icons/training-active.svg
+    - assets/icons/training-inactive.svg

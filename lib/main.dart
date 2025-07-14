@@ -6,6 +6,8 @@ import 'core/theme/app_text_styles.dart';
 import 'presentation/profile/profile_page.dart';
 import 'presentation/challenge/challenge_page.dart';
 import 'presentation/home/home_page.dart';
+import 'presentation/bonus/bonus_page.dart';
+import 'presentation/checkin/checkin_page.dart';
 import 'routes/app_routes.dart';
 
 void main() {
@@ -41,6 +43,8 @@ class _MainTabPageState extends State<MainTabPage> {
   final List<Widget> _pages = const [
     HomePage(),
     ChallengePage(),
+    CheckinPage(),
+    BonusPage(),
     ProfilePage(),
   ];
 
@@ -75,36 +79,55 @@ class _MainTabPageState extends State<MainTabPage> {
           selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
             color: AppColors.primary,
             fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
           ),
           unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
             color: AppColors.textSecondary,
             fontWeight: FontWeight.w500,
+            letterSpacing: 0.1,
           ),
           showUnselectedLabels: true,
           type: BottomNavigationBarType.fixed,
           elevation: 0,
+          iconSize: 28,
           items: [
             BottomNavigationBarItem(
-              icon: _NavIconModern(
-                icon: AppIcons.cupertinoHome,
+              icon: _SvgTabIcon(
                 active: _currentIndex == 0,
-                label: 'Home',
+                activeAsset: 'wiimadhiit-w-active',
+                inactiveAsset: 'wiimadhiit-w-inactive',
               ),
-              label: 'Home',
+              label: 'Wiimad',
             ),
             BottomNavigationBarItem(
-              icon: _NavIconModern(
-                icon: AppIcons.cupertinoStar,
+              icon: _SvgTabIcon(
                 active: _currentIndex == 1,
-                label: 'Challenge',
+                activeAsset: 'pk-active',
+                inactiveAsset: 'pk-inactive',
               ),
               label: 'Challenge',
             ),
             BottomNavigationBarItem(
-              icon: _NavIconModern(
-                icon: AppIcons.cupertinoProfile,
+              icon: _SvgTabIcon(
                 active: _currentIndex == 2,
-                label: 'Profile',
+                activeAsset: 'training-active',
+                inactiveAsset: 'training-inactive',
+              ),
+              label: 'Check-in',
+            ),
+            BottomNavigationBarItem(
+              icon: _SvgTabIcon(
+                active: _currentIndex == 3,
+                activeAsset: 'bonus-active',
+                inactiveAsset: 'bonus-inactive',
+              ),
+              label: 'Bonus',
+            ),
+            BottomNavigationBarItem(
+              icon: _SvgTabIcon(
+                active: _currentIndex == 4,
+                activeAsset: 'profile-active',
+                inactiveAsset: 'profile-inactive',
               ),
               label: 'Profile',
             ),
@@ -216,6 +239,48 @@ class _NavIconModern extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+// 新增SVG Tab Icon组件，紧凑青春有力量感
+class _SvgTabIcon extends StatelessWidget {
+  final bool active;
+  final String activeAsset;
+  final String inactiveAsset;
+  const _SvgTabIcon({required this.active, required this.activeAsset, required this.inactiveAsset});
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isWiimadInactive = !active && inactiveAsset == 'wiimadhiit-w-inactive';
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      width: 32,
+      height: 32,
+      alignment: Alignment.center,
+      child: isWiimadInactive
+          ? Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFD8D8D8),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                AppIcons.svg(
+                  inactiveAsset,
+                  size: 24,
+                ),
+              ],
+            )
+          : AppIcons.svg(
+              active ? activeAsset : inactiveAsset,
+              size: active ? 28 : 24,
+            ),
     );
   }
 }
