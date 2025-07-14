@@ -11,63 +11,182 @@ const List<String> fontFallback = [
 ];
 
 class AppTextStyles {
-  static const TextStyle headline1 = TextStyle(
+  // Display
+  static const TextStyle displayLarge = TextStyle(
     fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.bold,
+    fontWeight: FontWeight.w700, // Bold
+    fontSize: 34,
+    height: 1.2,
+    color: AppColors.textPrimary,
+  );
+  static const TextStyle displayMedium = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w700, // Bold
     fontSize: 28,
-    color: AppColors.black,
+    height: 1.2,
+    color: AppColors.textPrimary,
   );
-  static const TextStyle headline2 = TextStyle(
+  static const TextStyle displaySmall = TextStyle(
     fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w600, // Semibold
     fontSize: 22,
-    color: AppColors.black,
-  );
-  static const TextStyle subtitle1 = TextStyle(
-    fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.w500,
-    fontSize: 18,
-    color: AppColors.grey5,
-  );
-  static const TextStyle body1 = TextStyle(
-    fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.normal,
-    fontSize: 16,
-    color: AppColors.grey5,
-  );
-  static const TextStyle body2 = TextStyle(
-    fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.normal,
-    fontSize: 14,
-    color: AppColors.grey4,
-  );
-  static const TextStyle button = TextStyle(
-    fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.w600,
-    fontSize: 16,
-    color: AppColors.primary,
-  );
-  static const TextStyle caption = TextStyle(
-    fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.normal,
-    fontSize: 12,
-    color: AppColors.grey4,
-  );
-  static const TextStyle disabled = TextStyle(
-    fontFamilyFallback: fontFallback,
-    fontWeight: FontWeight.normal,
-    fontSize: 16,
-    color: AppColors.grey3,
+    height: 1.2,
+    color: AppColors.textPrimary,
   );
 
+  // Headline
+  static const TextStyle headlineLarge = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w600, // Semibold
+    fontSize: 20,
+    height: 1.25,
+    color: AppColors.textPrimary,
+  );
+  static const TextStyle headlineMedium = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w500, // Medium
+    fontSize: 17,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+  static const TextStyle headlineSmall = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 16,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+
+  // Title
+  static const TextStyle titleLarge = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w600, // Semibold
+    fontSize: 17,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+  static const TextStyle titleMedium = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w500, // Medium
+    fontSize: 15,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+  static const TextStyle titleSmall = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w500, // Medium
+    fontSize: 13,
+    height: 1.3,
+    color: AppColors.textSecondary,
+  );
+
+  // Body
+  static const TextStyle bodyLarge = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 17,
+    height: 1.4,
+    color: AppColors.textPrimary,
+  );
+  static const TextStyle bodyMedium = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 15,
+    height: 1.4,
+    color: AppColors.textSecondary,
+  );
+  static const TextStyle bodySmall = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 13,
+    height: 1.4,
+    color: AppColors.textSecondary,
+  );
+
+  // Label/Button
+  static const TextStyle labelLarge = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w700, // Bold
+    fontSize: 16,
+    height: 1.2,
+    color: AppColors.primary,
+    letterSpacing: 0.2,
+  );
+  static const TextStyle labelMedium = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w600, // Semibold
+    fontSize: 14,
+    height: 1.2,
+    color: AppColors.primary,
+    letterSpacing: 0.1,
+  );
+  static const TextStyle labelSmall = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w500, // Medium
+    fontSize: 12,
+    height: 1.2,
+    color: AppColors.primary,
+  );
+
+  // Caption/Footnote/Overline
+  static const TextStyle caption = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 12,
+    height: 1.2,
+    color: AppColors.textSecondary,
+  );
+  static const TextStyle footnote = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 11,
+    height: 1.2,
+    color: AppColors.textDisabled,
+  );
+  static const TextStyle overline = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 10,
+    height: 1.2,
+    color: AppColors.textDisabled,
+    letterSpacing: 1.5,
+  );
+
+  // Disabled
+  static const TextStyle disabled = TextStyle(
+    fontFamilyFallback: fontFallback,
+    fontWeight: FontWeight.w400, // Regular
+    fontSize: 16,
+    height: 1.2,
+    color: AppColors.textDisabled,
+  );
+
+  // 等宽/代码
+  static const TextStyle mono = TextStyle(
+    fontFamily: 'SF Mono',
+    fontFamilyFallback: ['Menlo', 'Consolas', 'monospace'],
+    fontWeight: FontWeight.w500,
+    fontSize: 14,
+    height: 1.3,
+    color: AppColors.dark40,
+  );
+
+  // 全局 TextTheme 映射
   static TextTheme textTheme = TextTheme(
-    displayLarge: headline1,
-    displayMedium: headline2,
-    titleMedium: subtitle1,
-    bodyLarge: body1,
-    bodyMedium: body2,
-    labelLarge: button,
-    bodySmall: caption,
-    labelSmall: disabled,
+    displayLarge: displayLarge,
+    displayMedium: displayMedium,
+    displaySmall: displaySmall,
+    headlineLarge: headlineLarge,
+    headlineMedium: headlineMedium,
+    headlineSmall: headlineSmall,
+    titleLarge: titleLarge,
+    titleMedium: titleMedium,
+    titleSmall: titleSmall,
+    bodyLarge: bodyLarge,
+    bodyMedium: bodyMedium,
+    bodySmall: bodySmall,
+    labelLarge: labelLarge,
+    labelMedium: labelMedium,
+    labelSmall: labelSmall,
   );
 }
