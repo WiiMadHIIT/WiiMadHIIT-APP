@@ -34,6 +34,12 @@ class CheckinViewModel extends ChangeNotifier {
       iconAsset: "assets/icons/cardio.svg",
       checkedIn: false,
     ),
+    ProductCheckin(
+      name: "Strength",
+      description: "Strength Training",
+      iconAsset: "assets/icons/strength.svg",
+      checkedIn: false,
+    )
   ];
 
   List<ProductCheckin> get products => List.unmodifiable(_products);

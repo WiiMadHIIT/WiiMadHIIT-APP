@@ -9,6 +9,7 @@ import 'presentation/home/home_page.dart';
 import 'presentation/bonus/bonus_page.dart';
 import 'presentation/checkin/checkin_page.dart';
 import 'routes/app_routes.dart';
+import 'dart:ui';
 
 void main() {
   runApp(const MyApp());
@@ -55,84 +56,95 @@ class _MainTabPageState extends State<MainTabPage> {
         index: _currentIndex,
         children: _pages,
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.shadow,
-              blurRadius: 12,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          backgroundColor: AppColors.card,
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: AppColors.icon,
-          selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.2,
+      bottomNavigationBar: _currentIndex == 2
+          ? ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: _buildTabBar(context, glass: true),
+              ),
+            )
+          : _buildTabBar(context, glass: false),
+    );
+  }
+
+  Widget _buildTabBar(BuildContext context, {bool glass = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: glass ? Colors.black.withOpacity(0.18) : AppColors.card, // 这里改为黑色半透明
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 12,
+            offset: const Offset(0, -2),
           ),
-          unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.1,
-          ),
-          showUnselectedLabels: true,
-          type: BottomNavigationBarType.fixed,
-          elevation: 0,
-          iconSize: 28,
-          items: [
-            BottomNavigationBarItem(
-              icon: _SvgTabIcon(
-                active: _currentIndex == 0,
-                activeAsset: 'wiimadhiit-w-active',
-                inactiveAsset: 'wiimadhiit-w-inactive',
-              ),
-              label: 'Wiimad',
-            ),
-            BottomNavigationBarItem(
-              icon: _SvgTabIcon(
-                active: _currentIndex == 1,
-                activeAsset: 'pk-active',
-                inactiveAsset: 'pk-inactive',
-              ),
-              label: 'Challenge',
-            ),
-            BottomNavigationBarItem(
-              icon: _SvgTabIcon(
-                active: _currentIndex == 2,
-                activeAsset: 'training-active',
-                inactiveAsset: 'training-inactive',
-              ),
-              label: 'Check-in',
-            ),
-            BottomNavigationBarItem(
-              icon: _SvgTabIcon(
-                active: _currentIndex == 3,
-                activeAsset: 'bonus-active',
-                inactiveAsset: 'bonus-inactive',
-              ),
-              label: 'Bonus',
-            ),
-            BottomNavigationBarItem(
-              icon: _SvgTabIcon(
-                active: _currentIndex == 4,
-                activeAsset: 'profile-active',
-                inactiveAsset: 'profile-inactive',
-              ),
-              label: 'Profile',
-            ),
-          ],
+        ],
+      ),
+      child: BottomNavigationBar(
+        backgroundColor: Colors.transparent,
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.icon,
+        selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
         ),
+        unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.1,
+        ),
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
+        iconSize: 28,
+        items: [
+          BottomNavigationBarItem(
+            icon: _SvgTabIcon(
+              active: _currentIndex == 0,
+              activeAsset: 'wiimadhiit-w-active',
+              inactiveAsset: 'wiimadhiit-w-inactive',
+            ),
+            label: 'Wiimad',
+          ),
+          BottomNavigationBarItem(
+            icon: _SvgTabIcon(
+              active: _currentIndex == 1,
+              activeAsset: 'pk-active',
+              inactiveAsset: 'pk-inactive',
+            ),
+            label: 'Challenge',
+          ),
+          BottomNavigationBarItem(
+            icon: _SvgTabIcon(
+              active: _currentIndex == 2,
+              activeAsset: 'training-active',
+              inactiveAsset: 'training-inactive',
+            ),
+            label: 'Check-in',
+          ),
+          BottomNavigationBarItem(
+            icon: _SvgTabIcon(
+              active: _currentIndex == 3,
+              activeAsset: 'bonus-active',
+              inactiveAsset: 'bonus-inactive',
+            ),
+            label: 'Bonus',
+          ),
+          BottomNavigationBarItem(
+            icon: _SvgTabIcon(
+              active: _currentIndex == 4,
+              activeAsset: 'profile-active',
+              inactiveAsset: 'profile-inactive',
+            ),
+            label: 'Profile',
+          ),
+        ],
       ),
     );
   }

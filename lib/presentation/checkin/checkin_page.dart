@@ -2,19 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
-import 'dart:ui'; // Added for ImageFilter
+import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:math' as math;
+import 'dart:ui';
 
 class ProductCheckin {
   final String name;
   final String description;
   final String iconAsset;
-  bool checkedIn;
+  final String routeName;
 
   ProductCheckin({
     required this.name,
     required this.description,
     required this.iconAsset,
-    this.checkedIn = false,
+    required this.routeName,
   });
 }
 
@@ -32,11 +34,31 @@ class _CheckinPageState extends State<CheckinPage> {
       name: "HIIT Pro",
       description: "High-Intensity Interval Training",
       iconAsset: "assets/icons/hiit.svg",
+      routeName: "/hiit",
     ),
     ProductCheckin(
       name: "Yoga Flex",
       description: "Daily Yoga Flexibility",
       iconAsset: "assets/icons/yoga.svg",
+      routeName: "/yoga",
+    ),
+    ProductCheckin(
+      name: "Yoga Flex",
+      description: "Daily Yoga Flexibility",
+      iconAsset: "assets/icons/yoga.svg",
+      routeName: "/yoga",
+    ),
+    ProductCheckin(
+      name: "Yoga Flex",
+      description: "Daily Yoga Flexibility",
+      iconAsset: "assets/icons/yoga.svg",
+      routeName: "/yoga",
+    ),
+    ProductCheckin(
+      name: "Yoga Flex",
+      description: "Daily Yoga Flexibility",
+      iconAsset: "assets/icons/yoga.svg",
+      routeName: "/yoga",
     ),
     // 可扩展更多产品
   ];
@@ -59,16 +81,18 @@ class _CheckinPageState extends State<CheckinPage> {
     super.dispose();
   }
 
-  void _toggleCheckin(int index) {
-    setState(() {
-      products[index].checkedIn = !products[index].checkedIn;
-    });
+  void _onProductTap(ProductCheckin product) {
+    Navigator.pushNamed(context, product.routeName);
   }
 
   @override
   Widget build(BuildContext context) {
+    final double maxCardWidth = 340;
+    final double minCardWidth = 240;
+    final double cardAspectRatio = 3.2; // 宽:高
+
     return Scaffold(
-      backgroundColor: Colors.black, // 视频未加载时的底色
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           // 全屏视频背景
@@ -84,148 +108,232 @@ class _CheckinPageState extends State<CheckinPage> {
                   )
                 : Container(color: Colors.black),
           ),
-          // 半透明/毛玻璃内容区
-          Positioned.fill(
-            child: SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 32),
-                  Center(
-                    child: Text(
-                      "Stay active, stay strong!",
-                      style: AppTextStyles.headlineLarge.copyWith(
+
+          // 顶部状态栏毛玻璃
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  height: MediaQuery.of(context).padding.top + 8,
+                  color: Colors.black.withOpacity(0.18),
+                ),
+              ),
+            ),
+          ),
+
+          // 顶部悬浮Logo（黑色半透明背景+红色发光阴影）
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 32,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.40),
+                  borderRadius: BorderRadius.circular(40),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.25), // 红色发光
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 0),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.25),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                  border: Border.all(color: Colors.black.withOpacity(0.18), width: 1.2),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.red.withOpacity(0.35), // 红色发光
+                            blurRadius: 16,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 0),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: SvgPicture.asset(
+                          'assets/icons/wiimadhiit-w-red.svg',
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      'WiiMadHIIT',
+                      style: AppTextStyles.headlineMedium.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 2.2,
                         shadows: [
                           Shadow(
                             color: Colors.black.withOpacity(0.5),
-                            blurRadius: 8,
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 32),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(28),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                        child: Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.symmetric(horizontal: 20),
-                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
-                            borderRadius: BorderRadius.circular(28),
-                            border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.2),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ...List.generate(products.length, (index) {
-                                final product = products[index];
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                  child: _ProductCard(
-                                    product: product,
-                                    onTap: () => _toggleCheckin(index),
-                                  ),
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
+          // 悬浮入口
+          if (products.isNotEmpty)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 64),
+                child: SizedBox(
+                  height: maxCardWidth / cardAspectRatio, // 保证卡片高度一致
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // 横向滑动，单个时居中
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: products.length == 1
+                            ? const NeverScrollableScrollPhysics()
+                            : const BouncingScrollPhysics(),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: products.map((product) {
+                            return Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 8),
+                              constraints: BoxConstraints(
+                                minWidth: minCardWidth,
+                                maxWidth: maxCardWidth,
+                              ),
+                              child: AspectRatio(
+                                aspectRatio: cardAspectRatio,
+                                child: _ProductEntry(
+                                  product: product,
+                                  onTap: () => _onProductTap(product),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          // 无入口时显示激励语
+          if (products.isEmpty)
+            Center(
+              child: Text(
+                "Stay active, stay strong!",
+                style: AppTextStyles.headlineLarge.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-class _ProductCard extends StatelessWidget {
+class _ProductEntry extends StatelessWidget {
   final ProductCheckin product;
   final VoidCallback onTap;
 
-  const _ProductCard({required this.product, required this.onTap});
+  const _ProductEntry({required this.product, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final isChecked = product.checkedIn;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color: isChecked ? AppColors.primary.withOpacity(0.85) : Colors.white.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            if (isChecked)
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+                color: AppColors.primary.withOpacity(0.18),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-        child: Row(
-          children: [
-            // TODO: 替换为SVG图片
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: isChecked ? Colors.white : AppColors.primary.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.fitness_center,
-                  color: isChecked ? AppColors.primary : AppColors.dark,
-                  size: 28,
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // TODO: 用SVG替换
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Icon(Icons.fitness_center, color: AppColors.primary, size: 24),
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            // 产品信息
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: AppTextStyles.titleLarge.copyWith(
-                      color: isChecked ? Colors.white : AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.titleLarge.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    product.description,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: isChecked ? Colors.white70 : AppColors.textSecondary,
+                    const SizedBox(height: 2),
+                    Text(
+                      product.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.dark40,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            // 点亮状态icon
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: isChecked
-                  ? Icon(Icons.check_circle, color: Colors.white, size: 28, key: ValueKey(true))
-                  : Icon(Icons.radio_button_unchecked, color: AppColors.primary, size: 28, key: ValueKey(false)),
-            ),
-          ],
+              const SizedBox(width: 16),
+              Icon(Icons.arrow_forward_ios, color: AppColors.primary, size: 20),
+            ],
+          ),
         ),
       ),
     );
