@@ -5,6 +5,8 @@ import '../../core/theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:math' as math;
 import 'dart:ui';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+import 'package:infinite_carousel/infinite_carousel.dart';
 
 class ProductCheckin {
   final String name;
@@ -62,10 +64,13 @@ class _CheckinPageState extends State<CheckinPage> {
     ),
     // 可扩展更多产品
   ];
+  late InfiniteScrollController _carouselController;
+  int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    _carouselController = InfiniteScrollController(initialItem: 0);
     _controller = VideoPlayerController.asset('assets/video/video1.mp4')
       ..setLooping(true)
       ..setVolume(0)
@@ -78,6 +83,7 @@ class _CheckinPageState extends State<CheckinPage> {
   @override
   void dispose() {
     _controller.dispose();
+    _carouselController.dispose();
     super.dispose();
   }
 
@@ -87,9 +93,8 @@ class _CheckinPageState extends State<CheckinPage> {
 
   @override
   Widget build(BuildContext context) {
-    final double maxCardWidth = 340;
-    final double minCardWidth = 240;
-    final double cardAspectRatio = 3.2; // 宽:高
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double cardWidth = screenWidth * 0.78; // 78% 屏幕宽度
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -199,46 +204,56 @@ class _CheckinPageState extends State<CheckinPage> {
             ),
           ),
           // 悬浮入口
-          if (products.isNotEmpty)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 64),
-                child: SizedBox(
-                  height: maxCardWidth / cardAspectRatio, // 保证卡片高度一致
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      // 横向滑动，单个时居中
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: products.length == 1
-                            ? const NeverScrollableScrollPhysics()
-                            : const BouncingScrollPhysics(),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: products.map((product) {
-                            return Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 8),
-                              constraints: BoxConstraints(
-                                minWidth: minCardWidth,
-                                maxWidth: maxCardWidth,
-                              ),
-                              child: AspectRatio(
-                                aspectRatio: cardAspectRatio,
-                                child: _ProductEntry(
-                                  product: product,
-                                  onTap: () => _onProductTap(product),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      );
-                    },
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 64),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 140,
+                    child: InfiniteCarousel.builder(
+                      itemCount: products.length,
+                      itemExtent: cardWidth,
+                      anchor: 0.5,
+                      center: true,
+                      loop: true,
+                      controller: _carouselController,
+                      onIndexChanged: (index) {
+                        setState(() {
+                          _currentIndex = index;
+                        });
+                      },
+                      itemBuilder: (context, itemIndex, realIndex) {
+                        final product = products[itemIndex];
+                        return AnimatedScale(
+                          scale: _currentIndex == itemIndex ? 1.0 : 0.92,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.ease,
+                          child: _ProductEntry(
+                            product: product,
+                            onTap: () => _onProductTap(product),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  AnimatedSmoothIndicator(
+                    activeIndex: _currentIndex,
+                    count: products.length,
+                    effect: ExpandingDotsEffect(
+                      dotHeight: 8,
+                      dotWidth: 8,
+                      activeDotColor: AppColors.primary,
+                      dotColor: Colors.white.withOpacity(0.3),
+                    ),
+                  ),
+                ],
               ),
             ),
+          ),
           // 无入口时显示激励语
           if (products.isEmpty)
             Center(
