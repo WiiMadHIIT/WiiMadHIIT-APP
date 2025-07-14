@@ -36,6 +36,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_svg: ^2.0.10
+  video_player: ^2.8.1
 
 dev_dependencies:
   flutter_test:
@@ -111,3 +112,4 @@ flutter:
     - assets/icons/bonus-inactive.svg
     - assets/icons/training-active.svg
     - assets/icons/training-inactive.svg
+    - assets/video/video1.mp4
