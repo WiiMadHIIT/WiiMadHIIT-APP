@@ -385,29 +385,58 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
   }
 }
 
-class _AnimatedButton extends StatefulWidget {
-  final VoidCallback onPressed;
+class PowerfulTapEffect extends StatefulWidget {
   final Widget child;
+  final VoidCallback onTap;
+  final double pressedScale;
+  final Duration pressDuration;
+  final Duration reboundDuration;
+  final Curve reboundCurve;
 
-  const _AnimatedButton({required this.onPressed, required this.child});
+  const PowerfulTapEffect({
+    required this.child,
+    required this.onTap,
+    this.pressedScale = 0.90,
+    this.pressDuration = const Duration(milliseconds: 80),
+    this.reboundDuration = const Duration(milliseconds: 320),
+    this.reboundCurve = Curves.elasticOut,
+    Key? key,
+  }) : super(key: key);
 
   @override
-  State<_AnimatedButton> createState() => _AnimatedButtonState();
+  State<PowerfulTapEffect> createState() => _PowerfulTapEffectState();
 }
 
-class _AnimatedButtonState extends State<_AnimatedButton> {
+class _PowerfulTapEffectState extends State<PowerfulTapEffect> {
   double _scale = 1.0;
+  bool _isAnimating = false;
+
+  Future<void> _handleTap() async {
+    if (_isAnimating) return;
+    setState(() {
+      _scale = widget.pressedScale;
+      _isAnimating = true;
+    });
+    await Future.delayed(widget.pressDuration);
+    setState(() {
+      _scale = 1.0;
+    });
+    await Future.delayed(widget.reboundDuration);
+    widget.onTap();
+    setState(() {
+      _isAnimating = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.96),
-      onTapUp: (_) => setState(() => _scale = 1.0),
-      onTapCancel: () => setState(() => _scale = 1.0),
-      onTap: widget.onPressed,
+      onTap: _handleTap,
+      behavior: HitTestBehavior.translucent,
       child: AnimatedScale(
         scale: _scale,
-        duration: const Duration(milliseconds: 100),
+        duration: _scale < 1.0 ? widget.pressDuration : widget.reboundDuration,
+        curve: _scale < 1.0 ? Curves.easeIn : widget.reboundCurve,
         child: widget.child,
       ),
     );
@@ -427,21 +456,11 @@ class _ProductEntry extends StatefulWidget {
 class _ProductEntryState extends State<_ProductEntry> {
   double _scale = 1.0;
 
-  void _onTapDown(TapDownDetails details) {
-    setState(() {
-      _scale = 0.97;
-    });
-  }
-
-  void _onTapUp(TapUpDetails details) {
-    setState(() {
-      _scale = 1.0;
-    });
-  }
-
-  void _onTapCancel() {
-    setState(() {
-      _scale = 1.0;
+  void _onTap() {
+    setState(() => _scale = 0.97);
+    Future.delayed(const Duration(milliseconds: 80), () {
+      setState(() => _scale = 1.0);
+      widget.onTap();
     });
   }
 
@@ -451,127 +470,169 @@ class _ProductEntryState extends State<_ProductEntry> {
       scale: _scale,
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          splashColor: AppColors.primary.withOpacity(0.08),
-          highlightColor: AppColors.primary.withOpacity(0.10),
-          onTap: widget.onTap,
-          onTapDown: _onTapDown,
-          onTapUp: _onTapUp,
-          onTapCancel: _onTapCancel,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.92),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.18),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // 让内容自适应高度
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 顶部小标签
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'CHECK-IN',
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
+      child: PowerfulTapEffect(
+        onTap: _onTap,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            splashColor: AppColors.primary.withOpacity(0.08),
+            highlightColor: AppColors.primary.withOpacity(0.10),
+            onTap: _onTap,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.18),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min, // 让内容自适应高度
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 顶部小标签
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'CHECK-IN',
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // 主体内容
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // 主体内容
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Icon(Icons.fitness_center, color: AppColors.primary, size: 24),
+                        ),
                       ),
-                      child: Center(
-                        child: Icon(Icons.fitness_center, color: AppColors.primary, size: 24),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.product.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.titleLarge.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.product.description,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.dark40,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.product.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.titleLarge.copyWith(
-                              color: AppColors.primary,
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  // 明确的操作按钮
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: PowerfulTapEffect(
+                      onTap: widget.onTap,
+                      pressedScale: 0.90, // 力量感更强
+                      pressDuration: Duration(milliseconds: 80),
+                      reboundDuration: Duration(milliseconds: 320),
+                      reboundCurve: Curves.elasticOut,
+                      child: _AnimatedButton(
+                        onPressed: () {}, // 保持按钮可用，实际逻辑由外层PowerfulTapEffect控制
+                        child: ElevatedButton.icon(
+                          onPressed: () {}, // 保持按钮可用，实际逻辑由外层PowerfulTapEffect控制
+                          icon: const Icon(Icons.flash_on, size: 18, color: Colors.white),
+                          label: Text(
+                            'Start Training',
+                            style: AppTextStyles.labelLarge.copyWith(
+                              color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.product.description,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.dark40,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            elevation: 0,
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                // 明确的操作按钮
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _AnimatedButton(
-                    onPressed: widget.onTap,
-                    child: ElevatedButton.icon(
-                      onPressed: widget.onTap,
-                      icon: const Icon(Icons.flash_on, size: 18, color: Colors.white),
-                      label: Text(
-                        'Start Training',
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
                         ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        elevation: 0,
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AnimatedButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final Widget child;
+
+  const _AnimatedButton({required this.onPressed, required this.child});
+
+  @override
+  State<_AnimatedButton> createState() => _AnimatedButtonState();
+}
+
+class _AnimatedButtonState extends State<_AnimatedButton> {
+  double _scale = 1.0;
+
+  void _onTap() {
+    setState(() => _scale = 0.90);
+    Future.delayed(const Duration(milliseconds: 80), () {
+      setState(() => _scale = 1.0);
+      widget.onPressed();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _onTap,
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.elasticOut,
+        child: widget.child,
       ),
     );
   }
