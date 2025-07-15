@@ -66,6 +66,7 @@ class _CheckinPageState extends State<CheckinPage> {
   ];
   late InfiniteScrollController _carouselController;
   int _currentIndex = 0;
+  late final PageController _pageController = PageController(viewportFraction: 0.78);
 
   @override
   void initState() {
@@ -84,6 +85,7 @@ class _CheckinPageState extends State<CheckinPage> {
   void dispose() {
     _controller.dispose();
     _carouselController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -119,12 +121,18 @@ class _CheckinPageState extends State<CheckinPage> {
             top: 0,
             left: 0,
             right: 0,
-            child: ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  height: MediaQuery.of(context).padding.top + 8,
-                  color: Colors.black.withOpacity(0.18),
+            child: Container(
+              height: MediaQuery.of(context).padding.top + 44, // 顶部+渐变高度
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color.fromRGBO(0, 0, 0, 0.22), // 顶部较深
+                    Color.fromRGBO(0, 0, 0, 0.10),
+                    Colors.transparent,
+                  ],
+                  stops: [0.0, 0.6, 1.0],
                 ),
               ),
             ),
@@ -213,27 +221,22 @@ class _CheckinPageState extends State<CheckinPage> {
                 children: [
                   SizedBox(
                     height: 140,
-                    child: InfiniteCarousel.builder(
+                    child: PageView.builder(
+                      controller: _pageController,
                       itemCount: products.length,
-                      itemExtent: cardWidth,
-                      anchor: 0.5,
-                      center: true,
-                      loop: true,
-                      controller: _carouselController,
-                      onIndexChanged: (index) {
+                      physics: const PageScrollPhysics(), // 强磁吸
+                      onPageChanged: (index) {
                         setState(() {
                           _currentIndex = index;
                         });
                       },
-                      itemBuilder: (context, itemIndex, realIndex) {
-                        final product = products[itemIndex];
+                      itemBuilder: (context, index) {
                         return AnimatedScale(
-                          scale: _currentIndex == itemIndex ? 1.0 : 0.92,
+                          scale: _currentIndex == index ? 1.0 : 0.92,
                           duration: const Duration(milliseconds: 300),
-                          curve: Curves.ease,
                           child: _ProductEntry(
-                            product: product,
-                            onTap: () => _onProductTap(product),
+                            product: products[index],
+                            onTap: () => _onProductTap(products[index]),
                           ),
                         );
                       },
