@@ -152,6 +152,8 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
 
         List<Widget> stack = [];
         for (int i = 0; i < products.length; i++) {
+          // 只渲染前后1页，提升性能
+          if ((i - page).abs() > 1.2) continue;
           final offset = (i - page) * MediaQuery.of(context).size.height;
           final opacity = (1.0 - (i - page).abs()).clamp(0.0, 1.0);
 
@@ -190,18 +192,9 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 全屏视频背景
+          // 全屏视频背景（TikTok风格上下滑动切换）
           Positioned.fill(
-            child: _videoControllers[_currentIndex].value.isInitialized
-                ? FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: _videoControllers[_currentIndex].value.size.width,
-                      height: _videoControllers[_currentIndex].value.size.height,
-                      child: VideoPlayer(_videoControllers[_currentIndex]),
-                    ),
-                  )
-                : Container(color: Colors.black),
+            child: _buildVideoStack(),
           ),
 
           // 顶部状态栏毛玻璃
