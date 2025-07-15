@@ -13,12 +13,14 @@ class ProductCheckin {
   final String description;
   final String iconAsset;
   final String routeName;
+  final String? videoAsset; // 新增，可选
 
   ProductCheckin({
     required this.name,
     required this.description,
     required this.iconAsset,
     required this.routeName,
+    this.videoAsset,
   });
 }
 
@@ -29,68 +31,154 @@ class CheckinPage extends StatefulWidget {
   State<CheckinPage> createState() => _CheckinPageState();
 }
 
-class _CheckinPageState extends State<CheckinPage> {
+class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStateMixin {
   late VideoPlayerController _controller;
+  VideoPlayerController? _nextController;
+  late InfiniteScrollController _carouselController;
+  int _currentIndex = 0;
+  late final PageController _pageController = PageController(viewportFraction: 0.78);
+  late final AnimationController _videoSwitchAnim;
+  bool _isSwitchingVideo = false;
+  late final List<VideoPlayerController> _videoControllers;
+
+  // 这里必须有
   final List<ProductCheckin> products = [
     ProductCheckin(
       name: "HIIT Pro",
       description: "High-Intensity Interval Training",
       iconAsset: "assets/icons/hiit.svg",
       routeName: "/hiit",
+      videoAsset: "assets/video/video1.mp4",
     ),
     ProductCheckin(
       name: "Yoga Flex",
       description: "Daily Yoga Flexibility",
       iconAsset: "assets/icons/yoga.svg",
       routeName: "/yoga",
+      videoAsset: "assets/video/video2.mp4",
     ),
     ProductCheckin(
       name: "Yoga Flex",
       description: "Daily Yoga Flexibility",
       iconAsset: "assets/icons/yoga.svg",
       routeName: "/yoga",
+      videoAsset: "assets/video/video3.mp4",
     ),
     ProductCheckin(
-      name: "Yoga Flex",
-      description: "Daily Yoga Flexibility",
-      iconAsset: "assets/icons/yoga.svg",
-      routeName: "/yoga",
+      name: "HIIT Pro",
+      description: "High-Intensity Interval Training",
+      iconAsset: "assets/icons/hiit.svg",
+      routeName: "/hiit",
+      videoAsset: "",
     ),
     ProductCheckin(
-      name: "Yoga Flex",
-      description: "Daily Yoga Flexibility",
-      iconAsset: "assets/icons/yoga.svg",
-      routeName: "/yoga",
+      name: "HIIT Pro",
+      description: "High-Intensity Interval Training",
+      iconAsset: "assets/icons/hiit.svg",
+      routeName: "/hiit",
+      videoAsset: "",
     ),
-    // 可扩展更多产品
+    ProductCheckin(
+      name: "HIIT Pro",
+      description: "High-Intensity Interval Training",
+      iconAsset: "assets/icons/hiit.svg",
+      routeName: "/hiit",
+      videoAsset: "",
+    ),
+    ProductCheckin(
+      name: "HIIT Pro",
+      description: "High-Intensity Interval Training",
+      iconAsset: "assets/icons/hiit.svg",
+      routeName: "/hiit",
+      videoAsset: "",
+    ),
+    // ... 其他产品
   ];
-  late InfiniteScrollController _carouselController;
-  int _currentIndex = 0;
-  late final PageController _pageController = PageController(viewportFraction: 0.78);
 
   @override
   void initState() {
     super.initState();
     _carouselController = InfiniteScrollController(initialItem: 0);
-    _controller = VideoPlayerController.asset('assets/video/video1.mp4')
-      ..setLooping(true)
-      ..setVolume(0)
-      ..initialize().then((_) {
-        setState(() {});
-        _controller.play();
-      });
+    _videoSwitchAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _videoControllers = List.generate(products.length, (i) {
+      final asset = (products[i].videoAsset == null || products[i].videoAsset!.isEmpty)
+          ? 'assets/video/video1.mp4'
+          : products[i].videoAsset!;
+      final controller = VideoPlayerController.asset(asset)
+        ..setLooping(true)
+        ..setVolume(0);
+      controller.initialize();
+      if (i == 0) controller.play();
+      return controller;
+    });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
-    _carouselController.dispose();
+    for (final c in _videoControllers) {
+      c.dispose();
+    }
     _pageController.dispose();
     super.dispose();
   }
 
   void _onProductTap(ProductCheckin product) {
     Navigator.pushNamed(context, product.routeName);
+  }
+
+  void _onPageChanged(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+    for (int i = 0; i < _videoControllers.length; i++) {
+      if (i == index) {
+        _videoControllers[i].play();
+      } else {
+        _videoControllers[i].pause();
+      }
+    }
+  }
+
+  Widget _buildVideoStack() {
+    return AnimatedBuilder(
+      animation: _pageController,
+      builder: (context, child) {
+        final page = _pageController.hasClients && _pageController.page != null
+            ? _pageController.page!
+            : _currentIndex.toDouble();
+
+        List<Widget> stack = [];
+        for (int i = 0; i < products.length; i++) {
+          final offset = (i - page) * MediaQuery.of(context).size.height;
+          final opacity = (1.0 - (i - page).abs()).clamp(0.0, 1.0);
+
+          stack.add(
+            Positioned.fill(
+              child: Transform.translate(
+                offset: Offset(0, offset),
+                child: Opacity(
+                  opacity: opacity,
+                  child: _videoControllers[i].value.isInitialized
+                      ? FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _videoControllers[i].value.size.width,
+                            height: _videoControllers[i].value.size.height,
+                            child: VideoPlayer(_videoControllers[i]),
+                          ),
+                        )
+                      : Container(color: Colors.black),
+                ),
+              ),
+            ),
+          );
+        }
+        return Stack(children: stack);
+      },
+    );
   }
 
   @override
@@ -104,13 +192,13 @@ class _CheckinPageState extends State<CheckinPage> {
         children: [
           // 全屏视频背景
           Positioned.fill(
-            child: _controller.value.isInitialized
+            child: _videoControllers[_currentIndex].value.isInitialized
                 ? FittedBox(
                     fit: BoxFit.cover,
                     child: SizedBox(
-                      width: _controller.value.size.width,
-                      height: _controller.value.size.height,
-                      child: VideoPlayer(_controller),
+                      width: _videoControllers[_currentIndex].value.size.width,
+                      height: _videoControllers[_currentIndex].value.size.height,
+                      child: VideoPlayer(_videoControllers[_currentIndex]),
                     ),
                   )
                 : Container(color: Colors.black),
@@ -225,11 +313,7 @@ class _CheckinPageState extends State<CheckinPage> {
                       controller: _pageController,
                       itemCount: products.length,
                       physics: const PageScrollPhysics(), // 强磁吸
-                      onPageChanged: (index) {
-                        setState(() {
-                          _currentIndex = index;
-                        });
-                      },
+                      onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) {
                         return AnimatedScale(
                           scale: _currentIndex == index ? 1.0 : 0.92,

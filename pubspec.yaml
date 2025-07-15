@@ -116,3 +116,6 @@ flutter:
     - assets/icons/training-active.svg
     - assets/icons/training-inactive.svg
     - assets/video/video1.mp4
+    - assets/video/video2.mp4
+    - assets/video/video3.mp4
+
