@@ -110,8 +110,13 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
       final controller = VideoPlayerController.asset(asset)
         ..setLooping(true)
         ..setVolume(0);
-      controller.initialize();
-      if (i == 0) controller.play();
+      controller.initialize().then((_) {
+        if (i == 0) {
+          controller.play();
+        }
+        // 触发刷新，确保 build 能感知到初始化完成
+        if (mounted) setState(() {});
+      });
       return controller;
     });
   }
@@ -151,11 +156,14 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
             : _currentIndex.toDouble();
 
         List<Widget> stack = [];
+        bool hasInitialized = false;
         for (int i = 0; i < products.length; i++) {
           // 只渲染前后1页，提升性能
           if ((i - page).abs() > 1.2) continue;
           final offset = (i - page) * MediaQuery.of(context).size.height;
           final opacity = (1.0 - (i - page).abs()).clamp(0.0, 1.0);
+
+          if (_videoControllers[i].value.isInitialized) hasInitialized = true;
 
           stack.add(
             Positioned.fill(
@@ -172,7 +180,27 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
                             child: VideoPlayer(_videoControllers[i]),
                           ),
                         )
-                      : Container(color: Colors.black),
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          );
+        }
+        // 如果所有视频都没初始化，显示默认视频
+        if (!hasInitialized) {
+          stack.add(
+            Positioned.fill(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: 1, // 这里用1防止报错
+                  height: 1,
+                  child: VideoPlayer(
+                    VideoPlayerController.asset('assets/video/video1.mp4')
+                      ..setLooping(true)
+                      ..setVolume(0)
+                      ..initialize(),
+                  ),
                 ),
               ),
             ),
