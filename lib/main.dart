@@ -56,7 +56,7 @@ class _MainTabPageState extends State<MainTabPage> {
         index: _currentIndex,
         children: _pages,
       ),
-      bottomNavigationBar: _currentIndex == 1 || _currentIndex == 2
+      bottomNavigationBar: _currentIndex == 1 || _currentIndex == 2 || _currentIndex == 3
           ? ClipRect(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),

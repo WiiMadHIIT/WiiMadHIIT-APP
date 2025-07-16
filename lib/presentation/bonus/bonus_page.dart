@@ -310,15 +310,6 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
   }
 }
 
-// 渐变色方案
-final List<List<Color>> cardGradients = [
-  [Color(0xFF6EE7B7), Color(0xFF3B82F6)], // 青绿-蓝
-  [Color(0xFFFFA5EC), Color(0xFF7F53AC)], // 粉-紫
-  [Color(0xFFFFD6A5), Color(0xFFFF6F61)], // 橙-红
-  [Color(0xFFB2FEFA), Color(0xFF0ED2F7)], // 青-蓝
-  [Color(0xFFFFE29F), Color(0xFFFFA07A)], // 黄-橙
-];
-
 class _BonusCard extends StatefulWidget {
   final BonusActivity activity;
   final VoidCallback onTap;
@@ -343,11 +334,11 @@ class _BonusCardState extends State<_BonusCard> {
   @override
   Widget build(BuildContext context) {
     final List<List<Color>> cardGradients = [
-      [Color(0xFF6EE7B7), Color(0xFF3B82F6)],
-      [Color(0xFFFFA5EC), Color(0xFF7F53AC)],
-      [Color(0xFFFFD6A5), Color(0xFFFF6F61)],
-      [Color(0xFFB2FEFA), Color(0xFF0ED2F7)],
-      [Color(0xFFFFE29F), Color(0xFFFFA07A)],
+      [Color(0xFF6EE7B7), Color(0xFF3B82F6)], // 青绿-蓝
+      [Color(0xFFFFA5EC), Color(0xFF7F53AC)], // 粉-紫
+      [Color(0xFFFFD6A5), Color(0xFFFF6F61)], // 橙-红
+      [Color(0xFFB2FEFA), Color(0xFF0ED2F7)], // 青-蓝
+      [Color(0xFFFFE29F), Color(0xFFFFA07A)], // 黄-橙
     ];
     final gradient = cardGradients[widget.index % cardGradients.length];
     // 自动选择主色或黑色，提升对比度
