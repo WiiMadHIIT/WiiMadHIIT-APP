@@ -3,49 +3,39 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-class LeaderboardPage extends StatelessWidget {
-  LeaderboardPage({Key? key}) : super(key: key);
+class CheckinboardPage extends StatelessWidget {
+  CheckinboardPage({Key? key}) : super(key: key);
 
   // 示例数据
-  final List<Map<String, dynamic>> leaderboards = [
+  final List<Map<String, dynamic>> checkinboards = [
     {
-      'activity': '7-Day HIIT Showdown',
-      'participants': 128,
-      'topUser': {'name': 'John Doe', 'score': 980},
+      'activity': 'HIIT Pro',
+      'totalCheckins': 320,
+      'topUser': {'name': 'John Doe', 'country': 'USA', 'streak': 45, 'year': 120, 'quarter': 40, 'month': 15},
       'rankings': [
-        {'rank': 1, 'user': 'John Doe', 'score': 980},
-        {'rank': 2, 'user': 'Alice', 'score': 950},
-        {'rank': 3, 'user': 'Bob', 'score': 900},
+        {'rank': 1, 'user': 'John Doe', 'country': 'USA', 'streak': 45, 'year': 120, 'quarter': 40, 'month': 15},
+        {'rank': 2, 'user': 'Alice', 'country': 'UK', 'streak': 38, 'year': 110, 'quarter': 35, 'month': 12},
+        {'rank': 3, 'user': 'Bob', 'country': 'Canada', 'streak': 30, 'year': 100, 'quarter': 30, 'month': 10},
       ],
     },
     {
-      'activity': 'Yoga Masters Cup',
-      'participants': 89,
-      'topUser': {'name': 'Emily', 'score': 870},
+      'activity': 'Yoga Flex',
+      'totalCheckins': 210,
+      'topUser': {'name': 'Emily', 'country': 'Germany', 'streak': 50, 'year': 130, 'quarter': 45, 'month': 20},
       'rankings': [
-        {'rank': 1, 'user': 'Emily', 'score': 870},
-        {'rank': 2, 'user': 'Sophia', 'score': 860},
-        {'rank': 3, 'user': 'Liam', 'score': 850},
-      ],
-    },
-    {
-      'activity': 'Endurance Marathon',
-      'participants': 256,
-      'topUser': {'name': 'Mike', 'score': 1200},
-      'rankings': [
-        {'rank': 1, 'user': 'Mike', 'score': 1200},
-        {'rank': 2, 'user': 'Anna', 'score': 1150},
-        {'rank': 3, 'user': 'Chris', 'score': 1100},
+        {'rank': 1, 'user': 'Emily', 'country': 'Germany', 'streak': 50, 'year': 130, 'quarter': 45, 'month': 20},
+        {'rank': 2, 'user': 'Sophia', 'country': 'France', 'streak': 40, 'year': 120, 'quarter': 40, 'month': 15},
+        {'rank': 3, 'user': 'Liam', 'country': 'Italy', 'streak': 35, 'year': 110, 'quarter': 38, 'month': 13},
       ],
     },
     {
       'activity': 'Endurance Marathon',
-      'participants': 256,
-      'topUser': {'name': 'Mike', 'score': 1200},
+      'totalCheckins': 410,
+      'topUser': {'name': 'Mike', 'country': 'USA', 'streak': 60, 'year': 150, 'quarter': 50, 'month': 25},
       'rankings': [
-        {'rank': 1, 'user': 'Mike', 'score': 1200},
-        {'rank': 2, 'user': 'Anna', 'score': 1150},
-        {'rank': 3, 'user': 'Chris', 'score': 1100},
+        {'rank': 1, 'user': 'Mike', 'country': 'USA', 'streak': 60, 'year': 150, 'quarter': 50, 'month': 25},
+        {'rank': 2, 'user': 'Anna', 'country': 'USA', 'streak': 55, 'year': 140, 'quarter': 48, 'month': 22},
+        {'rank': 3, 'user': 'Chris', 'country': 'Canada', 'streak': 50, 'year': 135, 'quarter': 45, 'month': 20},
       ],
     },
   ];
@@ -54,7 +44,6 @@ class LeaderboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final double expandedHeight = 180;
     final double collapsedHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
-
     return Scaffold(
       backgroundColor: AppColors.primary,
       body: CustomScrollView(
@@ -68,7 +57,7 @@ class LeaderboardPage extends StatelessWidget {
             automaticallyImplyLeading: false,
             // 只在收起时显示title
             title: Text(
-                    'Leaderboard',
+                    'Checkinboard',
                     style: AppTextStyles.headlineLarge.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -179,13 +168,13 @@ class LeaderboardPage extends StatelessWidget {
               },
             ),
           ),
-          // 排行榜列表
+          // 打卡排行榜列表
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, idx) {
-                  final board = leaderboards[idx];
+                  final board = checkinboards[idx];
                   return GestureDetector(
                     onTap: () {},
                     child: Container(
@@ -201,11 +190,11 @@ class LeaderboardPage extends StatelessWidget {
                         ],
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-                      margin: const EdgeInsets.only(bottom: 28),
+                      margin: const EdgeInsets.only(bottom: 18),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 活动名和参与人数
+                          // 活动名和总打卡人数
                           Row(
                             children: [
                               Expanded(
@@ -222,7 +211,7 @@ class LeaderboardPage extends StatelessWidget {
                                   Icon(Icons.people, color: AppColors.primary, size: 18),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '${board['participants']} joined',
+                                    '${board['totalCheckins']} check-ins',
                                     style: AppTextStyles.labelMedium.copyWith(
                                       color: AppColors.primary,
                                       fontWeight: FontWeight.w600,
@@ -233,7 +222,7 @@ class LeaderboardPage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          // RANK USER SCORE 标题
+                          // RANK USER COUNTRY STREAK DAYS THIS YEAR THIS QUARTER THIS MONTH 标题
                           Row(
                             children: [
                               Expanded(
@@ -244,7 +233,19 @@ class LeaderboardPage extends StatelessWidget {
                                 child: Text('USER', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
                               ),
                               Expanded(
-                                child: Text('SCORE', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                                child: Text('COUNTRY', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                              ),
+                              Expanded(
+                                child: Text('STREAK', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                              ),
+                              Expanded(
+                                child: Text('YEAR', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                              ),
+                              Expanded(
+                                child: Text('QTR', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                              ),
+                              Expanded(
+                                child: Text('MONTH', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
                               ),
                             ],
                           ),
@@ -277,7 +278,43 @@ class LeaderboardPage extends StatelessWidget {
                                   ),
                                   Expanded(
                                     child: Text(
-                                      '${r['score']}',
+                                      r['country'],
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
+                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '${r['streak']}',
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
+                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '${r['year']}',
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
+                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '${r['quarter']}',
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
+                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '${r['month']}',
                                       style: AppTextStyles.bodyMedium.copyWith(
                                         color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
                                         fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
@@ -289,13 +326,13 @@ class LeaderboardPage extends StatelessWidget {
                             );
                           }),
                           const SizedBox(height: 10),
-                          // 头号获奖者
+                          // 连续打卡第一的人
                           Row(
                             children: [
                               Icon(Icons.emoji_events, color: AppColors.primary, size: 20),
                               const SizedBox(width: 6),
                               Text(
-                                'Top Winner: ${board['topUser']['name']}',
+                                'Top Streak: ${board['topUser']['name']} (${board['topUser']['country']})',
                                 style: AppTextStyles.bodyMedium.copyWith(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.bold,
@@ -304,11 +341,11 @@ class LeaderboardPage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 10),
-                          // 查看完整排名提示
+                          // 查看完整checkinboard提示
                           Align(
                             alignment: Alignment.centerRight,
                             child: Text(
-                              'Tap to view full leaderboard',
+                              'Tap to view full checkinboard',
                               style: AppTextStyles.labelMedium.copyWith(
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.w600,
@@ -321,7 +358,7 @@ class LeaderboardPage extends StatelessWidget {
                     ),
                   );
                 },
-                childCount: leaderboards.length,
+                childCount: checkinboards.length,
               ),
             ),
           ),
@@ -331,7 +368,7 @@ class LeaderboardPage extends StatelessWidget {
   }
 }
 
-// 用于内容区大标题的渐隐动画
+// 用于内容区大标题的渐隐动画，只在LOGO完全展开时显示
 class _FadeHeaderDelegate extends SliverPersistentHeaderDelegate {
   final double minExtent;
   final double maxExtent;

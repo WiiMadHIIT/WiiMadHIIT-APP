@@ -328,6 +328,12 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // 新增 Checkinboard 入口
+                  _CheckinboardEntry(
+                    onTap: () {
+                      Navigator.pushNamed(context, '/checkinboard');
+                    },
+                  ),
                   SizedBox(
                     height: 180, // 推荐用固定高度，性能更优
                     child: PageView.builder(
@@ -607,12 +613,12 @@ class _ProductEntryState extends State<_ProductEntry> {
                               Icon(Icons.flash_on, size: 18, color: Colors.white),
                               const SizedBox(width: 6),
                               Text(
-                                'Start Training',
-                                style: AppTextStyles.labelLarge.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                            'Start Training',
+                            style: AppTextStyles.labelLarge.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                             ],
                           ),
                         ),
@@ -659,6 +665,60 @@ class _AnimatedButtonState extends State<_AnimatedButton> {
         duration: const Duration(milliseconds: 180),
         curve: Curves.elasticOut,
         child: widget.child,
+      ),
+    );
+  }
+}
+
+// 新增Checkinboard入口组件
+class _CheckinboardEntry extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CheckinboardEntry({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+        margin: const EdgeInsets.only(bottom: 18),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.32),
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+          border: Border.all(
+            color: Colors.white.withOpacity(0.10),
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.emoji_events, color: Colors.white, size: 24),
+            const SizedBox(width: 12),
+            Text(
+              'Checkinboard',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 1.2,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withOpacity(0.4),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
