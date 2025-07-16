@@ -68,9 +68,12 @@ class _MainTabPageState extends State<MainTabPage> {
   }
 
   Widget _buildTabBar(BuildContext context, {bool glass = false}) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
     return Container(
+      // 让背景色延伸到底部
+      padding: EdgeInsets.only(bottom: bottomPadding > 0 ? bottomPadding : 8),
       decoration: BoxDecoration(
-        color: glass ? Colors.black.withOpacity(0.18) : AppColors.card, // 这里改为黑色半透明
+        color: glass ? Colors.black.withOpacity(0.18) : AppColors.card,
         boxShadow: [
           BoxShadow(
             color: AppColors.shadow,
@@ -79,72 +82,75 @@ class _MainTabPageState extends State<MainTabPage> {
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        backgroundColor: Colors.transparent,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.icon,
-        selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
-          color: AppColors.primary,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
+      child: SafeArea(
+        top: false,
+        child: BottomNavigationBar(
+          backgroundColor: Colors.transparent,
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: AppColors.icon,
+          selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+          unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.1,
+          ),
+          showUnselectedLabels: true,
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+          iconSize: 28,
+          items: [
+            BottomNavigationBarItem(
+              icon: _SvgTabIcon(
+                active: _currentIndex == 0,
+                activeAsset: 'wiimadhiit-w-active',
+                inactiveAsset: 'wiimadhiit-w-inactive',
+              ),
+              label: 'Wiimad',
+            ),
+            BottomNavigationBarItem(
+              icon: _SvgTabIcon(
+                active: _currentIndex == 1,
+                activeAsset: 'pk-active',
+                inactiveAsset: 'pk-inactive',
+              ),
+              label: 'Challenge',
+            ),
+            BottomNavigationBarItem(
+              icon: _SvgTabIcon(
+                active: _currentIndex == 2,
+                activeAsset: 'training-active',
+                inactiveAsset: 'training-inactive',
+              ),
+              label: 'Check-in',
+            ),
+            BottomNavigationBarItem(
+              icon: _SvgTabIcon(
+                active: _currentIndex == 3,
+                activeAsset: 'bonus-active',
+                inactiveAsset: 'bonus-inactive',
+              ),
+              label: 'Bonus',
+            ),
+            BottomNavigationBarItem(
+              icon: _SvgTabIcon(
+                active: _currentIndex == 4,
+                activeAsset: 'profile-active',
+                inactiveAsset: 'profile-inactive',
+              ),
+              label: 'Profile',
+            ),
+          ],
         ),
-        unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
-          color: AppColors.textSecondary,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.1,
-        ),
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        elevation: 0,
-        iconSize: 28,
-        items: [
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 0,
-              activeAsset: 'wiimadhiit-w-active',
-              inactiveAsset: 'wiimadhiit-w-inactive',
-            ),
-            label: 'Wiimad',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 1,
-              activeAsset: 'pk-active',
-              inactiveAsset: 'pk-inactive',
-            ),
-            label: 'Challenge',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 2,
-              activeAsset: 'training-active',
-              inactiveAsset: 'training-inactive',
-            ),
-            label: 'Check-in',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 3,
-              activeAsset: 'bonus-active',
-              inactiveAsset: 'bonus-inactive',
-            ),
-            label: 'Bonus',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 4,
-              activeAsset: 'profile-active',
-              inactiveAsset: 'profile-inactive',
-            ),
-            label: 'Profile',
-          ),
-        ],
       ),
     );
   }
