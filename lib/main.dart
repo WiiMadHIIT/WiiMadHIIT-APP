@@ -68,22 +68,22 @@ class _MainTabPageState extends State<MainTabPage> {
   }
 
   Widget _buildTabBar(BuildContext context, {bool glass = false}) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    return Container(
-      // 让背景色延伸到底部
-      padding: EdgeInsets.only(bottom: bottomPadding > 0 ? bottomPadding : 8),
-      decoration: BoxDecoration(
-        color: glass ? Colors.black.withOpacity(0.18) : AppColors.card,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 12,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true, // 只处理底部安全区
+      child: Container(
+        decoration: BoxDecoration(
+          color: glass ? Colors.black.withOpacity(0.18) : AppColors.card,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
         child: BottomNavigationBar(
           backgroundColor: Colors.transparent,
           currentIndex: _currentIndex,

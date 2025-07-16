@@ -382,7 +382,7 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
                   ],
                 ),
               ),
-            ),
+          ),
         ],
       ),
     );
@@ -575,7 +575,7 @@ class _PKEntryState extends State<_PKEntry> {
                 ),
               ),
               padding: const EdgeInsets.all(20),
-              child: Column(
+        child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 顶部状态栏
@@ -767,7 +767,7 @@ class _PKEntryState extends State<_PKEntry> {
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
-                              children: [
+          children: [
                                 Icon(
                                   _getButtonIcon(),
                                   size: 16,
