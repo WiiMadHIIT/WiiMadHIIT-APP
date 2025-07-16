@@ -7,25 +7,26 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:infinite_carousel/infinite_carousel.dart';
 import '../../routes/app_routes.dart';
+import '../leaderboard/leaderboard_page.dart';
 
-/// PK状态枚举
+/// PK status enum
 enum PKStatus {
-  ongoing,    // 进行中
-  ended,      // 已结束
-  upcoming    // 即将开始
+  ongoing,    // Ongoing
+  ended,      // Ended
+  upcoming    // Upcoming
 }
 
-/// PK项数据模型
+/// PK item data model
 class PKItem {
-  final String name;           // PK名称
-  final String reward;         // PK奖励
-  final DateTime endDate;      // 结束日期
-  final PKStatus status;       // PK状态
-  final String iconAsset;      // 图标资源路径
-  final String routeName;      // 跳转路由
-  final String? videoAsset;    // 视频资源路径，可选
-  final int? participants;     // 参与人数（可选）
-  final String? description;   // 描述（可选）
+  final String name;           // PK name
+  final String reward;         // PK reward
+  final DateTime endDate;      // End date
+  final String status;         // PK status as string (for backend integration)
+  final String iconAsset;      // Icon asset path
+  final String routeName;      // Route name
+  final String? videoAsset;    // Video asset path (optional)
+  final int? participants;     // Number of participants (optional)
+  final String? description;   // Description (optional)
 
   PKItem({
     required this.name,
@@ -38,6 +39,20 @@ class PKItem {
     this.participants,
     this.description,
   });
+
+  /// Map status string to PKStatus enum
+  PKStatus get statusEnum {
+    switch (status.toLowerCase()) {
+      case 'ongoing':
+        return PKStatus.ongoing;
+      case 'ended':
+        return PKStatus.ended;
+      case 'upcoming':
+        return PKStatus.upcoming;
+      default:
+        return PKStatus.upcoming;
+    }
+  }
 }
 
 /// 挑战主页面，包含顶部LOGO、视频背景、底部滑动卡片等
@@ -54,53 +69,62 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
   int _currentIndex = 0; // 当前选中的卡片索引
   late final List<VideoPlayerController> _videoControllers; // 视频控制器列表
 
-  /// PK列表（模拟数据，可根据实际需求扩展）
+  /// 当前筛选状态，null为全部
+  PKStatus? currentFilter;
+
+  /// PK list (sample data for US/English users)
   final List<PKItem> pkList = [
     PKItem(
-      name: "7-Day HIIT Challenge",
-      reward: "🏆 冠军奖金 ¥1000",
+      name: "7-Day HIIT Showdown",
+      reward: "🏆 \$200 Amazon Gift Card",
       endDate: DateTime.now().add(const Duration(days: 3)),
-      status: PKStatus.ongoing,
+      status: 'ongoing',
       iconAsset: "assets/icons/hiit.svg",
       routeName: AppRoutes.challengeDetails,
       videoAsset: "assets/video/video1.mp4",
       participants: 128,
-      description: "高强度间歇训练挑战",
+      description: "Push your limits in this high-intensity interval training battle!",
     ),
     PKItem(
-      name: "Yoga Master Battle",
-      reward: "🥇 金牌证书 + 专属徽章",
+      name: "Yoga Masters Cup",
+      reward: "🥇 Gold Medal & Exclusive Badge",
       endDate: DateTime.now().subtract(const Duration(days: 2)),
-      status: PKStatus.ended,
+      status: 'ended',
       iconAsset: "assets/icons/yoga.svg",
       routeName: AppRoutes.challengeDetails,
       videoAsset: "assets/video/video2.mp4",
       participants: 89,
-      description: "瑜伽大师对决",
+      description: "Compete for flexibility and balance in the ultimate yoga challenge.",
     ),
     PKItem(
       name: "Strength Warriors",
-      reward: "💪 力量之王称号",
+      reward: "💪 Champion Title & Gym Gear",
       endDate: DateTime.now().add(const Duration(days: 7)),
-      status: PKStatus.upcoming,
+      status: 'upcoming',
       iconAsset: "assets/icons/hiit.svg",
       routeName: AppRoutes.challengeDetails,
       videoAsset: "assets/video/video3.mp4",
       participants: 0,
-      description: "力量训练挑战赛",
+      description: "Show your power in this strength training competition.",
     ),
     PKItem(
       name: "Endurance Marathon",
-      reward: "🏃 耐力之王 + 现金奖励",
+      reward: "🏃 \$500 Cash Prize",
       endDate: DateTime.now().add(const Duration(hours: 12)),
-      status: PKStatus.ongoing,
+      status: 'ongoing',
       iconAsset: "assets/icons/hiit.svg",
       routeName: AppRoutes.challengeDetails,
       videoAsset: "assets/video/video1.mp4",
       participants: 256,
-      description: "马拉松耐力挑战",
+      description: "Test your stamina in a marathon-style endurance challenge.",
     ),
   ];
+
+  /// 获取筛选后的PK列表
+  List<PKItem> get filteredPkList {
+    if (currentFilter == null) return pkList;
+    return pkList.where((pk) => pk.statusEnum == currentFilter).toList();
+  }
 
   @override
   void initState() {
@@ -151,6 +175,85 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
         _videoControllers[i].pause();
       }
     }
+  }
+
+  /// 显示底部筛选菜单
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white.withOpacity(0.96),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildFilterOption(null, 'All'),
+                const SizedBox(height: 8),
+                _buildFilterOption(PKStatus.ongoing, 'Ongoing'),
+                const SizedBox(height: 8),
+                _buildFilterOption(PKStatus.upcoming, 'Upcoming'),
+                const SizedBox(height: 8),
+                _buildFilterOption(PKStatus.ended, 'Ended'),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 构建筛选选项
+  Widget _buildFilterOption(PKStatus? status, String label) {
+    final bool selected = currentFilter == status;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          currentFilter = status;
+          _currentIndex = 0;
+        });
+        Navigator.pop(context);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withOpacity(0.10) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              status == null
+                ? Icons.all_inclusive
+                : status == PKStatus.ongoing
+                  ? Icons.flash_on
+                  : status == PKStatus.upcoming
+                    ? Icons.schedule
+                    : Icons.emoji_events,
+              color: selected ? AppColors.primary : Colors.grey[500],
+            ),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: AppTextStyles.titleLarge.copyWith(
+                color: selected ? AppColors.primary : Colors.black87,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+            if (selected)
+              const Spacer(),
+            if (selected)
+              Icon(Icons.check_circle, color: AppColors.primary, size: 22),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 构建视频背景层，支持滑动切换时的动画和懒加载
@@ -335,7 +438,7 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
                     height: 220, // 增加高度以适应新的卡片设计
                     child: PageView.builder(
                       controller: _pageController,
-                      itemCount: pkList.length,
+                      itemCount: filteredPkList.length,
                       physics: const PageScrollPhysics(),
                       onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) {
@@ -343,8 +446,8 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
                           scale: _currentIndex == index ? 1.0 : 0.92,
                           duration: const Duration(milliseconds: 300),
                           child: _PKEntry(
-                            pk: pkList[index],
-                            onTap: () => _onPKTap(pkList[index]),
+                            pk: filteredPkList[index],
+                            onTap: () => _onPKTap(filteredPkList[index]),
                           ),
                         );
                       },
@@ -354,7 +457,7 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
                   // 底部指示器
                   AnimatedSmoothIndicator(
                     activeIndex: _currentIndex,
-                    count: pkList.length,
+                    count: filteredPkList.length,
                     effect: ExpandingDotsEffect(
                       dotHeight: 8,
                       dotWidth: 8,
@@ -366,8 +469,26 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
               ),
             ),
           ),
+          // 悬浮筛选按钮和排行榜按钮（TikTok风格，卡片区和TabBar之间右下角，水平排列）
+          Positioned(
+            right: 16,
+            bottom: 24,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _LeaderboardFab(onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => LeaderboardPage()),
+                  );
+                }),
+                const SizedBox(width: 16),
+                _FilterFab(onTap: _showFilterSheet, currentFilter: currentFilter),
+              ],
+            ),
+          ),
           // 无PK时的提示语
-          if (pkList.isEmpty)
+          if (filteredPkList.isEmpty)
             Center(
               child: Text(
                 "No PK challenges available!",
@@ -384,6 +505,118 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
               ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// TikTok风格悬浮筛选按钮
+class _FilterFab extends StatelessWidget {
+  final VoidCallback onTap;
+  final PKStatus? currentFilter;
+  const _FilterFab({required this.onTap, required this.currentFilter});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.2),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(
+            color: AppColors.primary.withOpacity(0.18),
+            width: 1.2,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.filter_list,
+              color: AppColors.primary,
+              size: 28,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Filter',
+              style: TextStyle(
+                color: Colors.grey[800]?.withOpacity(0.85),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                letterSpacing: 0.2,
+              ),
+            ),
+            if (currentFilter != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  Icons.circle,
+                  color: AppColors.primary,
+                  size: 8,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 新增排行榜按钮组件
+class _LeaderboardFab extends StatelessWidget {
+  final VoidCallback onTap;
+  const _LeaderboardFab({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.2),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(
+            color: AppColors.primary.withOpacity(0.18),
+            width: 1.2,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.leaderboard,
+              color: AppColors.primary,
+              size: 28,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Rank',
+              style: TextStyle(
+                color: Colors.grey[800]?.withOpacity(0.85),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -470,45 +703,45 @@ class _PKEntryState extends State<_PKEntry> {
     });
   }
 
-  /// 获取状态对应的颜色主题
+  /// Get status color
   Color _getStatusColor() {
-    switch (widget.pk.status) {
+    switch (widget.pk.statusEnum) {
       case PKStatus.ongoing:
-        return const Color(0xFF00C851); // 绿色 - 进行中
+        return const Color(0xFF00C851); // Green - Ongoing
       case PKStatus.ended:
-        return const Color(0xFF6C757D); // 灰色 - 已结束
+        return const Color(0xFF6C757D); // Gray - Ended
       case PKStatus.upcoming:
-        return const Color(0xFFFF6B35); // 橙色 - 即将开始
+        return const Color(0xFFFF6B35); // Orange - Upcoming
     }
   }
 
-  /// 获取状态对应的标签文本
+  /// Get status label (English)
   String _getStatusText() {
-    switch (widget.pk.status) {
+    switch (widget.pk.statusEnum) {
       case PKStatus.ongoing:
-        return '进行中';
+        return 'Ongoing';
       case PKStatus.ended:
-        return '已结束';
+        return 'Ended';
       case PKStatus.upcoming:
-        return '即将开始';
+        return 'Upcoming';
     }
   }
 
-  /// 获取状态对应的按钮文本
+  /// Get button text (English)
   String _getButtonText() {
-    switch (widget.pk.status) {
+    switch (widget.pk.statusEnum) {
       case PKStatus.ongoing:
-        return '立即加入';
+        return 'Join Now';
       case PKStatus.ended:
-        return '查看结果';
+        return 'View Results';
       case PKStatus.upcoming:
-        return '查看介绍';
+        return 'Reserve Now';
     }
   }
 
-  /// 获取状态对应的按钮图标
+  /// Get status button icon
   IconData _getButtonIcon() {
-    switch (widget.pk.status) {
+    switch (widget.pk.statusEnum) {
       case PKStatus.ongoing:
         return Icons.flash_on;
       case PKStatus.ended:
@@ -518,21 +751,21 @@ class _PKEntryState extends State<_PKEntry> {
     }
   }
 
-  /// 格式化剩余时间
+  /// Format time remaining (English)
   String _formatTimeRemaining() {
     final now = DateTime.now();
     final difference = widget.pk.endDate.difference(now);
     
     if (difference.isNegative) {
-      return '已结束';
+      return 'Ended';
     }
     
     if (difference.inDays > 0) {
-      return '${difference.inDays}天${difference.inHours % 24}小时';
+      return '${difference.inDays}d ${difference.inHours % 24}h left';
     } else if (difference.inHours > 0) {
-      return '${difference.inHours}小时${difference.inMinutes % 60}分钟';
+      return '${difference.inHours}h ${difference.inMinutes % 60}m left';
     } else {
-      return '${difference.inMinutes}分钟';
+      return '${difference.inMinutes}m left';
     }
   }
 
@@ -578,7 +811,7 @@ class _PKEntryState extends State<_PKEntry> {
         child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 顶部状态栏
+                  // Top status bar
                   Row(
                     children: [
                       Container(
@@ -615,7 +848,7 @@ class _PKEntryState extends State<_PKEntry> {
                         ),
                       ),
                       const Spacer(),
-                      // 参与人数
+                      // Participants or Reservations
                       if (widget.pk.participants != null && widget.pk.participants! > 0)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -633,7 +866,9 @@ class _PKEntryState extends State<_PKEntry> {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                '${widget.pk.participants}',
+                                widget.pk.statusEnum == PKStatus.upcoming
+                                  ? '${widget.pk.participants} reservations'
+                                  : '${widget.pk.participants} joined',
                                 style: AppTextStyles.labelSmall.copyWith(
                                   color: Colors.grey[600],
                                   fontWeight: FontWeight.w500,
@@ -647,7 +882,7 @@ class _PKEntryState extends State<_PKEntry> {
                   
                   const SizedBox(height: 12),
                   
-                  // PK名称
+                  // PK name
                   Text(
                     widget.pk.name,
                     maxLines: 2,
@@ -661,7 +896,7 @@ class _PKEntryState extends State<_PKEntry> {
                   
                   const SizedBox(height: 8),
                   
-                  // 奖励信息
+                  // Reward info
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
@@ -702,10 +937,10 @@ class _PKEntryState extends State<_PKEntry> {
                   
                   const SizedBox(height: 12),
                   
-                  // 底部信息栏
+                  // Bottom info bar
                   Row(
                     children: [
-                      // 结束时间
+                      // End time
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -736,7 +971,7 @@ class _PKEntryState extends State<_PKEntry> {
                       
                       const SizedBox(width: 12),
                       
-                      // 操作按钮
+                      // Action button
                       PowerfulTapEffect(
                         onTap: widget.onTap,
                         pressedScale: 0.90,

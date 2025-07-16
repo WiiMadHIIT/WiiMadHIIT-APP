@@ -466,6 +466,7 @@ class _ProductEntryState extends State<_ProductEntry> {
 
   @override
   Widget build(BuildContext context) {
+    // 优化卡片外观
     return AnimatedScale(
       scale: _scale,
       duration: const Duration(milliseconds: 120),
@@ -481,15 +482,24 @@ class _ProductEntryState extends State<_ProductEntry> {
             onTap: _onTap,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.92),
+                color: Colors.white.withOpacity(0.95),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.18),
-                    blurRadius: 18,
+                    color: AppColors.primary.withOpacity(0.15),
+                    blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
                 ],
+                border: Border.all(
+                  color: AppColors.primary.withOpacity(0.18),
+                  width: 1.2,
+                ),
               ),
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
               child: Column(
@@ -571,23 +581,39 @@ class _ProductEntryState extends State<_ProductEntry> {
                       reboundCurve: Curves.elasticOut,
                       child: _AnimatedButton(
                         onPressed: () {}, // 保持按钮可用，实际逻辑由外层PowerfulTapEffect控制
-                        child: ElevatedButton.icon(
-                          onPressed: () {}, // 保持按钮可用，实际逻辑由外层PowerfulTapEffect控制
-                          icon: const Icon(Icons.flash_on, size: 18, color: Colors.white),
-                          label: Text(
-                            'Start Training',
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppColors.primary,
+                                AppColors.primary.withOpacity(0.8),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withOpacity(0.25),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                            elevation: 0,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.flash_on, size: 18, color: Colors.white),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Start Training',
+                                style: AppTextStyles.labelLarge.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
