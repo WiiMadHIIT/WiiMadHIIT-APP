@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:ui';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+import 'dart:math' as math;
 
 class BonusActivity {
   final String name;
@@ -37,7 +38,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
   final List<BonusActivity> activities = [
     BonusActivity(
       name: "Spring Challenge",
-      description: "Join the spring fitness challenge and win big!",
+      description: "Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big!",
       reward: "Up to 1000 WiiCoins + Exclusive Badge",
       regionLimit: "US, Canada, UK",
       videoAsset: "assets/video/video1.mp4",
@@ -264,8 +265,11 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    height: 260,
+                  Container(
+                    constraints: BoxConstraints(
+                      minHeight: math.min(180, MediaQuery.of(context).size.height * 0.26),
+                      maxHeight: math.max(180, MediaQuery.of(context).size.height * 0.26),
+                    ),
                     child: PageView.builder(
                       controller: _pageController,
                       itemCount: activities.length,
@@ -400,7 +404,7 @@ class _BonusCardState extends State<_BonusCard> {
                 // 描述
                 Text(
                   widget.activity.description,
-                  maxLines: 2,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: mainTextColor.withOpacity(0.82),
@@ -468,7 +472,7 @@ class _BonusCardState extends State<_BonusCard> {
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8.0, bottom: 0.0),
-                    child: Text(
+        child: Text(
                       'Tap card to learn more',
                       style: AppTextStyles.labelLarge.copyWith(
                         color: mainTextColor,

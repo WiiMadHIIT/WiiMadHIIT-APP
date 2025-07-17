@@ -45,7 +45,7 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
   final List<ProductCheckin> products = [
     ProductCheckin(
       name: "HIIT Pro",
-      description: "High-Intensity Interval Training",
+      description: "High-Intensity Interval Training Training Training Training Training Training Training Training Training Training",
       iconAsset: "assets/icons/hiit.svg",
       routeName: "/hiit",
       videoAsset: "assets/video/video1.mp4",
@@ -335,7 +335,7 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
                     },
                   ),
                   SizedBox(
-                    height: 180, // 推荐用固定高度，性能更优
+                    height: 200, // 推荐用固定高度，性能更优
                     child: PageView.builder(
                       controller: _pageController,
                       itemCount: products.length,
@@ -564,7 +564,7 @@ class _ProductEntryState extends State<_ProductEntry> {
                             const SizedBox(height: 2),
                             Text(
                               widget.product.description,
-                              maxLines: 1,
+                              maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.bodyMedium.copyWith(
                                 color: AppColors.dark40,
@@ -575,7 +575,7 @@ class _ProductEntryState extends State<_ProductEntry> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const Spacer(),
                   // 明确的操作按钮
                   Align(
                     alignment: Alignment.centerRight,
@@ -588,7 +588,7 @@ class _ProductEntryState extends State<_ProductEntry> {
                       child: _AnimatedButton(
                         onPressed: () {}, // 保持按钮可用，实际逻辑由外层PowerfulTapEffect控制
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [

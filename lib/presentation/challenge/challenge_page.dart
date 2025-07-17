@@ -435,7 +435,7 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    height: 220, // 增加高度以适应新的卡片设计
+                    height: 240, // 增加高度以适应新的卡片设计
                     child: PageView.builder(
                       controller: _pageController,
                       itemCount: filteredPkList.length,
@@ -934,8 +934,22 @@ class _PKEntryState extends State<_PKEntry> {
                       ],
                     ),
                   ),
+                  // description info
+                  if (widget.pk.description != null && widget.pk.description!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0, bottom: 0.0),
+                      child: Text(
+                        widget.pk.description!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                    ),
                   
-                  const SizedBox(height: 12),
+                  const Spacer(),
                   
                   // Bottom info bar
                   Row(
