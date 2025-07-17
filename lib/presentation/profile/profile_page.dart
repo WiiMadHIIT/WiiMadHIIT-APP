@@ -3,8 +3,27 @@ import '../../widgets/floating_logo.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +31,6 @@ class ProfilePage extends StatelessWidget {
       backgroundColor: Colors.white,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
-          // 顶部大背景+头像+荣誉墙
           SliverAppBar(
             expandedHeight: 320,
             pinned: true,
@@ -29,10 +47,10 @@ class ProfilePage extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   // 背景大图
-                  Image.asset(
-                    'assets/images/profile_bg.jpg',
-                    fit: BoxFit.cover,
-                  ),
+                //   Image.asset(
+                //     'assets/images/profile_bg.jpg',
+                //     fit: BoxFit.cover,
+                //   ),
                   // 渐变遮罩
                   Container(
                     decoration: BoxDecoration(
@@ -58,25 +76,36 @@ class ProfilePage extends StatelessWidget {
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: 32,
+                    bottom: 90,
                     child: Column(
                       children: [
+                        // 用户头像
                         CircleAvatar(
                           radius: 48,
                           backgroundColor: Colors.white,
                           backgroundImage: AssetImage('assets/images/avatar_default.png'),
                         ),
                         const SizedBox(height: 12),
-                        Text('Username', style: AppTextStyles.headlineMedium.copyWith(color: Colors.black, fontWeight: FontWeight.bold)),
+                        // 用户昵称
+                        Text('John Doe', // TODO: 替换为真实昵称
+                          style: AppTextStyles.headlineMedium.copyWith(
+                            color: Colors.black,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text('ID: 123456789', style: AppTextStyles.bodySmall.copyWith(color: Colors.grey[700])),
+                        // 用户ID
+                        Text('User ID: 123456789',
+                          style: AppTextStyles.bodySmall.copyWith(color: Colors.grey[700]),
+                        ),
                         const SizedBox(height: 10),
+                        // 运动天数统计
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _StatBlock(label: '连续运动', value: '36天'),
+                            _StatBlock(label: 'Current Streak', value: '36 days'),
                             const SizedBox(width: 18),
-                            _StatBlock(label: '年度运动', value: '120天'),
+                            _StatBlock(label: 'Days This Year', value: '120 days'),
                           ],
                         ),
                       ],
@@ -86,7 +115,7 @@ class ProfilePage extends StatelessWidget {
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: -30,
+                    bottom: 0,
                     child: _HonorWall(),
                   ),
                 ],
@@ -94,19 +123,39 @@ class ProfilePage extends StatelessWidget {
             ),
           ),
         ],
-        body: ListView(
-          padding: const EdgeInsets.only(top: 40, bottom: 24),
+        body: Column(
           children: [
             // 功能入口区
+            const SizedBox(height: 40),
             _ProfileFunctionGrid(),
             const SizedBox(height: 18),
-            // 比赛记录区
-            _SectionTitle('Challenge Records'),
-            _ChallengeRecordList(),
-            const SizedBox(height: 18),
-            // 打卡记录区
-            _SectionTitle('Check-in Records'),
-            _CheckinRecordList(),
+            // TabBar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+              child: TabBar(
+                controller: _tabController,
+                indicatorColor: AppColors.primary,
+                indicatorWeight: 3,
+                labelColor: AppColors.primary,
+                unselectedLabelColor: Colors.grey[500],
+                labelStyle: AppTextStyles.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                unselectedLabelStyle: AppTextStyles.titleMedium,
+                tabs: const [
+                  Tab(text: 'Challenges'),
+                  Tab(text: 'Check-ins'),
+                ],
+              ),
+            ),
+            // TabBarView
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _ChallengeRecordList(),
+                  _CheckinRecordList(),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -114,11 +163,10 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
-// 下面是各个子组件的结构草图（可根据实际需求细化）
-
 class _EditProfileButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // 编辑资料按钮
     return Material(
       color: Colors.white.withOpacity(0.7),
       borderRadius: BorderRadius.circular(20),
@@ -126,12 +174,13 @@ class _EditProfileButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         onTap: () {},
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           child: Row(
             children: [
               Icon(Icons.edit, color: AppColors.primary, size: 20),
-              const SizedBox(width: 6),
-              Text('Edit', style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Text('Edit', style: AppTextStyles.labelLarge.copyWith(
+                color: AppColors.primary, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -159,28 +208,36 @@ class _StatBlock extends StatelessWidget {
 class _HonorWall extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    // 可用ListView横向滑动或宫格
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    // 荣誉墙，全部英文
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(22),
+            topRight: Radius.circular(22),
+            bottomLeft: Radius.circular(0),
+            bottomRight: Radius.circular(0),
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _MedalWidget(icon: Icons.emoji_events, label: '年度冠军', desc: '2023年HIIT总冠军'),
-          const SizedBox(width: 18),
-          _MedalWidget(icon: Icons.star, label: '最佳打卡', desc: '连续打卡60天'),
-        ],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _MedalWidget(icon: Icons.emoji_events, label: 'Overall Champion', desc: 'HIIT Winner 2023'),
+            const SizedBox(width: 18),
+            _MedalWidget(icon: Icons.star, label: 'Best Streak', desc: '60-Day Check-in Streak'),
+          ],
+        ),
       ),
     );
   }
@@ -207,13 +264,14 @@ class _MedalWidget extends StatelessWidget {
 class _ProfileFunctionGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    // 宫格功能入口
+    // 功能入口区，全部英文
     final items = [
-      {'icon': Icons.card_giftcard, 'label': '激活入口'},
-      {'icon': Icons.emoji_events, 'label': '奖励联系'},
-      {'icon': Icons.shopping_bag, 'label': '产品列表'},
-      {'icon': Icons.bar_chart, 'label': '运动数据'},
-      {'icon': Icons.check_circle, 'label': '打卡数据'},
+      {'icon': Icons.card_giftcard, 'label': 'Activate'},
+      {'icon': Icons.emoji_events, 'label': 'Rewards'},
+      {'icon': Icons.shopping_bag, 'label': 'Gear'},
+      {'icon': Icons.bar_chart, 'label': 'Challenges'},
+      {'icon': Icons.check_circle, 'label': 'Check-ins'},
+      // 如有更多，继续添加
     ];
     return Card(
       color: Colors.white,
@@ -222,34 +280,50 @@ class _ProfileFunctionGrid extends StatelessWidget {
       elevation: 0,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: items.map((item) {
-            return Column(
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.primary.withOpacity(0.10),
-                  child: Icon(item['icon'] as IconData, color: AppColors.primary),
-                ),
-                const SizedBox(height: 6),
-                Text(item['label'] as String, style: AppTextStyles.labelMedium.copyWith(color: Colors.black87)),
-              ],
-            );
-          }).toList(),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: BouncingScrollPhysics(), // 苹果风格弹性
+          child: Row(
+            children: [
+              const SizedBox(width: 8), // 首部 padding
+              ...items.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: SizedBox(
+                    width: 60,// 固定宽度，保证icon对齐
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 40,
+                          child: CircleAvatar(
+                            backgroundColor: AppColors.primary.withOpacity(0.10),
+                            child: Icon(item['icon'] as IconData, color: AppColors.primary),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 32,
+                          child: Center(
+                            child: Text(
+                              item['label'] as String,
+                              style: AppTextStyles.labelMedium.copyWith(color: Colors.black87),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+              const SizedBox(width: 8), // 尾部 padding
+            ],
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  const _SectionTitle(this.title);
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 0, 8),
-      child: Text(title, style: AppTextStyles.titleMedium.copyWith(color: Colors.black, fontWeight: FontWeight.bold)),
     );
   }
 }
@@ -257,13 +331,16 @@ class _SectionTitle extends StatelessWidget {
 class _ChallengeRecordList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    // 示例数据
+    // 比赛记录区，全部英文
     final records = [
-      {'index': 1, 'name': 'HIIT 7天挑战', 'rank': '第2名'},
-      {'index': 2, 'name': '瑜伽大师赛', 'rank': '第1名'},
+      {'index': 1, 'name': 'HIIT 7-Day Challenge', 'rank': '2nd'},
+      {'index': 2, 'name': 'Yoga Masters Cup', 'rank': '1st'},
     ];
-    return Column(
-      children: records.map((r) {
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 12),
+      itemCount: records.length,
+      itemBuilder: (context, i) {
+        final r = records[i];
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -273,7 +350,7 @@ class _ChallengeRecordList extends StatelessWidget {
             trailing: Text(r['rank'].toString(), style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary)),
           ),
         );
-      }).toList(),
+      },
     );
   }
 }
@@ -281,13 +358,16 @@ class _ChallengeRecordList extends StatelessWidget {
 class _CheckinRecordList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    // 示例数据
+    // 打卡记录区，全部英文
     final records = [
-      {'index': 1, 'name': 'HIIT Pro', 'count': '第36次'},
-      {'index': 2, 'name': 'Yoga Flex', 'count': '第20次'},
+      {'index': 1, 'name': 'HIIT Pro', 'count': '36th Check-in'},
+      {'index': 2, 'name': 'Yoga Flex', 'count': '20th Check-in'},
     ];
-    return Column(
-      children: records.map((r) {
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 12),
+      itemCount: records.length,
+      itemBuilder: (context, i) {
+        final r = records[i];
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -297,7 +377,7 @@ class _CheckinRecordList extends StatelessWidget {
             trailing: Text(r['count'].toString(), style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary)),
           ),
         );
-      }).toList(),
+      },
     );
   }
 }
