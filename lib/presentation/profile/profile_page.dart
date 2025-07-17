@@ -122,17 +122,12 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               ),
             ),
           ),
-        ],
-        body: Column(
-          children: [
-            // 功能入口区
-            const SizedBox(height: 40),
-            _ProfileFunctionGrid(),
-            const SizedBox(height: 18),
-            // TabBar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
-              child: TabBar(
+          SliverToBoxAdapter(child: SizedBox(height: 40)), // 功能入口区上方间距
+          SliverToBoxAdapter(child: _ProfileFunctionGrid()), // 功能入口区
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _TabBarDelegate(
+              TabBar(
                 controller: _tabController,
                 indicatorColor: AppColors.primary,
                 indicatorWeight: 3,
@@ -146,16 +141,13 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 ],
               ),
             ),
-            // TabBarView
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _ChallengeRecordList(),
-                  _CheckinRecordList(),
-                ],
-              ),
-            ),
+          ),
+        ],
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _ChallengeRecordList(),
+            _CheckinRecordList(),
           ],
         ),
       ),
@@ -337,6 +329,7 @@ class _ChallengeRecordList extends StatelessWidget {
       {'index': 2, 'name': 'Yoga Masters Cup', 'rank': '1st'},
     ];
     return ListView.builder(
+      key: const PageStorageKey('challengeList'), // 关键：唯一key
       padding: const EdgeInsets.only(top: 12),
       itemCount: records.length,
       itemBuilder: (context, i) {
@@ -362,8 +355,26 @@ class _CheckinRecordList extends StatelessWidget {
     final records = [
       {'index': 1, 'name': 'HIIT Pro', 'count': '36th Check-in'},
       {'index': 2, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 3, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 4, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 5, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 6, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 7, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 8, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 9, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 10, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 11, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 12, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 13, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 14, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 15, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 16, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 17, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 18, 'name': 'Yoga Flex', 'count': '20th Check-in'},
+      {'index': 19, 'name': 'Yoga Flex', 'count': '20th Check-in'},
     ];
     return ListView.builder(
+      key: const PageStorageKey('checkinList'), // 关键：唯一key
       padding: const EdgeInsets.only(top: 12),
       itemCount: records.length,
       itemBuilder: (context, i) {
@@ -379,5 +390,28 @@ class _CheckinRecordList extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class _TabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar tabBar;
+  _TabBarDelegate(this.tabBar);
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white, // 保证吸顶时背景不穿透
+      child: tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_TabBarDelegate oldDelegate) {
+    return false;
   }
 }
