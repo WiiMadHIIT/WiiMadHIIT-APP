@@ -8,6 +8,7 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:infinite_carousel/infinite_carousel.dart';
 import '../../routes/app_routes.dart';
 import '../leaderboard/leaderboard_page.dart';
+import '../../widgets/floating_logo.dart';
 
 /// PK status enum
 enum PKStatus {
@@ -354,78 +355,8 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
             ),
           ),
           // 顶部悬浮LOGO
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 32,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.40),
-                  borderRadius: BorderRadius.circular(40),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.25),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 0),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.black.withOpacity(0.18), width: 1.2),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.35),
-                            blurRadius: 16,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 0),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: SvgPicture.asset(
-                          'assets/icons/wiimadhiit-w-red.svg',
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'WiiMadHIIT',
-                      style: AppTextStyles.headlineMedium.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2.2,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          const FloatingLogo(),
+          
           // 底部滑动卡片区
           Align(
             alignment: Alignment.bottomCenter,
@@ -549,7 +480,7 @@ class _FilterFab extends StatelessWidget {
             Text(
               'Filter',
               style: TextStyle(
-                color: Colors.grey[800]?.withOpacity(0.85),
+                color: Colors.white.withOpacity(0.85),
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
                 letterSpacing: 0.2,
@@ -609,7 +540,7 @@ class _LeaderboardFab extends StatelessWidget {
             Text(
               'Rank',
               style: TextStyle(
-                color: Colors.grey[800]?.withOpacity(0.85),
+                color: Colors.white.withOpacity(0.85),
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
                 letterSpacing: 0.2,

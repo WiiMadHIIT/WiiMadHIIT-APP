@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:ui';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'dart:math' as math;
+import '../../widgets/floating_logo.dart';
 
 class BonusActivity {
   final String name;
@@ -185,78 +186,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
           // 视频背景
           Positioned.fill(child: _buildVideoStack()),
           // 顶部LOGO
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 32,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.40),
-                  borderRadius: BorderRadius.circular(40),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.25),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 0),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.black.withOpacity(0.18), width: 1.2),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.35),
-                            blurRadius: 16,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 0),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: SvgPicture.asset(
-                          'assets/icons/wiimadhiit-w-red.svg',
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'WiiMadHIIT',
-                      style: AppTextStyles.headlineMedium.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2.2,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          const FloatingLogo(),
           // 底部卡片轮播
           Align(
             alignment: Alignment.bottomCenter,
@@ -450,18 +380,19 @@ class _BonusCardState extends State<_BonusCard> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.public, size: 13, color: gradient.last),
                       const SizedBox(width: 4),
-                      Text(
-                        widget.activity.regionLimit.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.labelMedium.copyWith(
-                          color: mainTextColor,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.1,
+                      Expanded(
+                        child: Text(
+                          widget.activity.regionLimit.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.labelMedium.copyWith(
+                            color: mainTextColor,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.1,
+                          ),
                         ),
                       ),
                     ],

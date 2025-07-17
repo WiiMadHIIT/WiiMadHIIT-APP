@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../widgets/floating_logo.dart';
 
 class LeaderboardPage extends StatelessWidget {
   LeaderboardPage({Key? key}) : super(key: key);
@@ -108,71 +109,7 @@ class LeaderboardPage extends StatelessWidget {
                       padding: EdgeInsets.only(
                         top: MediaQuery.of(context).padding.top + 24,
                       ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.40),
-                          borderRadius: BorderRadius.circular(40),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.red.withOpacity(0.25),
-                              blurRadius: 24,
-                              spreadRadius: 2,
-                              offset: const Offset(0, 0),
-                            ),
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.25),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                          border: Border.all(color: Colors.black.withOpacity(0.18), width: 1.2),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.red.withOpacity(0.35),
-                                    blurRadius: 16,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 0),
-                                  ),
-                                ],
-                              ),
-                              child: ClipOval(
-                                child: SvgPicture.asset(
-                                  'assets/icons/wiimadhiit-w-red.svg',
-                                  width: 48,
-                                  height: 48,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              'WiiMadHIIT',
-                              style: AppTextStyles.headlineMedium.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 2.2,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.black.withOpacity(0.5),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      child: const LogoContent(),
                     ),
                   ),
                 );
@@ -358,5 +295,78 @@ class _FadeHeaderDelegate extends SliverPersistentHeaderDelegate {
     return oldDelegate.child != child ||
         oldDelegate.minExtent != minExtent ||
         oldDelegate.maxExtent != maxExtent;
+  }
+}
+
+class LogoContent extends StatelessWidget {
+  final EdgeInsetsGeometry? margin;
+  const LogoContent({this.margin, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: margin,
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.40),
+        borderRadius: BorderRadius.circular(40),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 32,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.white.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+        border: Border.all(color: Colors.black.withOpacity(0.13), width: 1.1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.18),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: SvgPicture.asset(
+                'assets/icons/wiimadhiit-w-red.svg',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Text(
+            'WiiMadHIIT',
+            style: AppTextStyles.headlineMedium.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2.2,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

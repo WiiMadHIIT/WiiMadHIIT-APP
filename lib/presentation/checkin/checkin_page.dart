@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:infinite_carousel/infinite_carousel.dart';
+import '../../widgets/floating_logo.dart';
 
 class ProductCheckin {
   final String name;
@@ -248,78 +249,8 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
           ),
 
           // 顶部悬浮Logo（黑色半透明背景+红色发光阴影）
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 32,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.40),
-                  borderRadius: BorderRadius.circular(40),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.25), // 红色发光
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 0),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.black.withOpacity(0.18), width: 1.2),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.35), // 红色发光
-                            blurRadius: 16,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 0),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: SvgPicture.asset(
-                          'assets/icons/wiimadhiit-w-red.svg',
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'WiiMadHIIT',
-                      style: AppTextStyles.headlineMedium.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2.2,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          const FloatingLogo(),
+
           // 悬浮入口
           Align(
             alignment: Alignment.bottomCenter,
@@ -670,54 +601,85 @@ class _AnimatedButtonState extends State<_AnimatedButton> {
   }
 }
 
-// 新增Checkinboard入口组件
-class _CheckinboardEntry extends StatelessWidget {
+// Checkinboard入口组件
+class _CheckinboardEntry extends StatefulWidget {
   final VoidCallback onTap;
   const _CheckinboardEntry({required this.onTap});
 
   @override
+  State<_CheckinboardEntry> createState() => _CheckinboardEntryState();
+}
+
+class _CheckinboardEntryState extends State<_CheckinboardEntry> {
+  double _scale = 1.0;
+
+  void _onTap() {
+    setState(() => _scale = 0.97);
+    Future.delayed(const Duration(milliseconds: 80), () {
+      setState(() => _scale = 1.0);
+      widget.onTap();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-        margin: const EdgeInsets.only(bottom: 18),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.32),
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.18),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-          border: Border.all(
-            color: Colors.white.withOpacity(0.10),
-            width: 1.2,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.emoji_events, color: Colors.white, size: 24),
-            const SizedBox(width: 12),
-            Text(
-              'Checkinboard',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                letterSpacing: 1.2,
-                shadows: [
-                  Shadow(
-                    color: Colors.black.withOpacity(0.4),
-                    blurRadius: 4,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4), // 推荐左右20，上下4
+      child: GestureDetector(
+        onTap: _onTap,
+        child: AnimatedScale(
+          scale: _scale,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 18), // 上下10，左右18
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.13),
+                    width: 1.1,
                   ),
-                ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.emoji_events, color: Colors.white, size: 22),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Checkinboard',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        letterSpacing: 1.1,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withOpacity(0.18),
+                            blurRadius: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.8), size: 24),
+                  ],
+                ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
