@@ -44,7 +44,7 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
   // 这里必须有
   final List<ProductCheckin> products = [
     ProductCheckin(
-      name: "HIIT Pro",
+      name: "HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro",
       description: "High-Intensity Interval Training Training Training Training Training Training Training Training Training Training",
       iconAsset: "assets/icons/hiit.svg",
       routeName: "/hiit",

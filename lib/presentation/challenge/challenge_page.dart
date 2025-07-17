@@ -75,15 +75,15 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
   /// PK list (sample data for US/English users)
   final List<PKItem> pkList = [
     PKItem(
-      name: "7-Day HIIT Showdown",
-      reward: "🏆 \$200 Amazon Gift Card",
+      name: "7-Day HIIT Showdown 7-Day HIIT Showdown 7-Day HIIT Showdown 7-Day HIIT Showdown",
+      reward: "🏆 \$200 Amazon Gift Card Amazon Gift Card Amazon Gift Card Amazon Gift Card",
       endDate: DateTime.now().add(const Duration(days: 3)),
       status: 'ongoing',
       iconAsset: "assets/icons/hiit.svg",
       routeName: AppRoutes.challengeDetails,
       videoAsset: "assets/video/video1.mp4",
       participants: 128,
-      description: "Push your limits in this high-intensity interval training battle!",
+      description: "Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle!",
     ),
     PKItem(
       name: "Yoga Masters Cup",
@@ -885,7 +885,7 @@ class _PKEntryState extends State<_PKEntry> {
                   // PK name
                   Text(
                     widget.pk.name,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.titleLarge.copyWith(
                       color: Colors.black87,
@@ -925,6 +925,7 @@ class _PKEntryState extends State<_PKEntry> {
                         Expanded(
                           child: Text(
                             widget.pk.reward,
+                            maxLines: 1,
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: statusColor,
                               fontWeight: FontWeight.w600,

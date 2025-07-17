@@ -37,10 +37,10 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
 
   final List<BonusActivity> activities = [
     BonusActivity(
-      name: "Spring Challenge",
+      name: "Spring Challenge Spring Challenge Spring Challenge Spring Challenge",
       description: "Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big!",
       reward: "Up to 1000 WiiCoins + Exclusive Badge",
-      regionLimit: "US, Canada, UK",
+      regionLimit: "US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK",
       videoAsset: "assets/video/video1.mp4",
     ),
     BonusActivity(
