@@ -325,6 +325,9 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
+    final double bottomPadding = MediaQuery.of(context).padding.bottom; //safty安全区高度 
+    // final double bottomPadding2 = MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight; //safty安全区高度 + 底部tabbar高度
+    
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -356,12 +359,12 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
           ),
           // 顶部悬浮LOGO
           const FloatingLogo(),
-          
+
           // 底部滑动卡片区
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 64),
+              padding: EdgeInsets.only(bottom: bottomPadding + 64),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -403,7 +406,7 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
           // 悬浮筛选按钮和排行榜按钮（TikTok风格，卡片区和TabBar之间右下角，水平排列）
           Positioned(
             right: 16,
-            bottom: 24,
+            bottom: bottomPadding + 24,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

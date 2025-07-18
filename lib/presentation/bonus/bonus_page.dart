@@ -179,6 +179,9 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double cardWidth = screenWidth * 0.78;
+    final double bottomPadding = MediaQuery.of(context).padding.bottom; //safty安全区高度 
+    // final double bottomPadding2 = MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight; //safty安全区高度 + 底部tabbar高度
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -191,7 +194,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 64),
+              padding: EdgeInsets.only(bottom: bottomPadding + 64),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

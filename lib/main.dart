@@ -38,8 +38,10 @@ class MainTabPage extends StatefulWidget {
   State<MainTabPage> createState() => _MainTabPageState();
 }
 
-class _MainTabPageState extends State<MainTabPage> {
+class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin {
   int _currentIndex = 0;
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
 
   final List<Widget> _pages = [
     HomePage(),
@@ -50,249 +52,303 @@ class _MainTabPageState extends State<MainTabPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true, // 让tabbar底部区域透明,内容延申到tabbar底部
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
       ),
-      bottomNavigationBar: _currentIndex == 1 || _currentIndex == 2 || _currentIndex == 3
-          ? ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: _buildTabBar(context, glass: true),
-              ),
-            )
-          : _buildTabBar(context, glass: false),
+      bottomNavigationBar: _buildAdaptiveTabBar(context),
     );
   }
 
-  Widget _buildTabBar(BuildContext context, {bool glass = false}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: glass ? Colors.black.withOpacity(0.18) : AppColors.card, // 这里改为黑色半透明
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 12,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
-        backgroundColor: Colors.transparent,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.icon,
-        selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
-          color: AppColors.primary,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
-        ),
-        unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
-          color: AppColors.textSecondary,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.1,
-        ),
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        elevation: 0,
-        iconSize: 28,
-        items: [
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 0,
-              activeAsset: 'wiimadhiit-w-active',
-              inactiveAsset: 'wiimadhiit-w-inactive',
-            ),
-            label: 'Wiimad',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 1,
-              activeAsset: 'pk-active',
-              inactiveAsset: 'pk-inactive',
-            ),
-            label: 'Challenge',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 2,
-              activeAsset: 'training-active',
-              inactiveAsset: 'training-inactive',
-            ),
-            label: 'Check-in',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 3,
-              activeAsset: 'bonus-active',
-              inactiveAsset: 'bonus-inactive',
-            ),
-            label: 'Bonus',
-          ),
-          BottomNavigationBarItem(
-            icon: _SvgTabIcon(
-              active: _currentIndex == 4,
-              activeAsset: 'profile-active',
-              inactiveAsset: 'profile-inactive',
-            ),
-            label: 'Profile',
-          ),
-        ],
-      ),
-    );
-  }
-}
+  Widget _buildAdaptiveTabBar(BuildContext context) {
+    final bool isWiimadActive = _currentIndex == 0;
+    final bool isProfileActive = _currentIndex == 4;
 
-class _NavIcon extends StatelessWidget {
-  final IconData icon;
-  final bool active;
-  final String label;
-  const _NavIcon({required this.icon, required this.active, required this.label});
+    // 当切换到 Wiimad tab 时启动动画
+    if (isWiimadActive) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutBack,
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              if (active)
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.12),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withOpacity(0.18),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
+    return AnimatedBuilder(
+      animation: _fadeAnimation,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            // Wiimad激活时用渐变，其它tab用透明色
+            gradient: isWiimadActive
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.black.withOpacity(0.95),
+                      AppColors.primary.withOpacity(0.1),
+                      Colors.black.withOpacity(0.9),
                     ],
-                  ),
-                ),
-              Icon(
-                icon,
-                size: active ? 28 : 24,
-                color: active ? AppColors.primary : AppColors.icon,
+                    stops: [0, 0.5, 1],
+                  )
+                : null,
+            color: isProfileActive
+                ? Colors.transparent
+                : (isWiimadActive ? Colors.white.withOpacity(0): Colors.transparent),
+            border: Border(
+              top: BorderSide(
+                color: isWiimadActive
+                    ? AppColors.primary.withOpacity(0.3)
+                    : Colors.grey.withOpacity(0.1),
+                width: 0.5,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isWiimadActive
+                    ? AppColors.primary.withOpacity(0.2)
+                    : AppColors.shadow,
+                blurRadius: isWiimadActive ? 20 : 12,
+                offset: const Offset(0, -2),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-// 新增更时尚有力量感的底部导航icon组件
-class _NavIconModern extends StatelessWidget {
-  final IconData icon;
-  final bool active;
-  final String label;
-  const _NavIconModern({required this.icon, required this.active, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 1.0, end: active ? 1.18 : 1.0),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.elasticOut,
-      builder: (context, scale, child) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                if (active)
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppColors.primary, AppColors.energyOrange],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withOpacity(0.18),
-                          blurRadius: 12,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                Transform.scale(
-                  scale: scale,
-                  child: Icon(
-                    icon,
-                    size: active ? 30 : 24,
-                    color: active ? AppColors.white : AppColors.icon,
-                  ),
-                ),
-              ],
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
-            const SizedBox(height: 2),
-          ],
+            child: BackdropFilter(
+              // ====== 毛玻璃效果的核心 ======
+              // 这里通过 BackdropFilter + sigmaX/Y 实现底部导航栏的毛玻璃模糊
+              filter: ImageFilter.blur(
+                sigmaX: isProfileActive ? 0 : (isWiimadActive ? 25 : 28),
+                sigmaY: isProfileActive ? 0 : (isWiimadActive ? 25 : 28),
+              ),
+              // ===========================
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isProfileActive
+                      ? AppColors.card
+                      : (isWiimadActive ? Colors.black.withOpacity(0) : Colors.transparent),
+                ),
+                child: BottomNavigationBar(
+                  backgroundColor: Colors.transparent,
+                  currentIndex: _currentIndex,
+                  onTap: (index) {
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                  },
+                  selectedItemColor: isWiimadActive 
+                      ? AppColors.primary 
+                      : AppColors.primary,
+                  unselectedItemColor: isWiimadActive
+                      ? Colors.white.withOpacity(0.6)
+                      : AppColors.icon,
+                  selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
+                    color: isWiimadActive ? AppColors.primary : AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                    shadows: isWiimadActive ? [
+                      Shadow(
+                        color: AppColors.primary.withOpacity(0.5),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ] : null,
+                  ),
+                  unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
+                    color: isWiimadActive 
+                        ? Colors.white.withOpacity(0.7)
+                        : AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.1,
+                  ),
+                  showUnselectedLabels: true,
+                  type: BottomNavigationBarType.fixed,
+                  elevation: 0,
+                  iconSize: 28,
+                  items: [
+                    BottomNavigationBarItem(
+                      icon: _AdaptiveTabIcon(
+                        active: _currentIndex == 0,
+                        activeAsset: 'wiimadhiit-w-active',
+                        inactiveAsset: 'wiimadhiit-w-inactive',
+                        isWiimadActive: isWiimadActive,
+                      ),
+                      label: 'WiiMad',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: _AdaptiveTabIcon(
+                        active: _currentIndex == 1,
+                        activeAsset: 'pk-active',
+                        inactiveAsset: 'pk-inactive',
+                        isWiimadActive: isWiimadActive,
+                      ),
+                      label: 'Challenge',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: _AdaptiveTabIcon(
+                        active: _currentIndex == 2,
+                        activeAsset: 'training-active',
+                        inactiveAsset: 'training-inactive',
+                        isWiimadActive: isWiimadActive,
+                      ),
+                      label: 'Check-in',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: _AdaptiveTabIcon(
+                        active: _currentIndex == 3,
+                        activeAsset: 'bonus-active',
+                        inactiveAsset: 'bonus-inactive',
+                        isWiimadActive: isWiimadActive,
+                      ),
+                      label: 'Bonus',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: _AdaptiveTabIcon(
+                        active: _currentIndex == 4,
+                        activeAsset: 'profile-active',
+                        inactiveAsset: 'profile-inactive',
+                        isWiimadActive: isWiimadActive,
+                      ),
+                      label: 'Profile',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
   }
 }
 
-// 新增SVG Tab Icon组件，紧凑青春有力量感
-class _SvgTabIcon extends StatelessWidget {
+// 自适应 Tab Icon 组件
+class _AdaptiveTabIcon extends StatelessWidget {
   final bool active;
   final String activeAsset;
   final String inactiveAsset;
-  const _SvgTabIcon({required this.active, required this.activeAsset, required this.inactiveAsset});
+  final bool isWiimadActive;
+
+  const _AdaptiveTabIcon({
+    required this.active,
+    required this.activeAsset,
+    required this.inactiveAsset,
+    required this.isWiimadActive,
+  });
 
   @override
   Widget build(BuildContext context) {
     final bool isWiimadInactive = !active && inactiveAsset == 'wiimadhiit-w-inactive';
+    
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
       width: 32,
       height: 32,
       alignment: Alignment.center,
-      child: isWiimadInactive
-          ? Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFD8D8D8),
-                    shape: BoxShape.circle,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // 背景圆圈 - 根据 Wiimad 状态调整
+          if (active)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: isWiimadActive ? 40 : 36,
+              height: isWiimadActive ? 40 : 36,
+              decoration: BoxDecoration(
+                gradient: isWiimadActive
+                    ? LinearGradient(
+                        colors: [
+                          AppColors.primary.withOpacity(0.3),
+                          AppColors.primary.withOpacity(0.1),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                    : null,
+                color: isWiimadActive ? null : AppColors.primary.withOpacity(0.12),
+                shape: BoxShape.circle,
+                border: isWiimadActive
+                    ? Border.all(
+                        color: AppColors.primary.withOpacity(0.4),
+                        width: 1,
+                      )
+                    : null,
+                boxShadow: [
+                  BoxShadow(
+                    color: isWiimadActive
+                        ? AppColors.primary.withOpacity(0.3)
+                        : AppColors.primary.withOpacity(0.18),
+                    blurRadius: isWiimadActive ? 12 : 8,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-                AppIcons.svg(
-                  inactiveAsset,
-                  size: 24,
-                ),
-              ],
-            )
-          : AppIcons.svg(
-              active ? activeAsset : inactiveAsset,
-              size: active ? 28 : 24,
+                ],
+              ),
             ),
+          
+          // Wiimad 特殊处理
+          if (isWiimadInactive)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: isWiimadActive
+                    ? Colors.white.withOpacity(0.1)
+                    : const Color(0xFFD8D8D8),
+                shape: BoxShape.circle,
+                border: isWiimadActive
+                    ? Border.all(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1,
+                      )
+                    : null,
+              ),
+            ),
+          
+          // Icon
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            child: isWiimadInactive
+                ? AppIcons.svg(
+                    inactiveAsset,
+                    size: isWiimadActive ? 22 : 24,
+                  )
+                : AppIcons.svg(
+                    active ? activeAsset : inactiveAsset,
+                    size: active 
+                        ? (isWiimadActive ? 30 : 28)
+                        : (isWiimadActive ? 24 : 24),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

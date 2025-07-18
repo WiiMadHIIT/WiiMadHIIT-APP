@@ -27,6 +27,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final double bottomPadding = MediaQuery.of(context).padding.bottom; //safty安全区高度 
+    // final double bottomPadding2 = MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight; //safty安全区高度 + 底部tabbar高度
+    
     return Scaffold(
       backgroundColor: Colors.white,
       body: NestedScrollView(
@@ -160,12 +163,15 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             ),
           ),
         ],
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            _ChallengeRecordList(),
-            _CheckinRecordList(),
-          ],
+        body: Padding(
+          padding: EdgeInsets.only(bottom: bottomPadding),
+          child: TabBarView(   
+            controller: _tabController,
+            children: [
+              _ChallengeRecordList(),
+              _CheckinRecordList(),
+            ],
+          ),
         ),
       ),
     );
