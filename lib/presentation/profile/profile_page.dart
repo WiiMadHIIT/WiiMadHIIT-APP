@@ -66,11 +66,28 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                       ),
                     ),
                   ),
-                  // 编辑按钮
+                  // 右上角按钮组
                   Positioned(
                     top: MediaQuery.of(context).padding.top + 16,
                     right: 20,
-                    child: _EditProfileButton(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ActionButton(
+                          icon: Icons.edit,
+                          onTap: () {
+                            // TODO: 跳转到设置页面
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        _ActionButton(
+                          icon: Icons.settings,
+                          onTap: () {
+                            // TODO: 编辑资料
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                   // 头像+用户名+运动天数
                   Positioned(
@@ -155,25 +172,29 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   }
 }
 
-class _EditProfileButton extends StatelessWidget {
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  
+  const _ActionButton({
+    required this.icon,
+    required this.onTap,
+  });
+
   @override
   Widget build(BuildContext context) {
-    // 编辑资料按钮
     return Material(
-      color: Colors.white.withOpacity(0.7),
+      color: Colors.grey.withOpacity(0.3), // 灰色半透明背景
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () {},
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          child: Row(
-            children: [
-              Icon(Icons.edit, color: AppColors.primary, size: 20),
-              const SizedBox(width: 8),
-              Text('Edit', style: AppTextStyles.labelLarge.copyWith(
-                color: AppColors.primary, fontWeight: FontWeight.bold)),
-            ],
+          padding: const EdgeInsets.all(10),
+          child: Icon(
+            icon,
+            color: Colors.white, // 白色图标
+            size: 20,
           ),
         ),
       ),
