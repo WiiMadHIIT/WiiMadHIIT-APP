@@ -88,6 +88,7 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
   Widget _buildAdaptiveTabBar(BuildContext context) {
     final bool isWiimadActive = _currentIndex == 0;
     final bool isProfileActive = _currentIndex == 4;
+    final bool isLightTabActive = _currentIndex == 1 || _currentIndex == 2 || _currentIndex == 3;
 
     // 当切换到 Wiimad tab 时启动动画
     if (isWiimadActive) {
@@ -100,41 +101,41 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
       animation: _fadeAnimation,
       builder: (context, child) {
         return Container(
-          decoration: BoxDecoration(
-            // Wiimad激活时用渐变，其它tab用透明色
-            gradient: isWiimadActive
-                ? LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.black.withOpacity(0.95),
-                      AppColors.primary.withOpacity(0.1),
-                      Colors.black.withOpacity(0.9),
-                    ],
-                    stops: [0, 0.5, 1],
-                  )
-                : null,
-            color: isProfileActive
-                ? Colors.transparent
-                : (isWiimadActive ? Colors.white.withOpacity(0): Colors.transparent),
-            border: Border(
-              top: BorderSide(
-                color: isWiimadActive
-                    ? AppColors.primary.withOpacity(0)
-                    : Colors.grey.withOpacity(0),
-                width: 0.5,
-              ),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isWiimadActive
-                    ? AppColors.primary.withOpacity(0.2)
-                    : AppColors.shadow,
-                blurRadius: isWiimadActive ? 20 : 12,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
+          // decoration: BoxDecoration(
+          //   // Wiimad激活时用渐变，其它tab用透明色
+          //   gradient: isWiimadActive
+          //       ? LinearGradient(
+          //           begin: Alignment.topLeft,
+          //           end: Alignment.bottomRight,
+          //           colors: [
+          //             Colors.black.withOpacity(0.95),
+          //             AppColors.primary.withOpacity(0.1),
+          //             Colors.black.withOpacity(0.9),
+          //           ],
+          //           stops: [0, 0.5, 1],
+          //         )
+          //       : null,
+          //   color: isProfileActive
+          //       ? Colors.transparent
+          //       : (isWiimadActive ? Colors.white.withOpacity(0): Colors.transparent),
+          //   border: Border(
+          //     top: BorderSide(
+          //       color: isWiimadActive
+          //           ? AppColors.primary.withOpacity(0)
+          //           : Colors.grey.withOpacity(0),
+          //       width: 0.5,
+          //     ),
+          //   ),
+          //   boxShadow: [
+          //     BoxShadow(
+          //       color: isWiimadActive
+          //           ? AppColors.primary.withOpacity(0.2)
+          //           : AppColors.shadow,
+          //       blurRadius: isWiimadActive ? 20 : 12,
+          //       offset: const Offset(0, -2),
+          //     ),
+          //   ],
+          // ),
           child: ClipRRect(
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(20),
@@ -165,8 +166,8 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
                   selectedItemColor: isWiimadActive 
                       ? AppColors.primary 
                       : AppColors.primary,
-                  unselectedItemColor: isWiimadActive
-                      ? Colors.white.withOpacity(0.6)
+                  unselectedItemColor: isLightTabActive
+                      ? Colors.white.withOpacity(0.7)
                       : AppColors.icon,
                   selectedLabelStyle: AppTextStyles.labelLarge.copyWith(
                     color: isWiimadActive ? AppColors.primary : AppColors.primary,
@@ -181,7 +182,7 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
                     ] : null,
                   ),
                   unselectedLabelStyle: AppTextStyles.labelMedium.copyWith(
-                    color: isWiimadActive 
+                    color: isLightTabActive
                         ? Colors.white.withOpacity(0.7)
                         : AppColors.textSecondary,
                     fontWeight: FontWeight.w500,

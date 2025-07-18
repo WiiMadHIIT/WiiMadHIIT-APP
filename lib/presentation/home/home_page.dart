@@ -722,7 +722,7 @@ class _ChampionCard extends StatelessWidget {
                 ),
               ],
             ),
-            child: Text(
+        child: Text(
               '$rank Place',
               style: AppTextStyles.labelMedium.copyWith(
                 color: Colors.white,
