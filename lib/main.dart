@@ -120,8 +120,8 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
             border: Border(
               top: BorderSide(
                 color: isWiimadActive
-                    ? AppColors.primary.withOpacity(0.3)
-                    : Colors.grey.withOpacity(0.1),
+                    ? AppColors.primary.withOpacity(0)
+                    : Colors.grey.withOpacity(0),
                 width: 0.5,
               ),
             ),
