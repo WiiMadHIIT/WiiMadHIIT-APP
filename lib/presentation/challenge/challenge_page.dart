@@ -667,9 +667,9 @@ class _PKEntryState extends State<_PKEntry> {
       case PKStatus.ongoing:
         return 'Join Now';
       case PKStatus.ended:
-        return 'View Results';
+        return 'Results';
       case PKStatus.upcoming:
-        return 'Reserve Now';
+        return 'Reserve';
     }
   }
 
@@ -906,11 +906,14 @@ class _PKEntryState extends State<_PKEntry> {
                                 color: Colors.grey[600],
                               ),
                               const SizedBox(width: 4),
-                              Text(
-                                _formatTimeRemaining(),
-                                style: AppTextStyles.labelSmall.copyWith(
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
+                              Flexible(
+                                child: Text(
+                                  _formatTimeRemaining(),
+                                  style: AppTextStyles.labelSmall.copyWith(
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -918,54 +921,59 @@ class _PKEntryState extends State<_PKEntry> {
                         ),
                       ),
                       
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       
                       // Action button
-                      PowerfulTapEffect(
-                        onTap: widget.onTap,
-                        pressedScale: 0.90,
-                        pressDuration: Duration(milliseconds: 80),
-                        reboundDuration: Duration(milliseconds: 320),
-                        reboundCurve: Curves.elasticOut,
-                        child: _AnimatedButton(
-                          onPressed: () {},
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  statusColor,
-                                  statusColor.withOpacity(0.8),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: statusColor.withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
+                      Flexible(
+                        child: PowerfulTapEffect(
+                          onTap: widget.onTap,
+                          pressedScale: 0.90,
+                          pressDuration: Duration(milliseconds: 80),
+                          reboundDuration: Duration(milliseconds: 320),
+                          reboundCurve: Curves.elasticOut,
+                          child: _AnimatedButton(
+                            onPressed: () {},
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    statusColor,
+                                    statusColor.withOpacity(0.8),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-          children: [
-                                Icon(
-                                  _getButtonIcon(),
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _getButtonText(),
-                                  style: AppTextStyles.labelMedium.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: statusColor.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _getButtonIcon(),
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      _getButtonText(),
+                                      style: AppTextStyles.labelMedium.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),

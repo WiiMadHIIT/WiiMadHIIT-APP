@@ -7,22 +7,39 @@ class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  State<ProfilePage> createState() => ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
+class ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
+  final GlobalKey<ProfileFunctionGridState> _functionGridKey = GlobalKey<ProfileFunctionGridState>();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // 当应用从后台恢复时，重置滑动提示
+    if (state == AppLifecycleState.resumed) {
+      _functionGridKey.currentState?.resetScrollHint();
+    }
+  }
+
+  /// 重置滑动提示状态
+  void resetScrollHint() {
+    _functionGridKey.currentState?.resetScrollHint();
   }
 
   @override
@@ -109,7 +126,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                         // 用户昵称
                         Text('John Doe', // TODO: 替换为真实昵称
                           style: AppTextStyles.headlineMedium.copyWith(
-                            color: Colors.black,
+                            color: Colors.black, 
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -143,7 +160,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             ),
           ),
           SliverToBoxAdapter(child: SizedBox(height: 40)), // 功能入口区上方间距
-          SliverToBoxAdapter(child: _ProfileFunctionGrid()), // 功能入口区
+          SliverToBoxAdapter(child: _ProfileFunctionGrid(key: _functionGridKey)), // 功能入口区
           SliverPersistentHeader(
             pinned: true,
             delegate: _TabBarDelegate(
@@ -232,7 +249,7 @@ class _HonorWall extends StatelessWidget {
       alignment: Alignment.bottomCenter,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 24),
-        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: const BorderRadius.only(
@@ -250,11 +267,22 @@ class _HonorWall extends StatelessWidget {
           ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _MedalWidget(icon: Icons.emoji_events, label: 'Overall Champion', desc: 'HIIT Winner 2023'),
-            const SizedBox(width: 18),
-            _MedalWidget(icon: Icons.star, label: 'Best Streak', desc: '60-Day Check-in Streak'),
+            Expanded(
+              child: _MedalWidget(
+                icon: Icons.emoji_events, 
+                label: 'Overall Champion', 
+                desc: 'HIIT Winner 2023'
+              ),
+            ),
+            Expanded(
+              child: _MedalWidget(
+                icon: Icons.star, 
+                label: 'Best Streak', 
+                desc: '60-Day Check-in Streak'
+              ),
+            ),
           ],
         ),
       ),
@@ -270,17 +298,109 @@ class _MedalWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: AppColors.primary, size: 32),
+        Icon(icon, color: AppColors.primary, size: 28),
         const SizedBox(height: 4),
-        Text(label, style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold)),
-        Text(desc, style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700])),
+        Flexible(
+          child: Text(
+            label, 
+            style: AppTextStyles.labelMedium.copyWith(
+              color: AppColors.primary, 
+              fontWeight: FontWeight.bold
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Flexible(
+          child: Text(
+            desc, 
+            style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700]),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }
 }
 
-class _ProfileFunctionGrid extends StatelessWidget {
+class _ProfileFunctionGrid extends StatefulWidget {
+  const _ProfileFunctionGrid({Key? key}) : super(key: key);
+  
+  @override
+  State<_ProfileFunctionGrid> createState() => ProfileFunctionGridState();
+}
+
+class ProfileFunctionGridState extends State<_ProfileFunctionGrid> with SingleTickerProviderStateMixin {
+  late ScrollController _scrollController;
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  bool _showScrollHint = true;
+  bool _hasScrolled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+
+    // 监听滚动事件
+    _scrollController.addListener(() {
+      if (_scrollController.offset > 0 && !_hasScrolled) {
+        setState(() {
+          _hasScrolled = true;
+          _showScrollHint = false;
+        });
+        _animationController.stop();
+      }
+    });
+
+    // 延迟显示提示动画
+    _startScrollHint();
+  }
+
+  /// 开始显示滑动提示
+  void _startScrollHint() {
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted && _showScrollHint) {
+        _animationController.repeat(reverse: true);
+      }
+    });
+  }
+
+  /// 重置滑动提示状态
+  void resetScrollHint() {
+    setState(() {
+      _showScrollHint = true;
+      _hasScrolled = false;
+    });
+    _animationController.stop();
+    _startScrollHint();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // 功能入口区，全部英文
@@ -290,58 +410,116 @@ class _ProfileFunctionGrid extends StatelessWidget {
       {'icon': Icons.shopping_bag, 'label': 'Gear'},
       {'icon': Icons.bar_chart, 'label': 'Challenges'},
       {'icon': Icons.check_circle, 'label': 'Check-ins'},
+      {'icon': Icons.fitness_center, 'label': 'Workouts'},
+      {'icon': Icons.analytics, 'label': 'Stats'},
+      {'icon': Icons.group, 'label': 'Friends'},
       // 如有更多，继续添加
     ];
+    
     return Card(
       color: Colors.white,
-      margin: const EdgeInsets.symmetric(horizontal: 18),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: BouncingScrollPhysics(), // 苹果风格弹性
-          child: Row(
-            children: [
-              const SizedBox(width: 8), // 首部 padding
-              ...items.map((item) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: SizedBox(
-                    width: 60,// 固定宽度，保证icon对齐
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          height: 40,
-                          child: CircleAvatar(
-                            backgroundColor: AppColors.primary.withOpacity(0.10),
-                            child: Icon(item['icon'] as IconData, color: AppColors.primary),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          height: 32,
-                          child: Center(
-                            child: Text(
-                              item['label'] as String,
-                              style: AppTextStyles.labelMedium.copyWith(color: Colors.black87),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
+      child: Stack(
+        children: [
+          // 主要内容
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(), // 苹果风格弹性
+              child: Row(
+                children: [
+                  const SizedBox(width: 8), // 首部 padding
+                  ...items.map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: SizedBox(
+                        width: 60,// 固定宽度，保证icon对齐
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              height: 40,
+                              child: CircleAvatar(
+                                backgroundColor: AppColors.primary.withOpacity(0.10),
+                                child: Icon(item['icon'] as IconData, color: AppColors.primary),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 6),
+                            SizedBox(
+                              height: 32,
+                              child: Center(
+                                child: Text(
+                                  item['label'] as String,
+                                  style: AppTextStyles.labelMedium.copyWith(color: Colors.black87),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-              const SizedBox(width: 8), // 尾部 padding
-            ],
+                      ),
+                    );
+                  }).toList(),
+                  const SizedBox(width: 8), // 尾部 padding
+                ],
+              ),
+            ),
           ),
-        ),
+          
+          // TikTok风格的滑动提示
+          if (_showScrollHint && !_hasScrolled)
+            Positioned(
+              right: 12,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: AnimatedBuilder(
+                  animation: _fadeAnimation,
+                  builder: (context, child) {
+                    return Opacity(
+                      opacity: _fadeAnimation.value,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.swipe_left,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Swipe',
+                              style: AppTextStyles.labelSmall.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            )
+        ],
       ),
     );
   }

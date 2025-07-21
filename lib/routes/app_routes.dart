@@ -6,6 +6,8 @@ import '../presentation/home/home_page.dart';
 import '../presentation/leaderboard/leaderboard_page.dart';
 import '../presentation/checkinboard/checkinboard_page.dart';
 import '../presentation/profile1/profile_page.dart';
+import '../presentation/checkin_start_training/training_list_page.dart';
+import '../presentation/checkin_start_training/training_rule_page.dart';
 
 class AppRoutes {
   static const String profile = '/profile';
@@ -16,6 +18,8 @@ class AppRoutes {
   static const String leaderboard = '/leaderboard';
   static const String checkinboard = '/checkinboard';
 
+  static const String trainingList = '/training_list';
+  static const String trainingRule = '/training_rule';
 
   static Map<String, WidgetBuilder> get routes => {
     profile: (_) => const ProfilePage(),
@@ -25,5 +29,10 @@ class AppRoutes {
     home: (_) => const HomePage(),
     leaderboard: (_) => LeaderboardPage(),
     checkinboard: (_) => CheckinboardPage(),
+    trainingList: (_) => TrainingListPage(), // 添加TrainingListPage路由
+    trainingRule: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      return TrainingRulePage.fromRoute(args ?? {});
+    },
   };
 }

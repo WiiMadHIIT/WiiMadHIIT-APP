@@ -42,14 +42,9 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
   int _currentIndex = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  final GlobalKey<ProfilePageState> _profilePageKey = GlobalKey<ProfilePageState>();
 
-  final List<Widget> _pages = [
-    HomePage(),
-    ChallengePage(),
-    CheckinPage(),
-    BonusPage(),
-    ProfilePage(),
-  ];
+  late final List<Widget> _pages;
 
   @override
   void initState() {
@@ -65,7 +60,17 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
+    
+    _pages = [
+      HomePage(),
+      ChallengePage(),
+      CheckinPage(),
+      BonusPage(),
+      ProfilePage(key: _profilePageKey),
+    ];
   }
+
+
 
   @override
   void dispose() {
@@ -162,6 +167,13 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
                     setState(() {
                       _currentIndex = index;
                     });
+                    
+                    // 当切换到Profile页面时，重置滑动提示
+                    if (index == 4) {
+                      Future.delayed(const Duration(milliseconds: 100), () {
+                        _profilePageKey.currentState?.resetScrollHint();
+                      });
+                    }
                   },
                   selectedItemColor: isWiimadActive 
                       ? AppColors.primary 

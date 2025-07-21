@@ -1,0 +1,32 @@
+{
+  "videoPath": "https://cdn.example.com/videos/training_intro.mp4",
+  "fallbackImagePath": "https://cdn.example.com/images/training_bg.jpg",
+  "pageTitle": "Beat X Challenges",
+  "pageSubtitle": "Choose your rhythm and intensity",
+  "challenges": [
+    {
+      "name": "Beginner Rhythm",
+      "mode": "Classic",
+      "speed": "60 BPM",
+      "duration": "5 min",
+      "difficulty": "Easy",
+      "description": "Perfect for beginners to learn basic rhythm"
+    },
+    {
+      "name": "Intermediate Flow",
+      "mode": "Progressive",
+      "speed": "80 BPM",
+      "duration": "8 min",
+      "difficulty": "Medium",
+      "description": "Build your endurance with progressive intensity"
+    },
+    {
+      "name": "Advanced Beat",
+      "mode": "Intense",
+      "speed": "100 BPM",
+      "duration": "12 min",
+      "difficulty": "Hard",
+      "description": "High-intensity workout for experienced users"
+    }
+  ]
+} 

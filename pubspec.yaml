@@ -119,4 +119,5 @@ flutter:
     - assets/video/video2.mp4
     - assets/video/video3.mp4
     - assets/images/avatar_default.png
+    - assets/images/player_cover.png
 

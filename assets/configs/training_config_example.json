@@ -1,0 +1,56 @@
+{
+  "videoPath": "assets/video/video1.mp4",
+  "fallbackImagePath": "assets/images/beatx_bg.jpg",
+  "pageTitle": "Beat X Challenges",
+  "pageSubtitle": "Choose your rhythm and intensity",
+  "challenges": [
+    {
+      "name": "Beginner Rhythm",
+      "mode": "Classic",
+      "speed": "60 BPM",
+      "duration": "5 min",
+      "difficulty": "Easy",
+      "description": "Perfect for beginners to learn basic rhythm"
+    },
+    {
+      "name": "Intermediate Flow",
+      "mode": "Progressive",
+      "speed": "80 BPM",
+      "duration": "8 min",
+      "difficulty": "Medium",
+      "description": "Build your endurance with progressive intensity"
+    },
+    {
+      "name": "Advanced Beat",
+      "mode": "Intense",
+      "speed": "100 BPM",
+      "duration": "12 min",
+      "difficulty": "Hard",
+      "description": "High-intensity workout for experienced users"
+    },
+    {
+      "name": "Endurance Master",
+      "mode": "Marathon",
+      "speed": "70 BPM",
+      "duration": "20 min",
+      "difficulty": "Expert",
+      "description": "Long-duration challenge to test your stamina"
+    },
+    {
+      "name": "Speed Demon",
+      "mode": "Sprint",
+      "speed": "120 BPM",
+      "duration": "6 min",
+      "difficulty": "Hard",
+      "description": "Fast-paced challenge for speed training"
+    },
+    {
+      "name": "Rhythm Master",
+      "mode": "Complex",
+      "speed": "90 BPM",
+      "duration": "10 min",
+      "difficulty": "Expert",
+      "description": "Complex patterns to master your rhythm"
+    }
+  ]
+} 

@@ -8,8 +8,10 @@ import 'dart:ui';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:infinite_carousel/infinite_carousel.dart';
 import '../../widgets/floating_logo.dart';
+import '../checkin_start_training/training_list_page.dart';
 
 class ProductCheckin {
+  final String id; // 新增ID字段
   final String name;
   final String description;
   final String iconAsset;
@@ -17,6 +19,7 @@ class ProductCheckin {
   final String? videoAsset; // 新增，可选
 
   ProductCheckin({
+    required this.id,
     required this.name,
     required this.description,
     required this.iconAsset,
@@ -45,53 +48,36 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
   // 这里必须有
   final List<ProductCheckin> products = [
     ProductCheckin(
-      name: "HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro HIIT Pro",
-      description: "High-Intensity Interval Training Training Training Training Training Training Training Training Training Training",
+      id: "hiit_pro",
+      name: "HIIT Pro",
+      description: "High-Intensity Interval Training for maximum results",
       iconAsset: "assets/icons/hiit.svg",
-      routeName: "/hiit",
+      routeName: "/training_list",
       videoAsset: "assets/video/video1.mp4",
     ),
     ProductCheckin(
+      id: "yoga_flex",
       name: "Yoga Flex",
-      description: "Daily Yoga Flexibility",
+      description: "Daily Yoga Flexibility and Mindfulness",
       iconAsset: "assets/icons/yoga.svg",
-      routeName: "/yoga",
+      routeName: "/training_list",
       videoAsset: "assets/video/video2.mp4",
     ),
     ProductCheckin(
-      name: "Yoga Flex",
-      description: "Daily Yoga Flexibility",
-      iconAsset: "assets/icons/yoga.svg",
-      routeName: "/yoga",
+      id: "strength_training",
+      name: "Strength Training",
+      description: "Build muscle and increase strength",
+      iconAsset: "assets/icons/hiit.svg",
+      routeName: "/training_list",
       videoAsset: "assets/video/video3.mp4",
     ),
     ProductCheckin(
-      name: "HIIT Pro",
-      description: "High-Intensity Interval Training",
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: "/hiit",
-      videoAsset: "",
-    ),
-    ProductCheckin(
-      name: "HIIT Pro",
-      description: "High-Intensity Interval Training",
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: "/hiit",
-      videoAsset: "",
-    ),
-    ProductCheckin(
-      name: "HIIT Pro",
-      description: "High-Intensity Interval Training",
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: "/hiit",
-      videoAsset: "",
-    ),
-    ProductCheckin(
-      name: "HIIT Pro",
-      description: "High-Intensity Interval Training",
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: "/hiit",
-      videoAsset: "",
+      id: "cardio_blast",
+      name: "Cardio Blast",
+      description: "High-energy cardio workout",
+      iconAsset: "assets/icons/yoga.svg",
+      routeName: "/training_list",
+      videoAsset: "assets/video/video1.mp4",
     ),
     // ... 其他产品
   ];
@@ -132,7 +118,18 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
   }
 
   void _onProductTap(ProductCheckin product) {
-    Navigator.pushNamed(context, product.routeName);
+    if (product.routeName == "/training_list" || product.routeName == "/trainingList") {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TrainingListPage(
+            productId: product.id, // 传递产品ID
+          ),
+        ),
+      );
+    } else {
+      Navigator.pushNamed(context, product.routeName);
+    }
   }
 
   void _onPageChanged(int index) {
@@ -513,47 +510,44 @@ class _ProductEntryState extends State<_ProductEntry> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: PowerfulTapEffect(
-                      onTap: widget.onTap,
+                      onTap: _onTap,
                       pressedScale: 0.90, // 力量感更强
                       pressDuration: Duration(milliseconds: 80),
                       reboundDuration: Duration(milliseconds: 320),
                       reboundCurve: Curves.elasticOut,
-                      child: _AnimatedButton(
-                        onPressed: () {}, // 保持按钮可用，实际逻辑由外层PowerfulTapEffect控制
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.primary,
-                                AppColors.primary.withOpacity(0.8),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.primary,
+                              AppColors.primary.withOpacity(0.8),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withOpacity(0.25),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
                             ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primary.withOpacity(0.25),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.flash_on, size: 18, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Start Training',
+                              style: AppTextStyles.labelLarge.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
                               ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.flash_on, size: 18, color: Colors.white),
-                              const SizedBox(width: 6),
-                              Text(
-                            'Start Training',
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
                             ),
-                          ),
-                            ],
-                          ),
+                          ],
                         ),
                       ),
                     ),
