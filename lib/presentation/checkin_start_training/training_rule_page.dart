@@ -661,12 +661,10 @@ class _TrainingRulePageState extends State<TrainingRulePage>
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              // TODO: 开始训练
-              ScaffoldMessenger.of(context).showSnackBar(
-                               SnackBar(
-                 content: Text('Starting ${widget.trainingName ?? 'Training'}...'),
-                 backgroundColor: AppColors.primary,
-               ),
+              // 直接跳转到 CheckingTrainingPage 页面，无参数，无SnackBar
+              Navigator.pushNamed(
+                context,
+                '/checking_training',
               );
             },
             style: ElevatedButton.styleFrom(
@@ -882,7 +880,6 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
           // 标题
           Padding(
             padding: const EdgeInsets.all(24),
@@ -910,28 +907,33 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
               ],
             ),
           ),
-          
-          // 视频教程区域
-          _buildVideoTutorialSection(),
-          
-          // 教程内容
+          // 内容区：视频卡片+教程步骤一起滚动
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ...fakeTutorialSteps.map((step) => _buildTutorialStep(
-                    number: step["number"],
-                    title: step["title"],
-                    description: step["description"],
-                    icon: step["icon"],
-                  )).toList(),
+                  _buildVideoTutorialSection(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...fakeTutorialSteps.map((step) => _buildTutorialStep(
+                          number: step["number"],
+                          title: step["title"],
+                          description: step["description"],
+                          icon: step["icon"],
+                        )),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
           ),
-          
           // 关闭按钮
           Padding(
             padding: const EdgeInsets.all(24),
@@ -962,12 +964,8 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
   }
 
   Widget _buildVideoTutorialSection() {
-    final double cardHeight = 76;
-    final double iconSize = 32;
-    final double iconBox = 52;
-
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -984,28 +982,27 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
             child: ScaleTransition(
               scale: _scaleAnimation,
               child: Container(
-                height: cardHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.97),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.07),
-                      blurRadius: 14,
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
                   ],
                   border: Border.all(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withOpacity(0.03),
                     width: 1,
                   ),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: iconBox,
-                      height: iconBox,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
@@ -1015,7 +1012,7 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.10),
+                            color: Colors.black.withOpacity(0.08),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
@@ -1024,17 +1021,17 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
                       child: Icon(
                         Icons.play_arrow_rounded,
                         color: Colors.white,
-                        size: iconSize,
+                        size: 24,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         fakeVideoInfo["title"] ?? 'Watch Video Tutorial',
                         style: AppTextStyles.titleMedium.copyWith(
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF222222),
-                          fontSize: 17,
+                          fontSize: 16,
                           letterSpacing: 0.1,
                         ),
                         maxLines: 1,
@@ -1047,7 +1044,7 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
                         color: Color(0xFFB0B0B0),
-                        size: 28,
+                        size: 24,
                       ),
                     ),
                   ],
@@ -1056,15 +1053,15 @@ class _ProjectionTutorialSheetState extends State<_ProjectionTutorialSheet>
             ),
           ),
           AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
+            duration: const Duration(milliseconds: 350),
             curve: Curves.easeInOutCubic,
-            height: _isVideoExpanded ? 220 : 0,
-            margin: EdgeInsets.only(top: _isVideoExpanded ? 14 : 0),
+            height: _isVideoExpanded ? 180 : 0,
+            margin: EdgeInsets.only(top: _isVideoExpanded ? 10 : 0),
             child: _isVideoExpanded
                 ? ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     child: _buildVideoPlayer(
-                      customMaxHeight: 220,
+                      customMaxHeight: 180,
                       asset: fakeVideoInfo["asset"],
                     ),
                   )

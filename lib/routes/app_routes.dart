@@ -8,6 +8,7 @@ import '../presentation/checkinboard/checkinboard_page.dart';
 import '../presentation/profile1/profile_page.dart';
 import '../presentation/checkin_start_training/training_list_page.dart';
 import '../presentation/checkin_start_training/training_rule_page.dart';
+import '../presentation/checkin_start_training/checking_training_page.dart';
 
 class AppRoutes {
   static const String profile = '/profile';
@@ -17,6 +18,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String leaderboard = '/leaderboard';
   static const String checkinboard = '/checkinboard';
+  static const String checkingTraining = '/checking_training';
 
   static const String trainingList = '/training_list';
   static const String trainingRule = '/training_rule';
@@ -33,6 +35,10 @@ class AppRoutes {
     trainingRule: (context) {
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       return TrainingRulePage.fromRoute(args ?? {});
+    },
+    checkingTraining: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      return CheckingTrainingPage(trainingId: args?['trainingId'] ?? '');
     },
   };
 }
