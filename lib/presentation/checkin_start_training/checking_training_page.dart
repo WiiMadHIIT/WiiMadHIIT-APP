@@ -344,17 +344,26 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   @override
   Widget build(BuildContext context) {
     final double diameter = MediaQuery.of(context).size.width * 2 / 3;
+    final bool isWarning = isCounting && countdown <= 3;
+    // 进度条主色
+    final Color mainColor = isWarning ? Color(0xFF00FF7F) : Color(0xFF00BF60);
+    // 进度条渐变色（最后3秒）
+    final Gradient? progressGradient = isWarning
+        ? LinearGradient(
+            colors: [Color(0xFF00FF7F), Colors.white],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          )
+        : null;
+    final Color trackColor = Color(0xFFF3F4F6);
     return Scaffold(
       body: Container(
-        color: isCounting && countdown <= 3 ? Color(0xFF00FF7F) : Color(0xFFF97316),
+        color: isWarning ? Color(0xFF00FF7F) : Color(0xFFF97316),
         child: PageView.builder(
           controller: pageController,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: totalRounds,
           itemBuilder: (context, index) {
-            final bool isWarning = isCounting && countdown <= 3;
-            final Color mainColor = Color(0xFF00BF60); // 进度条主色
-            final Color trackColor = Color(0xFFF3F4F6); // 轨迹淡灰
             return Stack(
               children: [
                 // 顶部返回和大标题
@@ -402,16 +411,17 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                               painter: _CircleProgressPainter(
                                 progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
                                 color: mainColor,
+                                gradient: progressGradient,
                                 trackColor: trackColor,
                                 shadow: mainColor.withOpacity(0.18),
-                                strokeWidth: 8,
+                                strokeWidth: 14,
                               ),
                             ),
                           ),
-                          // 内部白色圆
+                          // 内部白色圆（比进度条内径略小，保证进度条内边缘向内延申）
                           Container(
-                            width: diameter - 8,
-                            height: diameter - 8,
+                            width: diameter - 24,
+                            height: diameter - 24,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
@@ -452,7 +462,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                                 style: TextStyle(
                                   fontSize: diameter / 7,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
+                                  color: mainColor,
                                   letterSpacing: 2,
                                 ),
                               ),
@@ -592,15 +602,17 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
 class _CircleProgressPainter extends CustomPainter {
   final double progress;
   final Color color;
+  final Gradient? gradient;
   final Color trackColor;
   final Color shadow;
   final double strokeWidth;
   _CircleProgressPainter({
     required this.progress,
     required this.color,
+    this.gradient,
     required this.trackColor,
     required this.shadow,
-    this.strokeWidth = 8,
+    this.strokeWidth = 14,
   });
 
   @override
@@ -616,6 +628,9 @@ class _CircleProgressPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2)
       ..strokeCap = StrokeCap.round;
+    if (gradient != null) {
+      fg.shader = gradient!.createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    }
     final Paint glow = Paint()
       ..color = shadow
       ..strokeWidth = strokeWidth + 6
