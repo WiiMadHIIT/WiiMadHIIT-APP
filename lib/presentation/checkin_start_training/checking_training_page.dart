@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import '../../widgets/floating_logo.dart';
+import '../../core/theme/app_colors.dart';
 
 class CheckingTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -12,6 +13,7 @@ class CheckingTrainingPage extends StatefulWidget {
 }
 
 class _CheckingTrainingPageState extends State<CheckingTrainingPage> with TickerProviderStateMixin {
+  Map<String, dynamic>? currentResult;
   int totalRounds = 1;
   int roundDuration = 1; // 单位：分钟
   int currentRound = 1;
@@ -25,12 +27,13 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   late Animation<double> bounceAnim;
   late PageController pageController;
   int _lastBounceTime = 0;
+  bool showResultOverlay = false;
 
   // 假数据历史排名
   final List<Map<String, dynamic>> history = [
-    {"rank": 1, "date": "May 19, 2025", "counts": 19},
-    {"rank": 2, "date": "May 13, 2025", "counts": 18},
-    {"rank": 3, "date": "May 13, 2025", "counts": 15},
+    {"rank": 1, "date": "May 19, 2025", "counts": 19, "note": ""},
+    {"rank": 2, "date": "May 13, 2025", "counts": 18, "note": ""},
+    {"rank": 3, "date": "May 13, 2025", "counts": 15, "note": ""},
   ];
 
   @override
@@ -290,33 +293,68 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   }
 
   void _tick() async {
-  if (!isCounting) return;
-  if (countdown > 0) {
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() {
-      countdown--;
-      if (countdown <= 3) {
-        // 变色
-      }
-    });
-    _tick();
-  } else {
-    if (!mounted) return;
-    // 进入下一个ROUND或结束
-    if (currentRound < totalRounds) {
+    if (!isCounting) return;
+    if (countdown > 0) {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
       setState(() {
-        currentRound++;
+        countdown--;
+        if (countdown <= 3) {
+          // 变色
+        }
       });
-      pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
-      Future.delayed(const Duration(milliseconds: 600), _startPreCountdown);
+      _tick();
     } else {
-      setState(() {
-        isCounting = false;
-      });
+      if (!mounted) return;
+      // 进入下一个ROUND或结束
+      if (currentRound < totalRounds) {
+        setState(() {
+          currentRound++;
+        });
+        pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+        Future.delayed(const Duration(milliseconds: 600), _startPreCountdown);
+      } else {
+        // 训练结束，插入本次成绩
+        final now = DateTime.now();
+        final months = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
+        final result = {
+          "date": dateStr,
+          "counts": counter,
+          "note": "current",
+        };
+        setState(() {
+          isCounting = false;
+          // 先移除已有current
+          history.removeWhere((e) => e["note"] == "current");
+          // 插入本次结果到首位
+          history.insert(0, result);
+          // 排序得到排名
+          final sorted = List<Map<String, dynamic>>.from(history);
+          sorted.sort((a, b) => b["counts"].compareTo(a["counts"]));
+          for (int i = 0; i < sorted.length; i++) {
+            sorted[i]["rank"] = i + 1;
+          }
+          // 找到本次结果的排名
+          final myRank = sorted.indexWhere((e) => e["note"] == "current") + 1;
+          history[0]["rank"] = myRank;
+          // 其余历史排名也赋rank
+          int hIdx = 1;
+          for (int i = 0; i < sorted.length; i++) {
+            if (sorted[i]["note"] != "current") {
+              history[hIdx]["rank"] = sorted[i]["rank"];
+              hIdx++;
+              if (hIdx >= history.length) break;
+            }
+          }
+          showResultOverlay = true;
+        });
+      }
     }
   }
-}
 
   void _onStartPressed() {
     _startPreCountdown();
@@ -386,7 +424,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   Widget build(BuildContext context) {
     final double diameter = MediaQuery.of(context).size.width * 3 / 4;
     final bool isWarning = isCounting && countdown <= 3;
-    final Color mainColor = isWarning ? Color(0xFF00FF7F) : Color(0xFF00BF60);
+    final Color mainColor = isWarning ? AppColors.primary : Color(0xFF00BF60);
     final Gradient? progressGradient = isWarning
         ? LinearGradient(
             colors: [Color(0xFF00FF7F), Colors.white],
@@ -466,8 +504,8 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                                 child: CustomPaint(
                                   painter: _CircleProgressPainter(
                                     progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
-                                    color: mainColor,
-                                    gradient: progressGradient,
+                                    color: isWarning ? AppColors.primary : mainColor,
+                                    gradient: isWarning ? null : progressGradient,
                                     trackColor: trackColor,
                                     shadow: mainColor.withOpacity(0.18),
                                     strokeWidth: 14,
@@ -495,7 +533,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                                     style: TextStyle(
                                       fontSize: diameter / 3,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
+                                      color: isWarning ? AppColors.primary : Colors.black87,
                                       letterSpacing: 1.5,
                                     ),
                                   ),
@@ -523,12 +561,14 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                         ),
                       ),
                     ),
-                    // 底部历史排名
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: _buildHistoryRanking(),
+                    // 底部历史排名可拖拽弹窗
+                    DraggableScrollableSheet(
+                      initialChildSize: 0.22,
+                      minChildSize: 0.15,
+                      maxChildSize: 0.6,
+                      builder: (context, scrollController) {
+                        return _buildHistoryRanking(scrollController);
+                      },
                     ),
                     // 遮罩倒计时动画
                     if (showPreCountdown)
@@ -596,12 +636,71 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
               },
             ),
           ),
+          if (showResultOverlay)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.7),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.emoji_events, color: AppColors.primary, size: 64),
+                      SizedBox(height: 24),
+                      Text('训练完成!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      SizedBox(height: 16),
+                      Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      Text('COUNT:  ${history[0]["counts"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: 18, color: Colors.white70)),
+                      SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                showResultOverlay = false;
+                                currentRound = 1;
+                                counter = 0;
+                                isStarted = false;
+                                isCounting = false;
+                                showPreCountdown = false;
+                              });
+                              _startPreCountdown();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            child: Text('再来一次', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                          SizedBox(width: 24),
+                          OutlinedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: BorderSide(color: AppColors.primary, width: 2),
+                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            child: Text('返回重置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildHistoryRanking() {
+  Widget _buildHistoryRanking(ScrollController scrollController) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       decoration: BoxDecoration(
@@ -615,9 +714,8 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: ListView(
+        controller: scrollController,
         children: [
           const Text(
             'TOP SCORES',
@@ -642,38 +740,65 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
           const SizedBox(height: 4),
           ...history.map((e) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  children: [
-                    SizedBox(width: 8),
-                    Container(
-                      width: 28,
-                      height: 28,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: e["rank"] == 1 ? Colors.orange.shade400 : Colors.black12,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${e["rank"]}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                child: Container(
+                  decoration: e["note"] == "current"
+                      ? BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.primary, width: 2),
+                        )
+                      : null,
+                  child: Row(
+                    children: [
+                      SizedBox(width: 8),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: e["rank"] == 1 ? Colors.orange.shade400 : Colors.black12,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${e["rank"]}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 18),
-                    Text(
-                      e["date"],
-                      style: const TextStyle(color: Colors.black87, fontSize: 15),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${e["counts"]}',
-                      style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.sports_mma, color: Colors.black54, size: 18),
-                  ],
+                      const SizedBox(width: 18),
+                      Text(
+                        e["date"],
+                        style: const TextStyle(color: Colors.black87, fontSize: 15),
+                      ),
+                      if (e["note"] == "current")
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'MY',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                      Text(
+                        '${e["counts"]}',
+                        style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.sports_mma, color: Colors.black54, size: 18),
+                    ],
+                  ),
                 ),
               )),
         ],
