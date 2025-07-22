@@ -324,12 +324,22 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   void _onCountPressed() {
     if (!isCounting) return;
     bounceController.stop();
-    bounceController.value = 1.18; // 直接弹到最大
+    final double start = bounceController.value;
+    // 第一段：当前位置到1.18
     bounceController.animateTo(
-      1.0,
-      duration: Duration(milliseconds: 120),
-      curve: Curves.elasticOut, // 有弹性回弹
-    );
+      1.18,
+      duration: Duration(milliseconds: (80 * (1.18 - start) / 0.18).round()),
+      curve: Curves.easeOut,
+    ).then((_) {
+      if (mounted) {
+        // 第二段：1.18回弹到1.0
+        bounceController.animateTo(
+          1.0,
+          duration: Duration(milliseconds: 180),
+          curve: Curves.elasticOut,
+        );
+      }
+    });
     setState(() {
       counter++;
     });
