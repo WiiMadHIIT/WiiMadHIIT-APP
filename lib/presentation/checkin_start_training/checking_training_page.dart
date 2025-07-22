@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import '../../core/theme/app_colors.dart';
 
 class CheckingTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -345,192 +346,160 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   Widget build(BuildContext context) {
     final double diameter = MediaQuery.of(context).size.width * 2 / 3;
     final bool isWarning = isCounting && countdown <= 3;
-    final Color mainBg = const Color(0xFF8B1FA9); // 主色紫红
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 0.75,
             colors: [
-              mainBg.withOpacity(0.95),
-              const Color(0xFF1A1A1A).withOpacity(0.95),
+              AppColors.primary,
+              AppColors.primary.withOpacity(0.8),
+              Colors.black,
             ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
-        child: Container(
-          color: Colors.black.withOpacity(0.45), // 黑色遮罩
-          child: PageView.builder(
-            controller: pageController,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: totalRounds,
-            itemBuilder: (context, index) {
-              final bool isWarning = isCounting && countdown <= 3;
-              return Stack(
-                children: [
-                  // 顶部返回和大标题
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-                            onPressed: () => Navigator.pop(context),
+        child: PageView.builder(
+          controller: pageController,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: totalRounds,
+          itemBuilder: (context, index) {
+            final bool isWarning = isCounting && countdown <= 3;
+            return Stack(
+              children: [
+                // 顶部返回和大标题
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        const Spacer(),
+                        Text(
+                          'ROUND ${index + 1}/$totalRounds',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 1.2,
                           ),
-                          const Spacer(),
-                          Text(
-                            'ROUND ${index + 1}/$totalRounds',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 1.2,
+                        ),
+                        const Spacer(flex: 2),
+                      ],
+                    ),
+                  ),
+                ),
+                Center(
+                  child: GestureDetector(
+                    onTap: isStarted && isCounting ? _onCountPressed : (isStarted ? null : _onStartPressed),
+                    child: AnimatedBuilder(
+                      animation: bounceController,
+                      builder: (context, child) => Transform.scale(
+                        scale: bounceController.value,
+                        child: child,
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: diameter,
+                            height: diameter,
+                            child: CustomPaint(
+                              painter: _CircleProgressPainter(
+                                progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
+                                color: isWarning
+                                    ? const Color(0xFFFF3B30)
+                                    : const Color(0xFF00FF7F), // 荧光绿
+                                trackColor: const Color(0xFF23272F),
+                                strokeWidth: 8,
+                              ),
                             ),
                           ),
-                          const Spacer(flex: 2),
+                          Container(
+                            width: diameter - 8,
+                            height: diameter - 8,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: isStarted && isCounting
+                                  ? AnimatedSwitcher(
+                                      duration: Duration(milliseconds: 200),
+                                      transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                                      child: Text(
+                                        '$counter',
+                                        key: ValueKey(counter),
+                                        style: TextStyle(
+                                          fontSize: diameter / 3,
+                                          fontWeight: FontWeight.bold,
+                                          color: isWarning ? const Color(0xFFFF3B30) : Colors.black,
+                                        ),
+                                      ),
+                                    )
+                                  : Icon(Icons.play_arrow_rounded, size: diameter / 2.5, color: const Color(0xFF00FF7F)),
+                            ),
+                          ),
+                          if (isStarted && isCounting)
+                            Positioned(
+                              bottom: diameter / 8,
+                              left: 0,
+                              right: 0,
+                              child: Text(
+                                _formatTime(countdown),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: diameter / 7,
+                                  fontWeight: FontWeight.bold,
+                                  color: isWarning ? const Color(0xFFFF3B30) : const Color(0xFF00FF7F),
+                                  letterSpacing: 2,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
                   ),
-                  Center(
-                    child: GestureDetector(
-                      onTap: isStarted && isCounting ? _onCountPressed : (isStarted ? null : _onStartPressed),
-                      child: AnimatedBuilder(
-                        animation: bounceController,
-                        builder: (context, child) => Transform.scale(
-                          scale: bounceController.value,
-                          child: child,
-                        ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // 圆环进度条
-                            SizedBox(
-                              width: diameter,
-                              height: diameter,
-                              child: CustomPaint(
-                                painter: _CircleProgressPainter(
-                                  progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
-                                  color: isWarning
-                                      ? const Color(0xFFFF3B30)
-                                      : const Color(0xFF00FF00), // 高饱和绿色
-                                  trackColor: mainBg.withOpacity(0.45),
-                                  shadow: isWarning
-                                      ? const Color(0xFFFF3B30).withOpacity(0.3)
-                                      : const Color(0xFF00FF00).withOpacity(0.18),
-                                  strokeWidth: 10,
-                                ),
-                              ),
-                            ),
-                            // 内部白色圆
-                            Container(
-                              width: diameter - 20,
-                              height: diameter - 20,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.10),
-                                    blurRadius: 24,
-                                    offset: Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: Center(
-                                child: isStarted && isCounting
-                                    ? Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          AnimatedSwitcher(
-                                            duration: Duration(milliseconds: 200),
-                                            transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                                            child: Text(
-                                              '$counter',
-                                              key: ValueKey(counter),
-                                              style: TextStyle(
-                                                fontSize: diameter / 3,
-                                                fontWeight: FontWeight.bold,
-                                                color: isWarning ? const Color(0xFFFF3B30) : Colors.black,
-                                              ),
-                                            ),
-                                          )
-                                        ],
-                                      )
-                                    : Icon(Icons.play_arrow_rounded, size: diameter / 2.5, color: const Color(0xFF00FF00)),
-                              ),
-                            ),
-                            // 倒计时数字
-                            if (isStarted && isCounting)
-                              Positioned(
-                                bottom: diameter / 8,
-                                left: 0,
-                                right: 0,
-                                child: Text(
-                                  _formatTime(countdown),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: diameter / 7,
-                                    fontWeight: FontWeight.bold,
-                                    color: isWarning ? const Color(0xFFFF3B30) : const Color(0xFF00FF00),
-                                    letterSpacing: 2,
-                                  ),
-                                ),
-                              ),
-                            // 最后三秒警示遮罩
-                            if (isWarning)
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFF3B30).withOpacity(0.08),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // 底部历史排名
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _buildHistoryRanking(),
-                  ),
-                  // 遮罩倒计时动画
-                  if (showPreCountdown)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withOpacity(0.7),
-                        child: Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 400),
-                            transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                            child: Text(
-                              '$preCountdown',
-                              key: ValueKey(preCountdown),
-                              style: const TextStyle(
-                                fontSize: 120,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                shadows: [
-                                  Shadow(color: Colors.black54, blurRadius: 12),
-                                ],
-                              ),
+                ),
+                // 底部历史排名
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildHistoryRanking(),
+                ),
+                // 遮罩倒计时动画
+                if (showPreCountdown)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.7),
+                      child: Center(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                          child: Text(
+                            '$preCountdown',
+                            key: ValueKey(preCountdown),
+                            style: const TextStyle(
+                              fontSize: 120,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(color: Colors.black54, blurRadius: 12),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
-                ],
-              );
-            },
-          ),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -627,14 +596,12 @@ class _CircleProgressPainter extends CustomPainter {
   final double progress;
   final Color color;
   final Color trackColor;
-  final Color shadow;
   final double strokeWidth;
   _CircleProgressPainter({
     required this.progress,
     required this.color,
     required this.trackColor,
-    required this.shadow,
-    this.strokeWidth = 10,
+    this.strokeWidth = 8,
   });
 
   @override
@@ -648,19 +615,12 @@ class _CircleProgressPainter extends CustomPainter {
       ..color = color
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 1.5)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2)
       ..strokeCap = StrokeCap.round;
-    final Paint glow = Paint()
-      ..color = shadow
-      ..strokeWidth = strokeWidth + 8
-      ..style = PaintingStyle.stroke
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8);
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - strokeWidth / 2;
     // 轨迹
     canvas.drawCircle(center, radius, track);
-    // glow
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, glow);
     // 主进度
     canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, fg);
   }
