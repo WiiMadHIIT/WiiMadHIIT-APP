@@ -24,6 +24,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   late AnimationController bounceController;
   late Animation<double> bounceAnim;
   late PageController pageController;
+  int _lastBounceTime = 0;
 
   // 假数据历史排名
   final List<Map<String, dynamic>> history = [
@@ -321,25 +322,27 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
     _startPreCountdown();
   }
 
-  void _onCountPressed() {
+  void _onCountPressed() async {
     if (!isCounting) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final interval = now - _lastBounceTime;
+    _lastBounceTime = now;
+
     bounceController.stop();
-    final double start = bounceController.value;
-    // 第一段：当前位置到1.18
-    bounceController.animateTo(
-      1.18,
-      duration: Duration(milliseconds: (80 * (1.18 - start) / 0.18).round()),
-      curve: Curves.easeOut,
-    ).then((_) {
+
+    if (interval > 200) {
+      // 慢速点击，完整弹跳动画
+      bounceController.value = 1.0;
+      await bounceController.animateTo(1.18, duration: Duration(milliseconds: 120), curve: Curves.easeOut);
       if (mounted) {
-        // 第二段：1.18回弹到1.0
-        bounceController.animateTo(
-          1.0,
-          duration: Duration(milliseconds: 180),
-          curve: Curves.elasticOut,
-        );
+        await bounceController.animateTo(1.0, duration: Duration(milliseconds: 180), curve: Curves.elasticOut);
       }
-    });
+    } else {
+      // 快速点击，直接弹到最大再快速回弹
+      bounceController.value = 1.18;
+      bounceController.animateTo(1.0, duration: Duration(milliseconds: 100), curve: Curves.easeOut);
+    }
+
     setState(() {
       counter++;
     });
