@@ -330,15 +330,22 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
 
     bounceController.stop();
 
-    if (interval > 200) {
-      // 慢速点击，完整弹跳动画
+    if (interval > 400) {
+      // 非常慢的点击，柔和弹跳
+      bounceController.value = 1.0;
+      await bounceController.animateTo(1.18, duration: Duration(milliseconds: 200), curve: Curves.easeInOutCubic);
+      if (mounted) {
+        await bounceController.animateTo(1.0, duration: Duration(milliseconds: 300), curve: Curves.elasticOut);
+      }
+    } else if (interval > 200) {
+      // 中速点击，正常弹跳
       bounceController.value = 1.0;
       await bounceController.animateTo(1.18, duration: Duration(milliseconds: 120), curve: Curves.easeOut);
       if (mounted) {
         await bounceController.animateTo(1.0, duration: Duration(milliseconds: 180), curve: Curves.elasticOut);
       }
     } else {
-      // 快速点击，直接弹到最大再快速回弹
+      // 快速点击，快速回弹
       bounceController.value = 1.18;
       bounceController.animateTo(1.0, duration: Duration(milliseconds: 100), curve: Curves.easeOut);
     }
@@ -362,9 +369,22 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
     ? (countdown <= 3 ? const Color(0xFF00FF7F) : const Color(0xFFF2F2F2))
     : const Color(0xFFF2F2F2);
 
+  Color get _dynamicBgColor {
+    if (isCounting && countdown > 3) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final interval = now - _lastBounceTime;
+      double t = (1.0 - (interval.clamp(0, 800) / 800));
+      return Color.lerp(Color(0xFFFFCC66), Color(0xFFF97316), t)!;
+    } else if (isCounting && countdown <= 3) {
+      return Color(0xFF00FF7F);
+    } else {
+      return Color(0xFFFFCC66);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final double diameter = MediaQuery.of(context).size.width * 2 / 3;
+    final double diameter = MediaQuery.of(context).size.width * 3 / 4;
     final bool isWarning = isCounting && countdown <= 3;
     final Color mainColor = isWarning ? Color(0xFF00FF7F) : Color(0xFF00BF60);
     final Gradient? progressGradient = isWarning
@@ -379,7 +399,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
       body: Stack(
         children: [
           Container(
-            color: isWarning ? Color(0xFF00FF7F) : Color(0xFFF97316),
+            color: _dynamicBgColor,
             child: PageView.builder(
               controller: pageController,
               physics: const NeverScrollableScrollPhysics(),
