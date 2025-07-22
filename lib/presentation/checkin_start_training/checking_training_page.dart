@@ -121,7 +121,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                   ),
                   SizedBox(height: 18),
                   Text(
-                    'Total: ${tempRounds * tempMinutes} min',
+                    '	${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
                     style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 15),
                   ),
                   SizedBox(height: 24),
@@ -165,48 +165,95 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
     required ValueChanged<int> onChanged,
     required Color color,
   }) {
+    final controller = FixedExtentScrollController(initialItem: value - min);
     return Column(
       children: [
         Text(label, style: TextStyle(fontSize: 15, color: Colors.black54, fontWeight: FontWeight.w500)),
         SizedBox(height: 8),
-        Container(
-          width: 70,
-          height: 120,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: RotatedBox(
-            quarterTurns: -1,
-            child: ListWheelScrollView.useDelegate(
-              itemExtent: 48,
-              diameterRatio: 1.2,
-              physics: FixedExtentScrollPhysics(),
-              controller: FixedExtentScrollController(initialItem: value - min),
-              onSelectedItemChanged: (i) => onChanged(i + min),
-              childDelegate: ListWheelChildBuilderDelegate(
-                builder: (context, i) {
-                  final v = i + min;
-                  final isSelected = v == value;
-                  return RotatedBox(
-                    quarterTurns: 1,
-                    child: Center(
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 70,
+              height: 120,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListWheelScrollView.useDelegate(
+                controller: controller,
+                itemExtent: 44,
+                diameterRatio: 1.2,
+                physics: FixedExtentScrollPhysics(),
+                onSelectedItemChanged: (i) => onChanged(i + min),
+                childDelegate: ListWheelChildBuilderDelegate(
+                  builder: (context, i) {
+                    final v = i + min;
+                    final isSelected = v == value;
+                    return AnimatedContainer(
+                      duration: Duration(milliseconds: 200),
+                      alignment: Alignment.center,
+                      decoration: isSelected
+                          ? BoxDecoration(
+                              color: color.withOpacity(0.18),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: color, width: 2),
+                            )
+                          : null,
                       child: Text(
                         '$v',
                         style: TextStyle(
-                          fontSize: isSelected ? 32 : 22,
+                          fontSize: isSelected ? 32 : 20,
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           color: isSelected ? color : Colors.black38,
                           letterSpacing: 1.1,
                         ),
                       ),
-                    ),
-                  );
-                },
-                childCount: max - min + 1,
+                    );
+                  },
+                  childCount: max - min + 1,
+                ),
               ),
             ),
-          ),
+            // 顶部渐变遮罩
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 28,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.white, Colors.white.withOpacity(0.0)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // 底部渐变遮罩
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 28,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [Colors.white, Colors.white.withOpacity(0.0)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -279,160 +326,212 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
       counter++;
     });
   }
-
+  // 背景色 绿色 0xFF00FF7F #00FF7F
+  // 绿色 0xFF34C759 #34C759
+  // 蓝色 0xFF007AFF  #007AFF
+  // 纯蓝色 0xFF0000FF  #0000FF
+  // 橙色 0xFF007AFF  #FF9500
+  // 红色 0xFFFF3B30  #FF3B30
+  // #00FFFF  #7FCFFF #007F3F #00A352 #33CCFF #00BF60
+  // #FF0080  #A300FF #7FFF00
+  // #FF8500  #FFA300 #00C2FF 
+  // #E0E0E0  #004F28 #FFA07A
+  // #00FFFF  #BF00FF #E0E0E0
   Color get _bgColor => isCounting
-      ? (countdown <= 3 ? const Color(0xFF34C759) : const Color(0xFFFF9500))
-      : const Color(0xFFFF9500);
+    ? (countdown <= 3 ? const Color(0xFF00FF7F) : const Color(0xFFF2F2F2))
+    : const Color(0xFFF2F2F2);
 
   @override
   Widget build(BuildContext context) {
+    final double diameter = MediaQuery.of(context).size.width * 2 / 3;
+    final bool isWarning = isCounting && countdown <= 3;
+    final Color mainBg = const Color(0xFF8B1FA9); // 主色紫红
     return Scaffold(
-      backgroundColor: _bgColor,
-      body: PageView.builder(
-        controller: pageController,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: totalRounds,
-        itemBuilder: (context, index) {
-          return Stack(
-            children: [
-              // 顶部返回和大标题
-              SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      const Spacer(),
-                      Text(
-                        'ROUND ${index + 1}/$totalRounds',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      const Spacer(flex: 2),
-                    ],
-                  ),
-                ),
-              ),
-              // 中间大圆形倒计时/计数器
-              Center(
-                child: GestureDetector(
-                  onTap: isStarted && isCounting ? _onCountPressed : (isStarted ? null : _onStartPressed),
-                  child: AnimatedBuilder(
-                    animation: bounceController,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: bounceController.value,
-                        child: child,
-                      );
-                    },
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 220,
-                          height: 220,
-                          child: CustomPaint(
-                            painter: _CircleProgressPainter(
-                              progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
-                              color: isCounting && countdown <= 3
-                                  ? const Color(0xFF34C759)
-                                  : const Color(0xFFFFFFFF),
-                              shadow: isCounting && countdown <= 3
-                                  ? const Color(0xFF34C759).withOpacity(0.2)
-                                  : const Color(0xFFFF9500).withOpacity(0.2),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          width: 180,
-                          height: 180,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: isStarted && isCounting
-                                ? Text(
-                                    '$counter',
-                                    style: const TextStyle(
-                                      fontSize: 72,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
-                                    ),
-                                  )
-                                : Icon(Icons.play_arrow_rounded, size: 80, color: Colors.orange.shade400),
-                          ),
-                        ),
-                        if (isStarted && isCounting)
-                          Positioned(
-                            bottom: 24,
-                            left: 0,
-                            right: 0,
-                            child: Text(
-                              _formatTime(countdown),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: countdown <= 3 ? const Color(0xFF34C759) : Colors.orange.shade400,
-                                letterSpacing: 2,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // 底部历史排名
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _buildHistoryRanking(),
-              ),
-              // 遮罩倒计时动画
-              if (showPreCountdown)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withOpacity(0.7),
-                    child: Center(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                        child: Text(
-                          '$preCountdown',
-                          key: ValueKey(preCountdown),
-                          style: const TextStyle(
-                            fontSize: 120,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(color: Colors.black54, blurRadius: 12),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              mainBg.withOpacity(0.95),
+              const Color(0xFF1A1A1A).withOpacity(0.95),
             ],
-          );
-        },
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Container(
+          color: Colors.black.withOpacity(0.45), // 黑色遮罩
+          child: PageView.builder(
+            controller: pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: totalRounds,
+            itemBuilder: (context, index) {
+              final bool isWarning = isCounting && countdown <= 3;
+              return Stack(
+                children: [
+                  // 顶部返回和大标题
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          const Spacer(),
+                          Text(
+                            'ROUND ${index + 1}/$totalRounds',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const Spacer(flex: 2),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: GestureDetector(
+                      onTap: isStarted && isCounting ? _onCountPressed : (isStarted ? null : _onStartPressed),
+                      child: AnimatedBuilder(
+                        animation: bounceController,
+                        builder: (context, child) => Transform.scale(
+                          scale: bounceController.value,
+                          child: child,
+                        ),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // 圆环进度条
+                            SizedBox(
+                              width: diameter,
+                              height: diameter,
+                              child: CustomPaint(
+                                painter: _CircleProgressPainter(
+                                  progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
+                                  color: isWarning
+                                      ? const Color(0xFFFF3B30)
+                                      : const Color(0xFF00FF00), // 高饱和绿色
+                                  trackColor: mainBg.withOpacity(0.45),
+                                  shadow: isWarning
+                                      ? const Color(0xFFFF3B30).withOpacity(0.3)
+                                      : const Color(0xFF00FF00).withOpacity(0.18),
+                                  strokeWidth: 10,
+                                ),
+                              ),
+                            ),
+                            // 内部白色圆
+                            Container(
+                              width: diameter - 20,
+                              height: diameter - 20,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.10),
+                                    blurRadius: 24,
+                                    offset: Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: isStarted && isCounting
+                                    ? Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          AnimatedSwitcher(
+                                            duration: Duration(milliseconds: 200),
+                                            transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                                            child: Text(
+                                              '$counter',
+                                              key: ValueKey(counter),
+                                              style: TextStyle(
+                                                fontSize: diameter / 3,
+                                                fontWeight: FontWeight.bold,
+                                                color: isWarning ? const Color(0xFFFF3B30) : Colors.black,
+                                              ),
+                                            ),
+                                          )
+                                        ],
+                                      )
+                                    : Icon(Icons.play_arrow_rounded, size: diameter / 2.5, color: const Color(0xFF00FF00)),
+                              ),
+                            ),
+                            // 倒计时数字
+                            if (isStarted && isCounting)
+                              Positioned(
+                                bottom: diameter / 8,
+                                left: 0,
+                                right: 0,
+                                child: Text(
+                                  _formatTime(countdown),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: diameter / 7,
+                                    fontWeight: FontWeight.bold,
+                                    color: isWarning ? const Color(0xFFFF3B30) : const Color(0xFF00FF00),
+                                    letterSpacing: 2,
+                                  ),
+                                ),
+                              ),
+                            // 最后三秒警示遮罩
+                            if (isWarning)
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFF3B30).withOpacity(0.08),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // 底部历史排名
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _buildHistoryRanking(),
+                  ),
+                  // 遮罩倒计时动画
+                  if (showPreCountdown)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withOpacity(0.7),
+                        child: Center(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                            child: Text(
+                              '$preCountdown',
+                              key: ValueKey(preCountdown),
+                              style: const TextStyle(
+                                fontSize: 120,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(color: Colors.black54, blurRadius: 12),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -527,26 +626,43 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
 class _CircleProgressPainter extends CustomPainter {
   final double progress;
   final Color color;
+  final Color trackColor;
   final Color shadow;
-  _CircleProgressPainter({required this.progress, required this.color, required this.shadow});
+  final double strokeWidth;
+  _CircleProgressPainter({
+    required this.progress,
+    required this.color,
+    required this.trackColor,
+    required this.shadow,
+    this.strokeWidth = 10,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint bg = Paint()
-      ..color = shadow
-      ..strokeWidth = 16
+    final Paint track = Paint()
+      ..color = trackColor
+      ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
     final Paint fg = Paint()
       ..color = color
-      ..strokeWidth = 16
+      ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 1.5)
       ..strokeCap = StrokeCap.round;
+    final Paint glow = Paint()
+      ..color = shadow
+      ..strokeWidth = strokeWidth + 8
+      ..style = PaintingStyle.stroke
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8);
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 8;
-    canvas.drawCircle(center, radius, bg);
-    double sweep = 2 * 3.1415926 * progress;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, sweep, false, fg);
+    final radius = size.width / 2 - strokeWidth / 2;
+    // 轨迹
+    canvas.drawCircle(center, radius, track);
+    // glow
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, glow);
+    // 主进度
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, fg);
   }
 
   @override
