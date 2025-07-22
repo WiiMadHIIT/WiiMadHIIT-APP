@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import '../../core/theme/app_colors.dart';
 
 class CheckingTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -345,27 +344,17 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   @override
   Widget build(BuildContext context) {
     final double diameter = MediaQuery.of(context).size.width * 2 / 3;
-    final bool isWarning = isCounting && countdown <= 3;
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.center,
-            radius: 0.75,
-            colors: [
-              AppColors.primary,
-              AppColors.primary.withOpacity(0.8),
-              Colors.black,
-            ],
-            stops: [0.0, 0.5, 1.0],
-          ),
-        ),
+        color: isCounting && countdown <= 3 ? Color(0xFF00FF7F) : Color(0xFFF97316),
         child: PageView.builder(
           controller: pageController,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: totalRounds,
           itemBuilder: (context, index) {
             final bool isWarning = isCounting && countdown <= 3;
+            final Color mainColor = Color(0xFF00BF60); // 进度条主色
+            final Color trackColor = Color(0xFFF3F4F6); // 轨迹淡灰
             return Stack(
               children: [
                 // 顶部返回和大标题
@@ -375,7 +364,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                     child: Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87),
                           onPressed: () => Navigator.pop(context),
                         ),
                         const Spacer(),
@@ -384,7 +373,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: Colors.black87,
                             letterSpacing: 1.2,
                           ),
                         ),
@@ -405,45 +394,53 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
+                          // 进度条
                           SizedBox(
                             width: diameter,
                             height: diameter,
                             child: CustomPaint(
                               painter: _CircleProgressPainter(
                                 progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
-                                color: isWarning
-                                    ? const Color(0xFFFF3B30)
-                                    : const Color(0xFF00FF7F), // 荧光绿
-                                trackColor: const Color(0xFF23272F),
+                                color: mainColor,
+                                trackColor: trackColor,
+                                shadow: mainColor.withOpacity(0.18),
                                 strokeWidth: 8,
                               ),
                             ),
                           ),
+                          // 内部白色圆
                           Container(
                             width: diameter - 8,
                             height: diameter - 8,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 18,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
                             ),
                             child: Center(
-                              child: isStarted && isCounting
-                                  ? AnimatedSwitcher(
-                                      duration: Duration(milliseconds: 200),
-                                      transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                                      child: Text(
-                                        '$counter',
-                                        key: ValueKey(counter),
-                                        style: TextStyle(
-                                          fontSize: diameter / 3,
-                                          fontWeight: FontWeight.bold,
-                                          color: isWarning ? const Color(0xFFFF3B30) : Colors.black,
-                                        ),
-                                      ),
-                                    )
-                                  : Icon(Icons.play_arrow_rounded, size: diameter / 2.5, color: const Color(0xFF00FF7F)),
+                              child: AnimatedSwitcher(
+                                duration: Duration(milliseconds: 200),
+                                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                                child: Text(
+                                  '$counter',
+                                  key: ValueKey(counter),
+                                  style: TextStyle(
+                                    fontSize: diameter / 3,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
+                          // 倒计时数字
                           if (isStarted && isCounting)
                             Positioned(
                               bottom: diameter / 8,
@@ -455,7 +452,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                                 style: TextStyle(
                                   fontSize: diameter / 7,
                                   fontWeight: FontWeight.bold,
-                                  color: isWarning ? const Color(0xFFFF3B30) : const Color(0xFF00FF7F),
+                                  color: Colors.black87,
                                   letterSpacing: 2,
                                 ),
                               ),
@@ -596,11 +593,13 @@ class _CircleProgressPainter extends CustomPainter {
   final double progress;
   final Color color;
   final Color trackColor;
+  final Color shadow;
   final double strokeWidth;
   _CircleProgressPainter({
     required this.progress,
     required this.color,
     required this.trackColor,
+    required this.shadow,
     this.strokeWidth = 8,
   });
 
@@ -617,10 +616,17 @@ class _CircleProgressPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2)
       ..strokeCap = StrokeCap.round;
+    final Paint glow = Paint()
+      ..color = shadow
+      ..strokeWidth = strokeWidth + 6
+      ..style = PaintingStyle.stroke
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8);
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - strokeWidth / 2;
     // 轨迹
     canvas.drawCircle(center, radius, track);
+    // glow
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, glow);
     // 主进度
     canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, fg);
   }
