@@ -292,6 +292,36 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
     _tick();
   }
 
+  void _insertRoundResult(int counts, {bool isFinal = false}) {
+  final now = DateTime.now();
+  final months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
+  // 清空所有note
+  for (var e in history) {
+    e["note"] = "";
+  }
+  final result = {
+    "date": dateStr,
+    "counts": counts,
+    "note": "current",
+  };
+  history.insert(0, result);
+  // 排序并赋rank
+  history.sort((a, b) => b["counts"].compareTo(a["counts"]));
+  for (int i = 0; i < history.length; i++) {
+    history[i]["rank"] = i + 1;
+  }
+  // 把note为current的移到首位，其余按rank排序
+  final idx = history.indexWhere((e) => e["note"] == "current");
+  if (idx > 0) {
+    final current = history.removeAt(idx);
+    history.insert(0, current);
+  }
+}
+
   void _tick() async {
     if (!isCounting) return;
     if (countdown > 0) {
@@ -299,14 +329,13 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
       if (!mounted) return;
       setState(() {
         countdown--;
-        if (countdown <= 3) {
-          // 变色
-        }
       });
       _tick();
     } else {
       if (!mounted) return;
-      // 进入下一个ROUND或结束
+      setState(() {
+        _insertRoundResult(counter, isFinal: currentRound == totalRounds);
+      });
       if (currentRound < totalRounds) {
         setState(() {
           currentRound++;
@@ -314,42 +343,8 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
         pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
         Future.delayed(const Duration(milliseconds: 600), _startPreCountdown);
       } else {
-        // 训练结束，插入本次成绩
-        final now = DateTime.now();
-        final months = [
-          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-        ];
-        final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
-        final result = {
-          "date": dateStr,
-          "counts": counter,
-          "note": "current",
-        };
         setState(() {
           isCounting = false;
-          // 先移除已有current
-          history.removeWhere((e) => e["note"] == "current");
-          // 插入本次结果到首位
-          history.insert(0, result);
-          // 排序得到排名
-          final sorted = List<Map<String, dynamic>>.from(history);
-          sorted.sort((a, b) => b["counts"].compareTo(a["counts"]));
-          for (int i = 0; i < sorted.length; i++) {
-            sorted[i]["rank"] = i + 1;
-          }
-          // 找到本次结果的排名
-          final myRank = sorted.indexWhere((e) => e["note"] == "current") + 1;
-          history[0]["rank"] = myRank;
-          // 其余历史排名也赋rank
-          int hIdx = 1;
-          for (int i = 0; i < sorted.length; i++) {
-            if (sorted[i]["note"] != "current") {
-              history[hIdx]["rank"] = sorted[i]["rank"];
-              hIdx++;
-              if (hIdx >= history.length) break;
-            }
-          }
           showResultOverlay = true;
         });
       }
@@ -561,15 +556,15 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                         ),
                       ),
                     ),
-                    // 底部历史排名可拖拽弹窗
-                    DraggableScrollableSheet(
-                      initialChildSize: 0.22,
-                      minChildSize: 0.15,
-                      maxChildSize: 0.6,
-                      builder: (context, scrollController) {
-                        return _buildHistoryRanking(scrollController);
-                      },
-                    ),
+                              // 底部历史排名可拖拽弹窗
+          DraggableScrollableSheet(
+            initialChildSize: 0.20,
+            minChildSize: 0.20,
+            maxChildSize: 0.70,
+            builder: (context, scrollController) {
+              return _buildHistoryRanking(scrollController);
+            },
+          ),
                     // 遮罩倒计时动画
                     if (showPreCountdown)
                       Positioned.fill(
@@ -637,7 +632,11 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
             ),
           ),
           if (showResultOverlay)
-            Positioned.fill(
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: MediaQuery.of(context).size.height * 0.32, // 留出榜单初始高度
               child: Container(
                 color: Colors.black.withOpacity(0.7),
                 child: Center(
@@ -695,6 +694,15 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                 ),
               ),
             ),
+          // DraggableScrollableSheet 始终在最上层
+          DraggableScrollableSheet(
+            initialChildSize: 0.32,
+            minChildSize: 0.20,
+            maxChildSize: 0.70,
+            builder: (context, scrollController) {
+              return _buildHistoryRanking(scrollController);
+            },
+          ),
         ],
       ),
     );
@@ -702,105 +710,272 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
 
   Widget _buildHistoryRanking(ScrollController scrollController) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
-      child: ListView(
-        controller: scrollController,
+      child: Column(
         children: [
-          const Text(
-            'TOP SCORES',
-            style: TextStyle(
-              color: Colors.black87,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              letterSpacing: 1.2,
+          // 顶部拖拽指示器
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 6),
+            width: 32,
+            height: 3,
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(1.5),
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: const [
-              SizedBox(width: 8),
-              Text('RANK', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500)),
-              SizedBox(width: 32),
-              Text('DATE', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500)),
-              Spacer(),
-              Text('COUNTS', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ...history.map((e) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Container(
-                  decoration: e["note"] == "current"
-                      ? BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.primary, width: 2),
-                        )
-                      : null,
-                  child: Row(
-                    children: [
-                      SizedBox(width: 8),
-                      Container(
-                        width: 28,
-                        height: 28,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: e["rank"] == 1 ? Colors.orange.shade400 : Colors.black12,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${e["rank"]}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Text(
-                        e["date"],
-                        style: const TextStyle(color: Colors.black87, fontSize: 15),
-                      ),
-                      if (e["note"] == "current")
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'MY',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 1.1,
-                            ),
-                          ),
-                        ),
-                      const Spacer(),
-                      Text(
-                        '${e["counts"]}',
-                        style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.sports_mma, color: Colors.black54, size: 18),
-                    ],
+          // 标题区域
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(1.5),
                   ),
                 ),
-              )),
+                const SizedBox(width: 10),
+                const Text(
+                  'TOP SCORES',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1),
+                  ),
+                  child: Text(
+                    '${history.length}',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 表头
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.05),
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 36,
+                  child: Text(
+                    'RANK',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'DATE',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 50,
+                  child: Text(
+                    'COUNTS',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 列表内容
+          Expanded(
+            child: ListView.builder(
+              controller: scrollController,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: history.length,
+              itemBuilder: (context, index) {
+                final e = history[index];
+                final isCurrent = e["note"] == "current";
+                final isTopThree = e["rank"] <= 3;
+                
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isCurrent 
+                        ? AppColors.primary.withOpacity(0.08)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isCurrent
+                        ? Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5)
+                        : null,
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        // 可以添加点击效果或详情页面
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            // 排名徽章
+                            Container(
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                gradient: isTopThree
+                                    ? LinearGradient(
+                                        colors: e["rank"] == 1
+                                            ? [Color(0xFFFFD700), Color(0xFFFFA500)]
+                                            : e["rank"] == 2
+                                                ? [Color(0xFFC0C0C0), Color(0xFFA0A0A0)]
+                                                : [Color(0xFFCD7F32), Color(0xFFB8860B)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      )
+                                    : null,
+                                color: isTopThree ? null : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: isTopThree
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 3,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Text(
+                                '${e["rank"]}',
+                                style: TextStyle(
+                                  color: isTopThree ? Colors.white : Colors.grey.shade700,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // 日期和当前标识
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      e["date"],
+                                      style: TextStyle(
+                                        color: isCurrent ? AppColors.primary : Colors.black87,
+                                        fontSize: 14,
+                                        fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w500,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (isCurrent) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        borderRadius: BorderRadius.circular(6),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.primary.withOpacity(0.3),
+                                            blurRadius: 3,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Text(
+                                        'CURRENT',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 9,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            // 计数和图标
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${e["counts"]}',
+                                  style: TextStyle(
+                                    color: isCurrent ? AppColors.primary : Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.fitness_center,
+                                  color: isCurrent ? AppColors.primary : Colors.grey.shade500,
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
