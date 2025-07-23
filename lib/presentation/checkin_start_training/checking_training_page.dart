@@ -177,6 +177,9 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   void _showSetupDialogLandscape() async {
     int tempRounds = totalRounds;
     int tempMinutes = roundDuration;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double dialogWidth = screenWidth.clamp(320, 600);
+    final bool isFinalResult = showResultOverlay;
     await showDialog(
       context: context,
       barrierDismissible: true,
@@ -185,8 +188,8 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
           child: Material(
             color: Colors.transparent,
             child: Container(
-              width: 480,
-              padding: EdgeInsets.all(32),
+              width: dialogWidth,
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
@@ -200,91 +203,97 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
               ),
               child: StatefulBuilder(
                 builder: (context, setStateModal) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Set Rounds & Time', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                          IconButton(
-                            icon: Icon(Icons.close_rounded, color: Colors.black54),
-                            onPressed: () => Navigator.of(context).pop(),
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // 居中标题
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 12),
+                          child: Text(
+                            'Set Rounds & Time',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1),
                           ),
-                        ],
-                      ),
-                      SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: _tiktokWheelPicker(
-                              label: 'Rounds',
-                              value: tempRounds,
-                              min: 1,
-                              max: 10,
-                              onChanged: (v) => setStateModal(() => tempRounds = v),
-                              color: Colors.orange,
-                            ),
-                          ),
-                          SizedBox(width: 32),
-                          Expanded(
-                            child: _tiktokWheelPicker(
-                              label: 'Minutes',
-                              value: tempMinutes,
-                              min: 1,
-                              max: 60,
-                              onChanged: (v) => setStateModal(() => tempMinutes = v),
-                              color: Colors.deepPurple,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 18),
-                      Text(
-                        '\t${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
-                        style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 15),
-                      ),
-                      SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton(
-                            onPressed: () {
-                              setState(() {
-                                totalRounds = tempRounds;
-                                roundDuration = tempMinutes;
-                                currentRound = 1;
-                              });
-                              Navigator.of(context).pop();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 8,
-                            ),
-                            child: Text('OK', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                          ),
-                          SizedBox(width: 24),
-                          OutlinedButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.black,
-                              side: BorderSide(color: Colors.black, width: 2),
-                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: _tiktokWheelPicker(
+                                label: 'Rounds',
+                                value: tempRounds,
+                                min: 1,
+                                max: 10,
+                                onChanged: (v) => setStateModal(() => tempRounds = v),
+                                color: Colors.orange,
                               ),
                             ),
-                            child: Text('Cancel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    ],
+                            SizedBox(width: 32),
+                            Expanded(
+                              child: _tiktokWheelPicker(
+                                label: 'Minutes',
+                                value: tempMinutes,
+                                min: 1,
+                                max: 60,
+                                onChanged: (v) => setStateModal(() => tempMinutes = v),
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          '\t${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
+                          style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 15),
+                        ),
+                        SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  totalRounds = tempRounds;
+                                  roundDuration = tempMinutes;
+                                  currentRound = 1;
+                                });
+                                Navigator.of(context).pop();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black,
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 8,
+                              ),
+                              child: Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                            ),
+                            SizedBox(width: 14),
+                            OutlinedButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                                if (isFinalResult) {
+                                  Navigator.of(context).maybePop();
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.black,
+                                side: BorderSide(color: Colors.black, width: 2),
+                                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: Text('Cancel', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
