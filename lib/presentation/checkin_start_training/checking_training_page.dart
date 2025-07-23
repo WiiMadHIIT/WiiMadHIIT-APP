@@ -32,7 +32,8 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   int _lastBounceTime = 0;
   bool showResultOverlay = false;
   // 1. 在State中添加controller
-  late final DraggableScrollableController draggableController;
+  DraggableScrollableController? _portraitController;
+  DraggableScrollableController? _landscapeController;
 
   // 假数据历史排名
   final List<Map<String, dynamic>> history = [
@@ -52,15 +53,29 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
     );
     bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
     pageController = PageController();
-    draggableController = DraggableScrollableController();
+    _portraitController = DraggableScrollableController();
+    _landscapeController = DraggableScrollableController();
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSetupDialog());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final orientation = MediaQuery.of(context).orientation;
+    if (orientation == Orientation.portrait && _portraitController == null) {
+      _portraitController = DraggableScrollableController();
+    }
+    if (orientation == Orientation.landscape && _landscapeController == null) {
+      _landscapeController = DraggableScrollableController();
+    }
   }
 
   @override
   void dispose() {
     bounceController.dispose();
     pageController.dispose();
-    draggableController.dispose();
+    _portraitController?.dispose();
+    _landscapeController?.dispose();
     super.dispose();
   }
 
@@ -175,46 +190,61 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   }
 
   void _showSetupDialogLandscape() async {
-    int tempRounds = totalRounds;
-    int tempMinutes = roundDuration;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double dialogWidth = screenWidth.clamp(320, 600);
-    final bool isFinalResult = showResultOverlay;
-    await showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return Center(
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: dialogWidth,
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.10),
-                    blurRadius: 32,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: StatefulBuilder(
-                builder: (context, setStateModal) {
-                  return SingleChildScrollView(
-                    child: Column(
+  int tempRounds = totalRounds;
+  int tempMinutes = roundDuration;
+  final double screenWidth = MediaQuery.of(context).size.width;
+  final double dialogWidth = screenWidth > 468 ? 420 : screenWidth - 48;
+  final bool isFinalResult = showResultOverlay;
+  await showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (context) {
+      return Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: dialogWidth,
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.10),
+                  blurRadius: 28,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: StatefulBuilder(
+              builder: (context, setStateModal) {
+                return Stack(
+                  children: [
+                    // 右上角关闭按钮
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: Icon(Icons.close_rounded, color: Colors.black54),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          if (isFinalResult) {
+                            Navigator.of(context).maybePop();
+                          }
+                        },
+                      ),
+                    ),
+                    Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // 居中标题
+                        SizedBox(height: 4),
                         Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 12),
+                          padding: const EdgeInsets.only(bottom: 10),
                           child: Text(
                             'Set Rounds & Time',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1),
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1),
                           ),
                         ),
                         Row(
@@ -230,7 +260,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                                 color: Colors.orange,
                               ),
                             ),
-                            SizedBox(width: 32),
+                            SizedBox(width: 24),
                             Expanded(
                               child: _tiktokWheelPicker(
                                 label: 'Minutes',
@@ -243,66 +273,47 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                             ),
                           ],
                         ),
-                        SizedBox(height: 10),
+                        SizedBox(height: 8),
                         Text(
                           '\t${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
-                          style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 15),
+                          style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 14),
                         ),
-                        SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton(
-                              onPressed: () {
-                                setState(() {
-                                  totalRounds = tempRounds;
-                                  roundDuration = tempMinutes;
-                                  currentRound = 1;
-                                });
-                                Navigator.of(context).pop();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 8,
+                        SizedBox(height: 16),
+                        SizedBox(
+                          width: 120,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                totalRounds = tempRounds;
+                                roundDuration = tempMinutes;
+                                currentRound = 1;
+                              });
+                              Navigator.of(context).pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                              child: Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                              elevation: 8,
                             ),
-                            SizedBox(width: 14),
-                            OutlinedButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                                if (isFinalResult) {
-                                  Navigator.of(context).maybePop();
-                                }
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.black,
-                                side: BorderSide(color: Colors.black, width: 2),
-                                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: Text('Cancel', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
+                            child: Text('OK', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                          ),
                         ),
                       ],
                     ),
-                  );
-                },
-              ),
+                  ],
+                );
+              },
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _tiktokWheelPicker({
     required String label,
@@ -493,7 +504,8 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
         Future.delayed(Duration(milliseconds: 50), () {
           final orientation = MediaQuery.of(context).orientation;
           final targetSize = orientation == Orientation.landscape ? 1.0 : 0.12;
-          draggableController.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+          final controller = orientation == Orientation.portrait ? _portraitController : _landscapeController;
+          controller?.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
         });
       }
     }
@@ -568,6 +580,8 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
     final double diameter = MediaQuery.of(context).size.width * 3 / 4;
     final orientation = MediaQuery.of(context).orientation;
     final bool isPortrait = orientation == Orientation.portrait;
+    final DraggableScrollableController controller =
+        isPortrait ? _portraitController! : _landscapeController!;
     final Widget mainContent = isPortrait
         ? TrainingPortraitLayout(
             totalRounds: totalRounds,
@@ -588,10 +602,10 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
             formatTime: _formatTime,
             showResultOverlay: showResultOverlay,
             history: history,
-            draggableController: draggableController,
+            draggableController: controller,
             buildHistoryRanking: _buildHistoryRanking,
             onResultOverlayTap: () {
-              draggableController.animateTo(
+              controller.animateTo(
                 1.0,
                 duration: Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
@@ -611,7 +625,12 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
             onResultBack: () {
               Navigator.pop(context);
             },
-            onResultSetup: _showSetupDialog,
+            onResultSetup: () {
+              setState(() {
+                showResultOverlay = false;
+              });
+              Future.delayed(const Duration(milliseconds: 200), _showSetupDialog);
+            },
           )
         : TrainingLandscapeLayout(
             totalRounds: totalRounds,
@@ -632,10 +651,10 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
             formatTime: _formatTime,
             showResultOverlay: showResultOverlay,
             history: history,
-            draggableController: draggableController,
+            draggableController: controller,
             buildHistoryRanking: _buildHistoryRanking,
             onResultOverlayTap: () {
-              draggableController.animateTo(
+              controller.animateTo(
                 1.0,
                 duration: Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
@@ -655,7 +674,12 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
             onResultBack: () {
                               Navigator.pop(context);
                             },
-            onResultSetup: _showSetupDialog,
+            onResultSetup: () {
+              setState(() {
+                showResultOverlay = false;
+              });
+              Future.delayed(const Duration(milliseconds: 200), _showSetupDialog);
+            },
           );
 
     return Scaffold(
@@ -697,28 +721,6 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                     ),
                   ),
                 ),
-               // 榜单表头
-               Padding(
-                 padding: const EdgeInsets.only(left: 24, right: 24, top: 0, bottom: 2),
-                 child: Row(
-                   children: [
-                     SizedBox(
-                       width: 44,
-                       child: Text('RANK', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                     ),
-                     Expanded(
-                       child: Text('DATE', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                     ),
-                     SizedBox(
-                       width: 60,
-                       child: Align(
-                         alignment: Alignment.centerRight,
-                         child: Text('COUNTS', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                       ),
-                     ),
-                   ],
-                 ),
-               ),
                 // 标题区域
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -761,9 +763,31 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                           ),
                         ),
                       ),
-            ],
-          ),
+                    ],
+                  ),
                 ),
+               // 榜单表头
+               Padding(
+                 padding: const EdgeInsets.only(left: 24, right: 24, top: 0, bottom: 2),
+                 child: Row(
+                   children: [
+                     SizedBox(
+                       width: 44,
+                       child: Text('RANK', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+                     ),
+                     Expanded(
+                       child: Text('DATE', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+                     ),
+                     SizedBox(
+                       width: 60,
+                       child: Align(
+                         alignment: Alignment.centerRight,
+                         child: Text('COUNTS', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+                       ),
+                     ),
+                   ],
+                 ),
+               ),
               ],
             ),
           ),

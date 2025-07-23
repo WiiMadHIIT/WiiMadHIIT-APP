@@ -97,7 +97,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
     // 计算进度环顶部到屏幕顶部的距离百分比
     final double counterTop = (screenHeight - counterDiameter) / 2;
     final double logoTop = counterTop / 2 * 0.5;
-    final double roundTextTop = screenHeight - counterTop;
+    final double roundTextTop = screenHeight * 5 / 7;
     
     return Stack(
       children: [
@@ -110,255 +110,262 @@ class TrainingLandscapeLayout extends StatelessWidget {
         Row(
           children: [
             // 左侧主计数器区域
-            Stack(
-              children: [
-                Container(
-                  width: leftPanelWidth,
-                  height: screenHeight,
-                  child: PageView.builder(
-                    controller: pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: totalRounds,
-                    itemBuilder: (context, index) {
-                      return Stack(
-                        children: [
-                          // 顶部浮动Logo（动态距离，苹果美学）
-                          FloatingLogoPlus(
-                            scale: 0.8,
-                            top: logoTop,
-                          ),
-                          // 顶部轮次文本（左对齐，离左侧10px）
-                          Positioned(
-                            top: logoTop,
-                            left: 10,
-                            child: Text(
-                              'ROUND  ${index + 1}/$totalRounds',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 1.2,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.black.withOpacity(0.18),
-                                    blurRadius: 8,
-                                    offset: Offset(0, 2),
-                                  ),
-                                ],
-                              ),
+            SizedBox(
+              width: leftPanelWidth,
+              height: screenHeight,
+              child: Stack(
+                children: [
+                  Container(
+                    width: leftPanelWidth,
+                    height: screenHeight,
+                    child: PageView.builder(
+                      controller: pageController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: totalRounds,
+                      itemBuilder: (context, index) {
+                        return Stack(
+                          children: [
+                            // 顶部浮动Logo（动态距离，苹果美学）
+                            FloatingLogoPlus(
+                              scale: 0.8,
+                              top: logoTop,
                             ),
-                          ),
-                          // 主计数器
-                          Align(
-                            alignment: Alignment(0, 5/7*2-1), // y=5/7处
-                            child: GestureDetector(
-                              onTap: isStarted && isCounting ? onCountPressed : (isStarted ? null : onStartPressed),
-                              child: AnimatedBuilder(
-                                animation: bounceController,
-                                builder: (context, child) => Transform.scale(
-                                  scale: bounceController.value,
-                                  child: child,
-                                ),
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    // 进度环
-                                    SizedBox(
-                                      width: counterDiameter,
-                                      height: counterDiameter,
-                                      child: CustomPaint(
-                                        painter: CircleProgressPainter(
-                                          progress: isCounting ? countdown / 60.0 : 1.0,
-                                          color: isWarning ? AppColors.primary : mainColor,
-                                          gradient: isWarning ? null : progressGradient,
-                                          trackColor: trackColor,
-                                          shadow: mainColor.withOpacity(0.18),
-                                          strokeWidth: 14,
-                                        ),
-                                      ),
-                                    ),
-                                    // 内部白色圆
-                                    Container(
-                                      width: counterDiameter - 24,
-                                      height: counterDiameter - 24,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.08),
-                                            blurRadius: 18,
-                                            offset: Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          '${counter}',
-                                          style: TextStyle(
-                                            fontSize: counterDiameter / 3,
-                                            fontWeight: FontWeight.bold,
-                                            color: isWarning ? AppColors.primary : Colors.black87,
-                                            letterSpacing: 1.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    // 倒计时数字
-                                    if (isStarted && isCounting)
-                                      Positioned(
-                                        bottom: counterDiameter / 8,
-                                        left: 0,
-                                        right: 0,
-                                        child: Text(
-                                          formatTime(countdown),
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: counterDiameter / 7,
-                                            fontWeight: FontWeight.bold,
-                                            color: mainColor,
-                                            letterSpacing: 2,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          // 预倒计时遮罩动画
-                          if (showPreCountdown)
-                            Positioned.fill(
-                              child: Container(
-                                color: Colors.black.withOpacity(0.7),
+                            // 顶部轮次文本（左对齐，离左侧10px）
+                            Positioned(
+                                top: logoTop - 16, // logo top + logo height + margin
+                                left: 0,
+                                right: 0,
                                 child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    child: Text(
+                                        'ROUND ${index + 1}/$totalRounds',
+                                        style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 1.2,
+                                        shadows: [
+                                            Shadow(
+                                            color: Colors.black.withOpacity(0.18),
+                                            blurRadius: 8,
+                                            offset: Offset(0, 2),
+                                            ),
+                                        ],
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            // 主计数器
+                            Align(
+                              alignment: Alignment(0, 5/7*2-1), // y=5/7处
+                              child: GestureDetector(
+                                onTap: isStarted && isCounting ? onCountPressed : (isStarted ? null : onStartPressed),
+                                child: AnimatedBuilder(
+                                  animation: bounceController,
+                                  builder: (context, child) => Transform.scale(
+                                    scale: bounceController.value,
+                                    child: child,
+                                  ),
+                                  child: Stack(
+                                    alignment: Alignment.center,
                                     children: [
-                                      Text(
-                                        'ROUND ${currentRound}/$totalRounds',
-                                        style: const TextStyle(
-                                          fontSize: 32,
-                                          fontWeight: FontWeight.bold,
+                                      // 进度环
+                                      SizedBox(
+                                        width: counterDiameter,
+                                        height: counterDiameter,
+                                        child: CustomPaint(
+                                          painter: CircleProgressPainter(
+                                            progress: isCounting ? countdown / 60.0 : 1.0,
+                                            color: isWarning ? AppColors.primary : mainColor,
+                                            gradient: isWarning ? null : progressGradient,
+                                            trackColor: trackColor,
+                                            shadow: mainColor.withOpacity(0.18),
+                                            strokeWidth: 14,
+                                          ),
+                                        ),
+                                      ),
+                                      // 内部白色圆
+                                      Container(
+                                        width: counterDiameter - 24,
+                                        height: counterDiameter - 24,
+                                        decoration: BoxDecoration(
                                           color: Colors.white,
-                                          letterSpacing: 1.2,
-                                          shadows: [
-                                            Shadow(color: Colors.black54, blurRadius: 12),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.08),
+                                              blurRadius: 18,
+                                              offset: Offset(0, 4),
+                                            ),
                                           ],
                                         ),
-                                      ),
-                                      const SizedBox(height: 24),
-                                      AnimatedSwitcher(
-                                        duration: const Duration(milliseconds: 400),
-                                        switchInCurve: Curves.easeOutCubic,
-                                        switchOutCurve: Curves.easeInCubic,
-                                        layoutBuilder: (currentChild, previousChildren) => Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            ...previousChildren,
-                                            if (currentChild != null) currentChild,
-                                          ],
-                                        ),
-                                        transitionBuilder: (child, anim) => FadeTransition(
-                                          opacity: anim,
-                                          child: SlideTransition(
-                                            position: Tween<Offset>(
-                                              begin: const Offset(0, 0.4),
-                                              end: Offset.zero,
-                                            ).animate(anim),
-                                            child: child,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '${preCountdown}',
-                                          key: ValueKey(preCountdown),
-                                          style: const TextStyle(
-                                            fontSize: 120,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                            shadows: [
-                                              Shadow(color: Colors.black54, blurRadius: 12),
-                                            ],
+                                        child: Center(
+                                          child: Text(
+                                            '${counter}',
+                                            style: TextStyle(
+                                              fontSize: counterDiameter / 3,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.black87,
+                                              letterSpacing: 1.5,
+                                            ),
                                           ),
                                         ),
                                       ),
+                                      // 倒计时数字
+                                      if (isStarted && isCounting)
+                                        Positioned(
+                                          bottom: counterDiameter / 8,
+                                          left: 0,
+                                          right: 0,
+                                          child: Text(
+                                            formatTime(countdown),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: counterDiameter / 7,
+                                              fontWeight: FontWeight.bold,
+                                              color: mainColor,
+                                              letterSpacing: 2,
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
                               ),
                             ),
-                          // 结果遮罩只覆盖左侧
-                          if (showResultOverlay)
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: onResultOverlayTap,
+                            // 预倒计时遮罩动画
+                            if (showPreCountdown)
+                              Positioned.fill(
                                 child: Container(
                                   color: Colors.black.withOpacity(0.7),
                                   child: Center(
                                     child: Column(
-                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.emoji_events, color: AppColors.primary, size: 64),
-                                        SizedBox(height: 24),
-                                        Text('训练完成!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                                        SizedBox(height: 16),
-                                        Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                                        Text('COUNT:  ${history[0]["counts"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                                        Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: 18, color: Colors.white70)),
-                                        SizedBox(height: 32),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            ElevatedButton(
-                                              onPressed: onResultReset,
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: AppColors.primary,
-                                                foregroundColor: Colors.white,
-                                                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                              ),
-                                              child: Text('再来一次', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                        Text(
+                                          'ROUND ${currentRound}/$totalRounds',
+                                          style: const TextStyle(
+                                            fontSize: 32,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            letterSpacing: 1.2,
+                                            shadows: [
+                                              Shadow(color: Colors.black54, blurRadius: 12),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 24),
+                                        AnimatedSwitcher(
+                                          duration: const Duration(milliseconds: 400),
+                                          switchInCurve: Curves.easeOutCubic,
+                                          switchOutCurve: Curves.easeInCubic,
+                                          layoutBuilder: (currentChild, previousChildren) => Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              ...previousChildren,
+                                              if (currentChild != null) currentChild,
+                                            ],
+                                          ),
+                                          transitionBuilder: (child, anim) => FadeTransition(
+                                            opacity: anim,
+                                            child: SlideTransition(
+                                              position: Tween<Offset>(
+                                                begin: const Offset(0, 0.4),
+                                                end: Offset.zero,
+                                              ).animate(anim),
+                                              child: child,
                                             ),
-                                            SizedBox(width: 24),
-                                            ElevatedButton(
-                                              onPressed: onResultSetup,
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.white,
-                                                foregroundColor: AppColors.primary,
-                                                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                              ),
-                                              child: Text('重置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                          ),
+                                          child: Text(
+                                            '${preCountdown}',
+                                            key: ValueKey(preCountdown),
+                                            style: const TextStyle(
+                                              fontSize: 120,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              shadows: [
+                                                Shadow(color: Colors.black54, blurRadius: 12),
+                                              ],
                                             ),
-                                            SizedBox(width: 24),
-                                            OutlinedButton(
-                                              onPressed: onResultBack,
-                                              style: OutlinedButton.styleFrom(
-                                                foregroundColor: AppColors.primary,
-                                                side: BorderSide(color: AppColors.primary, width: 2),
-                                                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                              ),
-                                              child: Text('返回', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ],
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      );
-                    },
+                            // 结果遮罩只覆盖左侧
+                            if (showResultOverlay)
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: onResultOverlayTap,
+                                  child: Container(
+                                    color: Colors.black.withOpacity(0.7),
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.emoji_events, color: AppColors.primary, size: 64),
+                                          SizedBox(height: 24),
+                                          Text('训练完成!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                          SizedBox(height: 16),
+                                          Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                          Text('COUNT:  ${history[0]["counts"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                                          Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: 18, color: Colors.white70)),
+                                          SizedBox(height: 32),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              ElevatedButton(
+                                                onPressed: onResultReset,
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: AppColors.primary,
+                                                  foregroundColor: Colors.white,
+                                                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                                ),
+                                                child: Text('再来一次', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                              ),
+                                              SizedBox(width: 24),
+                                              ElevatedButton(
+                                                onPressed: onResultSetup,
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.white,
+                                                  foregroundColor: AppColors.primary,
+                                                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                                ),
+                                                child: Text('重置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                              ),
+                                              SizedBox(width: 24),
+                                              OutlinedButton(
+                                                onPressed: onResultBack,
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor: AppColors.primary,
+                                                  side: BorderSide(color: AppColors.primary, width: 2),
+                                                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                                ),
+                                                child: Text('返回', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             // 右侧榜单区域
-            Container(
+            SizedBox(
               width: rightPanelWidth,
               height: screenHeight,
               child: DraggableScrollableSheet(
@@ -373,7 +380,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
               ),
             ),
           ],
-        ),
+        )
       ],
     );
   }

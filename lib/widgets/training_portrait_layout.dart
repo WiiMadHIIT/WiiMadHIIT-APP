@@ -157,7 +157,7 @@ class TrainingPortraitLayout extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: diameter / 3,
                                     fontWeight: FontWeight.bold,
-                                    color: isWarning ? AppColors.primary : Colors.black87,
+                                    color: Colors.black87,
                                     letterSpacing: 1.5,
                                   ),
                                 ),
@@ -327,6 +327,16 @@ class TrainingPortraitLayout extends StatelessWidget {
           builder: (context, scrollController) {
             return buildHistoryRanking(scrollController);
           },
+        ),
+        // 左上角返回按钮，确保浮在最上层
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 8,
+          left: 8,
+          child: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 26),
+            onPressed: onResultBack,
+            splashRadius: 22,
+          ),
         ),
       ],
     );
