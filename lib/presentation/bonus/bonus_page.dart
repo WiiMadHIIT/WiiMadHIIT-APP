@@ -42,7 +42,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
       description: "Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big!",
       reward: "Up to 1000 WiiCoins + Exclusive Badge",
       regionLimit: "US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK",
-      videoAsset: "assets/video/video1.mp4",
+      videoAsset: "assets/video/video_bonus1.mp4",
     ),
     BonusActivity(
       name: "Yoga Marathon",
@@ -195,49 +195,52 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
             alignment: Alignment.bottomCenter,
             child: Padding(
               padding: EdgeInsets.only(bottom: bottomPadding + 64),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    constraints: BoxConstraints(
-                      minHeight: math.min(180, MediaQuery.of(context).size.height * 0.26),
-                      maxHeight: math.max(180, MediaQuery.of(context).size.height * 0.26),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      constraints: BoxConstraints(
+                        minHeight: math.min(180, MediaQuery.of(context).size.height * 0.26),
+                        maxHeight: math.max(180, MediaQuery.of(context).size.height * 0.26),
+                      ),
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: activities.length,
+                        physics: const PageScrollPhysics(),
+                        onPageChanged: _onPageChanged,
+                        itemBuilder: (context, index) {
+                          return AnimatedScale(
+                            scale: _currentIndex == index ? 1.0 : 0.92,
+                            duration: const Duration(milliseconds: 300),
+                            child: _BonusCard(
+                              activity: activities[index],
+                              onTap: () {
+                                // TODO: 领奖逻辑
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Bonus claimed!')),
+                                );
+                              },
+                              index: index,
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    child: PageView.builder(
-                      controller: _pageController,
-                      itemCount: activities.length,
-                      physics: const PageScrollPhysics(),
-                      onPageChanged: _onPageChanged,
-                      itemBuilder: (context, index) {
-                        return AnimatedScale(
-                          scale: _currentIndex == index ? 1.0 : 0.92,
-                          duration: const Duration(milliseconds: 300),
-                          child: _BonusCard(
-                            activity: activities[index],
-                            onTap: () {
-                              // TODO: 领奖逻辑
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Bonus claimed!')),
-                              );
-                            },
-                            index: index,
-                          ),
-                        );
-                      },
+                    const SizedBox(height: 16),
+                    AnimatedSmoothIndicator(
+                      activeIndex: _currentIndex,
+                      count: activities.length,
+                      effect: ExpandingDotsEffect(
+                        dotHeight: 8,
+                        dotWidth: 8,
+                        activeDotColor: AppColors.primary,
+                        dotColor: Colors.white.withOpacity(0.3),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  AnimatedSmoothIndicator(
-                    activeIndex: _currentIndex,
-                    count: activities.length,
-                    effect: ExpandingDotsEffect(
-                      dotHeight: 8,
-                      dotWidth: 8,
-                      activeDotColor: AppColors.primary,
-                      dotColor: Colors.white.withOpacity(0.3),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -320,6 +323,7 @@ class _BonusCardState extends State<_BonusCard> {
             ),
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 活动名
@@ -401,7 +405,7 @@ class _BonusCardState extends State<_BonusCard> {
                     ],
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(height: 8),
                 // 底部提示
                 Center(
                   child: Padding(

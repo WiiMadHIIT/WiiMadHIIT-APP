@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import '../../widgets/floating_logo.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/training_portrait_layout.dart';
+import '../../widgets/training_landscape_layout.dart';
+import '../../widgets/circle_progress_painter.dart';
 
 class CheckingTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -62,6 +65,11 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   }
 
   void _showSetupDialog() async {
+    final orientation = MediaQuery.of(context).orientation;
+    if (orientation == Orientation.landscape) {
+      _showSetupDialogLandscape();
+      return;
+    }
     int tempRounds = totalRounds;
     int tempMinutes = roundDuration;
     await showModalBottomSheet(
@@ -130,7 +138,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                   ),
                   SizedBox(height: 18),
                   Text(
-                    '	${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
+                    '\t${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
                     style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 15),
                   ),
                   SizedBox(height: 24),
@@ -161,6 +169,127 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showSetupDialogLandscape() async {
+    int tempRounds = totalRounds;
+    int tempMinutes = roundDuration;
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 480,
+              padding: EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.10),
+                    blurRadius: 32,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: StatefulBuilder(
+                builder: (context, setStateModal) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Set Rounds & Time', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                          IconButton(
+                            icon: Icon(Icons.close_rounded, color: Colors.black54),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: _tiktokWheelPicker(
+                              label: 'Rounds',
+                              value: tempRounds,
+                              min: 1,
+                              max: 10,
+                              onChanged: (v) => setStateModal(() => tempRounds = v),
+                              color: Colors.orange,
+                            ),
+                          ),
+                          SizedBox(width: 32),
+                          Expanded(
+                            child: _tiktokWheelPicker(
+                              label: 'Minutes',
+                              value: tempMinutes,
+                              min: 1,
+                              max: 60,
+                              onChanged: (v) => setStateModal(() => tempMinutes = v),
+                              color: Colors.deepPurple,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 18),
+                      Text(
+                        '\t${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
+                        style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 15),
+                      ),
+                      SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                totalRounds = tempRounds;
+                                roundDuration = tempMinutes;
+                                currentRound = 1;
+                              });
+                              Navigator.of(context).pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 8,
+                            ),
+                            child: Text('OK', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                          ),
+                          SizedBox(width: 24),
+                          OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: BorderSide(color: Colors.black, width: 2),
+                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text('Cancel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
         );
       },
     );
@@ -297,34 +426,34 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   }
 
   void _insertRoundResult(int counts, {bool isFinal = false}) {
-  final now = DateTime.now();
-  final months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
-  final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
-  // 清空所有note
-  for (var e in history) {
-    e["note"] = "";
-  }
-  final result = {
-    "date": dateStr,
-    "counts": counts,
-    "note": "current",
-  };
-  history.insert(0, result);
-  // 排序并赋rank
+    final now = DateTime.now();
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
+    // 清空所有note
+    for (var e in history) {
+      e["note"] = "";
+    }
+    final result = {
+      "date": dateStr,
+      "counts": counts,
+      "note": "current",
+    };
+    history.insert(0, result);
+    // 排序并赋rank
   history.sort((a, b) => b["counts"].compareTo(a["counts"]));
   for (int i = 0; i < history.length; i++) {
     history[i]["rank"] = i + 1;
-  }
+    }
   // 把note为current的移到首位，其余按rank排序
   final idx = history.indexWhere((e) => e["note"] == "current");
   if (idx > 0) {
     final current = history.removeAt(idx);
     history.insert(0, current);
+    }
   }
-}
 
   void _tick() async {
     if (!isCounting) return;
@@ -353,7 +482,9 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
         });
         // 自动收起榜单
         Future.delayed(Duration(milliseconds: 50), () {
-          draggableController.animateTo(0.12, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+          final orientation = MediaQuery.of(context).orientation;
+          final targetSize = orientation == Orientation.landscape ? 1.0 : 0.12;
+          draggableController.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
         });
       }
     }
@@ -426,237 +557,82 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
   @override
   Widget build(BuildContext context) {
     final double diameter = MediaQuery.of(context).size.width * 3 / 4;
-    final bool isWarning = isCounting && countdown <= 3;
-    final Color mainColor = isWarning ? AppColors.primary : Color(0xFF00BF60);
-    final Gradient? progressGradient = isWarning
-        ? LinearGradient(
-            colors: [Color(0xFF00FF7F), Colors.white],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+    final orientation = MediaQuery.of(context).orientation;
+    final bool isPortrait = orientation == Orientation.portrait;
+    final Widget mainContent = isPortrait
+        ? TrainingPortraitLayout(
+            totalRounds: totalRounds,
+            currentRound: currentRound,
+            counter: counter,
+            countdown: countdown,
+            isStarted: isStarted,
+            isCounting: isCounting,
+            showPreCountdown: showPreCountdown,
+            preCountdown: preCountdown,
+            bounceController: bounceController,
+            bounceAnim: bounceAnim,
+            pageController: pageController,
+            onStartPressed: _onStartPressed,
+            onCountPressed: _onCountPressed,
+            dynamicBgColor: _dynamicBgColor,
+            diameter: diameter,
+            formatTime: _formatTime,
+            showResultOverlay: showResultOverlay,
+            history: history,
+            draggableController: draggableController,
+            buildHistoryRanking: _buildHistoryRanking,
+            onResultOverlayTap: () {
+              draggableController.animateTo(
+                1.0,
+                duration: Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+              );
+            },
+            onResultReset: () {
+              setState(() {
+                showResultOverlay = false;
+                currentRound = 1;
+                counter = 0;
+                isStarted = false;
+                isCounting = false;
+                showPreCountdown = false;
+              });
+              _startPreCountdown();
+            },
+            onResultBack: () {
+              Navigator.pop(context);
+            },
+            onResultSetup: _showSetupDialog,
           )
-        : null;
-    final Color trackColor = Color(0xFFF3F4F6);
-    return Scaffold(
-      body: Stack(
-        children: [
-          // 主内容区（PageView等）
-          Container(
-            color: _dynamicBgColor,
-            child: PageView.builder(
-              controller: pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: totalRounds,
-              itemBuilder: (context, index) {
-                return Stack(
-                  children: [
-                    // 浮动Logo（顶部到中间区域悬浮）
-                    FloatingLogo(margin: EdgeInsets.only(top: 24)),
-                    // ROUND文本放在FloatingLogo下方
-                    Positioned(
-                      top: (MediaQuery.of(context).padding.top) + 32 + 48 + 24 + 10 + 14, // logo top + logo height + margin
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: Text(
-                          'ROUND ${index + 1}/$totalRounds',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 1.2,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withOpacity(0.18),
-                                blurRadius: 8,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // SafeArea仅保留返回按钮
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Center(
-                      child: GestureDetector(
-                        onTap: isStarted && isCounting ? _onCountPressed : (isStarted ? null : _onStartPressed),
-                        child: AnimatedBuilder(
-                          animation: bounceController,
-                          builder: (context, child) => Transform.scale(
-                            scale: bounceController.value,
-                            child: child,
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // 进度条
-                              SizedBox(
-                                width: diameter,
-                                height: diameter,
-                                child: CustomPaint(
-                                  painter: _CircleProgressPainter(
-                                    progress: isCounting ? countdown / (roundDuration * 60) : 1.0,
-                                    color: isWarning ? AppColors.primary : mainColor,
-                                    gradient: isWarning ? null : progressGradient,
-                                    trackColor: trackColor,
-                                    shadow: mainColor.withOpacity(0.18),
-                                    strokeWidth: 14,
-                                  ),
-                                ),
-                              ),
-                              // 内部白色圆
-                              Container(
-                                width: diameter - 24,
-                                height: diameter - 24,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.08),
-                                      blurRadius: 18,
-                                      offset: Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '$counter',
-                                    style: TextStyle(
-                                      fontSize: diameter / 3,
-                                      fontWeight: FontWeight.bold,
-                                      color: isWarning ? AppColors.primary : Colors.black87,
-                                      letterSpacing: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // 倒计时数字
-                              if (isStarted && isCounting)
-                                Positioned(
-                                  bottom: diameter / 8,
-                                  left: 0,
-                                  right: 0,
-                                  child: Text(
-                                    _formatTime(countdown),
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: diameter / 7,
-                                      fontWeight: FontWeight.bold,
-                                      color: mainColor,
-                                      letterSpacing: 2,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                              // 遮罩倒计时动画
-                    if (showPreCountdown)
-                      Positioned.fill(
-                        child: Container(
-                          color: Colors.black.withOpacity(0.7),
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'ROUND ${index + 1}/$totalRounds',
-                                  style: const TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    letterSpacing: 1.2,
-                                    shadows: [
-                                      Shadow(color: Colors.black54, blurRadius: 12),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 400),
-                                  switchInCurve: Curves.easeOutCubic,
-                                  switchOutCurve: Curves.easeInCubic,
-                                  layoutBuilder: (currentChild, previousChildren) => Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      ...previousChildren,
-                                      if (currentChild != null) currentChild,
-                                    ],
-                                  ),
-                                  transitionBuilder: (child, anim) => FadeTransition(
-                                    opacity: anim,
-                                    child: SlideTransition(
-                                      position: Tween<Offset>(
-                                        begin: const Offset(0, 0.4),
-                                        end: Offset.zero,
-                                      ).animate(anim),
-                                      child: child,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '$preCountdown',
-                                    key: ValueKey(preCountdown),
-                                    style: const TextStyle(
-                                      fontSize: 120,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                      shadows: [
-                                        Shadow(color: Colors.black54, blurRadius: 12),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-          // 结果遮罩全屏
-          if (showResultOverlay)
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              bottom: 0, // 全屏遮罩
-              child: Container(
-                color: Colors.black.withOpacity(0.7),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.emoji_events, color: AppColors.primary, size: 64),
-                      SizedBox(height: 24),
-                      Text('训练完成!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      SizedBox(height: 16),
-                      Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      Text('COUNT:  ${history[0]["counts"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                      Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: 18, color: Colors.white70)),
-                      SizedBox(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton(
-                            onPressed: () {
+        : TrainingLandscapeLayout(
+            totalRounds: totalRounds,
+            currentRound: currentRound,
+            counter: counter,
+            countdown: countdown,
+            isStarted: isStarted,
+            isCounting: isCounting,
+            showPreCountdown: showPreCountdown,
+            preCountdown: preCountdown,
+            bounceController: bounceController,
+            bounceAnim: bounceAnim,
+            pageController: pageController,
+            onStartPressed: _onStartPressed,
+            onCountPressed: _onCountPressed,
+            dynamicBgColor: _dynamicBgColor,
+            diameter: diameter,
+            formatTime: _formatTime,
+            showResultOverlay: showResultOverlay,
+            history: history,
+            draggableController: draggableController,
+            buildHistoryRanking: _buildHistoryRanking,
+            onResultOverlayTap: () {
+              draggableController.animateTo(
+                1.0,
+                duration: Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+              );
+            },
+            onResultReset: () {
                               setState(() {
                                 showResultOverlay = false;
                                 currentRound = 1;
@@ -667,59 +643,27 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                               });
                               _startPreCountdown();
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            child: Text('再来一次', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          ),
-                          SizedBox(width: 24),
-                          OutlinedButton(
-                            onPressed: () {
+            onResultBack: () {
                               Navigator.pop(context);
                             },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primary,
-                              side: BorderSide(color: AppColors.primary, width: 2),
-                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            child: Text('返回重置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          // 唯一的DraggableScrollableSheet始终在最上层
-          DraggableScrollableSheet(
-            controller: draggableController,
-            initialChildSize: 0.20,
-            minChildSize: 0.12,
-            maxChildSize: 0.70,
-            builder: (context, scrollController) {
-              return _buildHistoryRanking(scrollController);
-            },
-          ),
-        ],
-      ),
+            onResultSetup: _showSetupDialog,
+          );
+
+    return Scaffold(
+      body: mainContent,
     );
   }
 
   Widget _buildHistoryRanking(ScrollController scrollController) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
+        color: Colors.black.withOpacity(0.25),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
           ),
         ],
       ),
@@ -729,7 +673,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
         slivers: [
           SliverToBoxAdapter(
             child: Column(
-              children: [
+        children: [
                 // 顶部大面积可拖动区域
                 Container(
                   height: 32,
@@ -739,11 +683,33 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                     height: 3,
                     margin: const EdgeInsets.only(top: 8),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.3),
+                      color: Colors.white.withOpacity(0.25),
                       borderRadius: BorderRadius.circular(1.5),
                     ),
                   ),
                 ),
+               // 榜单表头
+               Padding(
+                 padding: const EdgeInsets.only(left: 24, right: 24, top: 0, bottom: 2),
+                 child: Row(
+                   children: [
+                     SizedBox(
+                       width: 44,
+                       child: Text('RANK', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+                     ),
+                     Expanded(
+                       child: Text('DATE', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+                     ),
+                     SizedBox(
+                       width: 60,
+                       child: Align(
+                         alignment: Alignment.centerRight,
+                         child: Text('COUNTS', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+                       ),
+                     ),
+                   ],
+                 ),
+               ),
                 // 标题区域
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -753,40 +719,41 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                         width: 3,
                         height: 18,
                         decoration: BoxDecoration(
-                          color: AppColors.primary,
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(1.5),
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Text(
-                        'TOP SCORES',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
+          const Text(
+            'TOP SCORES',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              letterSpacing: 1.0,
+              shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+            ),
+          ),
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: Colors.white.withOpacity(0.10),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1),
+                          border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
                         ),
                         child: Text(
                           '${history.length}',
                           style: TextStyle(
-                            color: AppColors.primary,
+                            color: Colors.white,
                             fontWeight: FontWeight.w600,
                             fontSize: 11,
                             letterSpacing: 0.5,
                           ),
                         ),
                       ),
-                    ],
-                  ),
+            ],
+          ),
                 ),
               ],
             ),
@@ -801,57 +768,59 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   decoration: BoxDecoration(
                     color: isCurrent 
-                        ? AppColors.primary.withOpacity(0.08)
+                        ? Colors.white.withOpacity(0.10)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                     border: isCurrent
-                        ? Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5)
+                        ? Border.all(color: Colors.redAccent, width: 2)
                         : null,
                   ),
                   child: Material(
                     color: Colors.transparent,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      child: Row(
-                        children: [
+                  child: Row(
+                    children: [
                           // 排名徽章
-                          Container(
-                            width: 28,
-                            height: 28,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              gradient: isTopThree
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                              gradient: isTopThree && !isCurrent
                                   ? LinearGradient(
-                                      colors: e["rank"] == 1
-                                          ? [Color(0xFFFFD700), Color(0xFFFFA500)]
-                                          : e["rank"] == 2
-                                              ? [Color(0xFFC0C0C0), Color(0xFFA0A0A0)]
-                                              : [Color(0xFFCD7F32), Color(0xFFB8860B)],
+                                     colors: e["rank"] == 1
+                                         ? [Color(0xFFFFF176), Color(0xFFFFA500)]
+                                         : e["rank"] == 2
+                                             ? [Color(0xFFB0BEC5), Color(0xFF90A4AE)]
+                                             : [Color(0xFFBCAAA4), Color(0xFF8D6E63)],
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                     )
                                   : null,
-                              color: isTopThree ? null : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(8),
+                              color: isCurrent
+                                  ? Colors.redAccent
+                                  : (isTopThree ? null : Colors.white.withOpacity(0.10)),
+                            borderRadius: BorderRadius.circular(8),
                               boxShadow: isTopThree
                                   ? [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
+                                        color: Colors.black.withOpacity(0.18),
                                         blurRadius: 3,
                                         offset: const Offset(0, 1),
                                       ),
                                     ]
                                   : null,
-                            ),
-                            child: Text(
-                              '${e["rank"]}',
+                        ),
+                        child: Text(
+                          '${e["rank"]}',
                               style: TextStyle(
-                                color: isTopThree ? Colors.white : Colors.grey.shade700,
-                                fontWeight: FontWeight.bold,
+                                color: isCurrent ? Colors.white : (isTopThree ? Colors.black : Colors.white),
+                            fontWeight: FontWeight.bold,
                                 fontSize: 12,
-                              ),
-                            ),
                           ),
+                        ),
+                      ),
                           const SizedBox(width: 12),
                           // 日期和当前标识
                           Expanded(
@@ -859,9 +828,9 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                               children: [
                                 Flexible(
                                   child: Text(
-                                    e["date"],
+                        e["date"],
                                     style: TextStyle(
-                                      color: isCurrent ? AppColors.primary : Colors.black87,
+                                      color: isCurrent ? Colors.white : Colors.white70,
                                       fontSize: 14,
                                       fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w500,
                                     ),
@@ -870,33 +839,33 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                                 ),
                                 if (isCurrent) ...[
                                   const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
                                       gradient: LinearGradient(
-                                        colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+                                        colors: [Colors.redAccent, Colors.red],
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                       ),
-                                      borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(6),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: AppColors.primary.withOpacity(0.3),
+                                          color: Colors.redAccent.withOpacity(0.18),
                                           blurRadius: 3,
                                           offset: const Offset(0, 1),
                                         ),
                                       ],
-                                    ),
-                                    child: const Text(
+                          ),
+                          child: const Text(
                                       'CURRENT',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
                                         fontSize: 9,
                                         letterSpacing: 0.6,
-                                      ),
-                                    ),
-                                  ),
+                            ),
+                          ),
+                        ),
                                 ],
                               ],
                             ),
@@ -905,10 +874,10 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                '${e["counts"]}',
+                      Text(
+                        '${e["counts"]}',
                                 style: TextStyle(
-                                  color: isCurrent ? AppColors.primary : Colors.black87,
+                                  color: isCurrent ? Colors.white : Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
                                 ),
@@ -916,7 +885,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.fitness_center,
-                                color: isCurrent ? AppColors.primary : Colors.grey.shade500,
+                                color: isCurrent ? Colors.white : Colors.white54,
                                 size: 16,
                               ),
                             ],
@@ -942,55 +911,4 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
     final s = (seconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
   }
-}
-
-class _CircleProgressPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Gradient? gradient;
-  final Color trackColor;
-  final Color shadow;
-  final double strokeWidth;
-  _CircleProgressPainter({
-    required this.progress,
-    required this.color,
-    this.gradient,
-    required this.trackColor,
-    required this.shadow,
-    this.strokeWidth = 14,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint track = Paint()
-      ..color = trackColor
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final Paint fg = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2)
-      ..strokeCap = StrokeCap.round;
-    if (gradient != null) {
-      fg.shader = gradient!.createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-    }
-    final Paint glow = Paint()
-      ..color = shadow
-      ..strokeWidth = strokeWidth + 6
-      ..style = PaintingStyle.stroke
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8);
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - strokeWidth / 2;
-    // 轨迹
-    canvas.drawCircle(center, radius, track);
-    // glow
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, glow);
-    // 主进度
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -3.1415926/2, 2 * 3.1415926 * progress, false, fg);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
