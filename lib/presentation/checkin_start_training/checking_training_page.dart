@@ -625,12 +625,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
             onResultBack: () {
               Navigator.pop(context);
             },
-            onResultSetup: () {
-              setState(() {
-                showResultOverlay = false;
-              });
-              Future.delayed(const Duration(milliseconds: 200), _showSetupDialog);
-            },
+            onResultSetup: _showSetupDialog,
           )
         : TrainingLandscapeLayout(
             totalRounds: totalRounds,
@@ -674,12 +669,7 @@ class _CheckingTrainingPageState extends State<CheckingTrainingPage> with Ticker
             onResultBack: () {
                               Navigator.pop(context);
                             },
-            onResultSetup: () {
-              setState(() {
-                showResultOverlay = false;
-              });
-              Future.delayed(const Duration(milliseconds: 200), _showSetupDialog);
-            },
+            onResultSetup: _showSetupDialog,
           );
 
     return Scaffold(
