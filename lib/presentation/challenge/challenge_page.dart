@@ -19,6 +19,7 @@ enum PKStatus {
 
 /// PK item data model
 class PKItem {
+  final String id;             // PK id
   final String name;           // PK name
   final String reward;         // PK reward
   final DateTime endDate;      // End date
@@ -30,6 +31,7 @@ class PKItem {
   final String? description;   // Description (optional)
 
   PKItem({
+    required this.id,
     required this.name,
     required this.reward,
     required this.endDate,
@@ -76,8 +78,9 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
   /// PK list (sample data for US/English users)
   final List<PKItem> pkList = [
     PKItem(
+      id: 'pk1',
       name: "7-Day HIIT Showdown 7-Day HIIT Showdown 7-Day HIIT Showdown 7-Day HIIT Showdown",
-      reward: "🏆 \$200 Amazon Gift Card Amazon Gift Card Amazon Gift Card Amazon Gift Card",
+      reward: "\uD83C\uDFC6 \$200 Amazon Gift Card Amazon Gift Card Amazon Gift Card Amazon Gift Card",
       endDate: DateTime.now().add(const Duration(days: 3)),
       status: 'ongoing',
       iconAsset: "assets/icons/hiit.svg",
@@ -87,8 +90,9 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
       description: "Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle!",
     ),
     PKItem(
+      id: 'pk2',
       name: "Yoga Masters Cup",
-      reward: "🥇 Gold Medal & Exclusive Badge",
+      reward: "\uD83E\uDD47 Gold Medal & Exclusive Badge",
       endDate: DateTime.now().subtract(const Duration(days: 2)),
       status: 'ended',
       iconAsset: "assets/icons/yoga.svg",
@@ -98,8 +102,9 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
       description: "Compete for flexibility and balance in the ultimate yoga challenge.",
     ),
     PKItem(
+      id: 'pk3',
       name: "Strength Warriors",
-      reward: "💪 Champion Title & Gym Gear",
+      reward: "\uD83D\uDCAA Champion Title & Gym Gear",
       endDate: DateTime.now().add(const Duration(days: 7)),
       status: 'upcoming',
       iconAsset: "assets/icons/hiit.svg",
@@ -109,8 +114,9 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
       description: "Show your power in this strength training competition.",
     ),
     PKItem(
+      id: 'pk4',
       name: "Endurance Marathon",
-      reward: "🏃 \$500 Cash Prize",
+      reward: "\uD83C\uDFC3 \$500 Cash Prize",
       endDate: DateTime.now().add(const Duration(hours: 12)),
       status: 'ongoing',
       iconAsset: "assets/icons/hiit.svg",
@@ -161,7 +167,11 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
 
   /// 点击PK卡片时的跳转逻辑
   void _onPKTap(PKItem pk) {
-    Navigator.pushNamed(context, pk.routeName);
+    Navigator.pushNamed(
+      context,
+      pk.routeName,
+      arguments: {'id': pk.id},
+    );
   }
 
   /// 滑动卡片时切换视频播放

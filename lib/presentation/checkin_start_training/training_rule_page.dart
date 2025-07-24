@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 import 'dart:ui';
+import '../../routes/app_routes.dart';
 
 // ================== 伪数据 ==================
 import 'package:flutter/material.dart';
@@ -664,7 +665,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
               // 直接跳转到 CheckingTrainingPage 页面，无参数，无SnackBar
               Navigator.pushNamed(
                 context,
-                '/checking_training',
+                AppRoutes.checkinTraining,
               );
             },
             style: ElevatedButton.styleFrom(

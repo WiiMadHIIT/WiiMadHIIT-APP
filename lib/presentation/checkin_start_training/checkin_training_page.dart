@@ -7,15 +7,15 @@ import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/circle_progress_painter.dart';
 
-class CheckingTrainingPage extends StatefulWidget {
+class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
-  const CheckingTrainingPage({Key? key, required this.trainingId}) : super(key: key);
+  const CheckinTrainingPage({Key? key, required this.trainingId}) : super(key: key);
 
   @override
-  State<CheckingTrainingPage> createState() => _CheckingTrainingPageState();
+  State<CheckinTrainingPage> createState() => _CheckinTrainingPageState();
 }
 
-class _CheckingTrainingPageState extends State<CheckingTrainingPage> with TickerProviderStateMixin {
+class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerProviderStateMixin {
   Map<String, dynamic>? currentResult;
   int totalRounds = 1;
   int roundDuration = 1; // 单位：分钟
