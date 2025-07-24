@@ -76,6 +76,13 @@ class TrainingPortraitLayout extends StatelessWidget {
       children: [
         Container(
           color: dynamicBgColor,
+        ),
+        // 全屏黑色高透明遮罩
+        Container(
+          color: Colors.black.withOpacity(0.18),
+        ),
+        Container(
+          color: Colors.transparent,
           child: PageView.builder(
             controller: pageController,
             physics: const NeverScrollableScrollPhysics(),

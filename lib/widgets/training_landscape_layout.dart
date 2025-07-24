@@ -107,6 +107,12 @@ class TrainingLandscapeLayout extends StatelessWidget {
           height: screenHeight,
           color: dynamicBgColor,
         ),
+        // 全屏黑色高透明遮罩
+        Container(
+          width: screenWidth,
+          height: screenHeight,
+          color: Colors.black.withOpacity(0.18),
+        ),
         Row(
           children: [
             // 左侧主计数器区域
