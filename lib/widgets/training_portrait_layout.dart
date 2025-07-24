@@ -78,9 +78,9 @@ class TrainingPortraitLayout extends StatelessWidget {
           color: dynamicBgColor,
         ),
         // 全屏黑色高透明遮罩
-        Container(
-          color: Colors.black.withOpacity(0.18),
-        ),
+        // Container(
+        //   color: Colors.black.withOpacity(0.38),
+        // ),
         Container(
           color: Colors.transparent,
           child: PageView.builder(
@@ -148,13 +148,18 @@ class TrainingPortraitLayout extends StatelessWidget {
                               width: diameter - 24,
                               height: diameter - 24,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: const Color(0xFFF8F9FB),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFFF8F9FB), Color(0xFFEDEEF2)],
+                                ),
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.08),
-                                    blurRadius: 18,
-                                    offset: Offset(0, 4),
+                                    color: Colors.black.withOpacity(0.10),
+                                    blurRadius: 22,
+                                    offset: Offset(0, 6),
                                   ),
                                 ],
                               ),
