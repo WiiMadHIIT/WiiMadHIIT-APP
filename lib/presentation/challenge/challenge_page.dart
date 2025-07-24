@@ -170,7 +170,7 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
     Navigator.pushNamed(
       context,
       pk.routeName,
-      arguments: {'id': pk.id},
+      arguments: {'challengeId': pk.id},
     );
   }
 
@@ -671,30 +671,6 @@ class _PKEntryState extends State<_PKEntry> {
     }
   }
 
-  /// Get button text (English)
-  String _getButtonText() {
-    switch (widget.pk.statusEnum) {
-      case PKStatus.ongoing:
-        return 'Join Now';
-      case PKStatus.ended:
-        return 'Results';
-      case PKStatus.upcoming:
-        return 'Reserve';
-    }
-  }
-
-  /// Get status button icon
-  IconData _getButtonIcon() {
-    switch (widget.pk.statusEnum) {
-      case PKStatus.ongoing:
-        return Icons.flash_on;
-      case PKStatus.ended:
-        return Icons.emoji_events;
-      case PKStatus.upcoming:
-        return Icons.info_outline;
-    }
-  }
-
   /// Format time remaining (English)
   String _formatTimeRemaining() {
     final now = DateTime.now();
@@ -754,6 +730,7 @@ class _PKEntryState extends State<_PKEntry> {
               padding: const EdgeInsets.all(20),
         child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Top status bar
                   Row(
@@ -898,6 +875,7 @@ class _PKEntryState extends State<_PKEntry> {
                   
                   // Bottom info bar
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       // End time
                       Expanded(
@@ -930,62 +908,21 @@ class _PKEntryState extends State<_PKEntry> {
                           ),
                         ),
                       ),
-                      
                       const SizedBox(width: 8),
-                      
                       // Action button
-                      Flexible(
-                        child: PowerfulTapEffect(
-                          onTap: widget.onTap,
-                          pressedScale: 0.90,
-                          pressDuration: Duration(milliseconds: 80),
-                          reboundDuration: Duration(milliseconds: 320),
-                          reboundCurve: Curves.elasticOut,
-                          child: _AnimatedButton(
-                            onPressed: () {},
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    statusColor,
-                                    statusColor.withOpacity(0.8),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: statusColor.withOpacity(0.3),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _getButtonIcon(),
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(
-                                      _getButtonText(),
-                                      style: AppTextStyles.labelMedium.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                      ElevatedButton.icon(
+                        onPressed: widget.onTap,
+                        icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.white),
+                        label: const Text('Explore', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: statusColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          textStyle: const TextStyle(fontSize: 14, letterSpacing: 0.2),
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ),
                     ],

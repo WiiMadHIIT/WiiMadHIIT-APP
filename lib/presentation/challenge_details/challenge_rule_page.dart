@@ -8,24 +8,17 @@ import '../../routes/app_routes.dart';
 import '../../widgets/projection_tutorial_sheet.dart';
 
 // ================== 伪数据 ==================
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../core/theme/app_colors.dart';
-import 'dart:ui';
-
-final Map<String, dynamic> fakeTrainingInfo = {
-  "name": "Projection Training",
-  "type": "General",
+final Map<String, dynamic> fakeChallengeInfo = {
+  "name": "Challenge Game",
+  "type": "Competition",
   "level": "All Levels",
 };
 
-final List<Map<String, dynamic>> fakeTrainingRules = [
+final List<Map<String, dynamic>> fakeChallengeRules = [
   {
     "icon": Icons.settings,
     "title": "Device Setup",
-    "description": "Switch to P10 mode and P9 speed for optimal training experience",
+    "description": "Switch to P10 mode and P9 speed for optimal challenge experience",
     "color": const Color(0xFF10B981),
   },
   {
@@ -46,8 +39,8 @@ final Map<String, dynamic> fakeVideoInfo = {
   "asset": "assets/video/video1.mp4",
   "duration": "2 min",
   "quality": "HD",
-  "title": "Watch Video Tutorial",
-  "subtitle": "Learn projection setup step by step",
+  "title": "Watch Challenge Tutorial",
+  "subtitle": "Learn challenge setup step by step",
 };
 
 final List<Map<String, dynamic>> fakeTutorialSteps = [
@@ -66,7 +59,7 @@ final List<Map<String, dynamic>> fakeTutorialSteps = [
   {
     "number": 3,
     "title": "Enable Projection",
-    "description": "Tap the projection button in the training interface to start casting.",
+    "description": "Tap the projection button in the challenge interface to start casting.",
     "icon": Icons.cast_connected,
   },
   {
@@ -77,42 +70,41 @@ final List<Map<String, dynamic>> fakeTutorialSteps = [
   },
   {
     "number": 5,
-    "title": "Start Training",
-    "description": "Once the projection is properly set up, you can begin your training session.",
+    "title": "Start Challenge",
+    "description": "Once the projection is properly set up, you can begin your challenge session.",
     "icon": Icons.play_circle,
   },
 ];
 // ================== 伪数据 END ==================
 
-class TrainingRulePage extends StatefulWidget {
-  final String? trainingId;
-  final String? trainingName;
-  final String? trainingType;
-  final String? trainingLevel;
+class ChallengeRulePage extends StatefulWidget {
+  final String? challengeId;
+  final String? challengeName;
+  final String? challengeType;
+  final String? challengeLevel;
   
-  const TrainingRulePage({
+  const ChallengeRulePage({
     Key? key,
-    this.trainingId,
-    this.trainingName,
-    this.trainingType,
-    this.trainingLevel,
+    this.challengeId,
+    this.challengeName,
+    this.challengeType,
+    this.challengeLevel,
   }) : super(key: key);
 
   @override
-  State<TrainingRulePage> createState() => _TrainingRulePageState();
+  State<ChallengeRulePage> createState() => _ChallengeRulePageState();
 
-  // 从路由参数创建页面的静态方法
-  static TrainingRulePage fromRoute(Map<String, dynamic> arguments) {
-    return TrainingRulePage(
-      trainingId: arguments['trainingId'] as String?,
-      trainingName: arguments['trainingName'] as String?,
-      trainingType: arguments['trainingType'] as String?,
-      trainingLevel: arguments['trainingLevel'] as String?,
+  static ChallengeRulePage fromRoute(Map<String, dynamic> arguments) {
+    return ChallengeRulePage(
+      challengeId: arguments['challengeId'] as String?,
+      challengeName: arguments['challengeName'] as String?,
+      challengeType: arguments['challengeType'] as String?,
+      challengeLevel: arguments['challengeLevel'] as String?,
     );
   }
 }
 
-class _TrainingRulePageState extends State<TrainingRulePage> 
+class _ChallengeRulePageState extends State<ChallengeRulePage> 
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -185,7 +177,6 @@ class _TrainingRulePageState extends State<TrainingRulePage>
               background: _buildHeaderBackground(),
             ),
           ),
-          
           // 主要内容
           SliverToBoxAdapter(
             child: SlideTransition(
@@ -197,20 +188,13 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 训练信息卡片
-                      _buildTrainingInfoCard(),
+                      _buildChallengeInfoCard(),
                       const SizedBox(height: 24),
-                      
-                      // 训练规则卡片
-                      _buildTrainingRulesCard(),
+                      _buildChallengeRulesCard(),
                       const SizedBox(height: 24),
-                      
-                      // 投影教程入口
                       _buildProjectionTutorialCard(),
                       const SizedBox(height: 32),
-                      
-                      // 开始训练按钮
-                      _buildStartTrainingButton(),
+                      _buildStartChallengeButton(),
                       const SizedBox(height: 40),
                     ],
                   ),
@@ -259,7 +243,6 @@ class _TrainingRulePageState extends State<TrainingRulePage>
       ),
       child: Stack(
         children: [
-          // 装饰性背景图案
           Positioned(
             top: -50,
             right: -50,
@@ -284,8 +267,6 @@ class _TrainingRulePageState extends State<TrainingRulePage>
               ),
             ),
           ),
-          
-          // 标题内容
           Positioned(
             left: 24,
             right: 24,
@@ -294,7 +275,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Training Rules',
+                  'Challenge Rules',
                   style: AppTextStyles.headlineLarge.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -309,7 +290,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Get ready for your workout',
+                  'Get ready for your challenge',
                   style: AppTextStyles.bodyLarge.copyWith(
                     color: Colors.white.withOpacity(0.9),
                     shadows: [
@@ -329,7 +310,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildTrainingInfoCard() {
+  Widget _buildChallengeInfoCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -355,7 +336,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  Icons.fitness_center,
+                  Icons.emoji_events,
                   color: AppColors.primary,
                   size: 24,
                 ),
@@ -366,14 +347,14 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      fakeTrainingInfo["name"] ?? 'Training',
+                      fakeChallengeInfo["name"] ?? 'Challenge',
                       style: AppTextStyles.titleLarge.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
                       ),
                     ),
                     Text(
-                      '${fakeTrainingInfo["type"] ?? 'General'} • ${fakeTrainingInfo["level"] ?? 'All Levels'}',
+                      '${fakeChallengeInfo["type"] ?? 'Competition'} • ${fakeChallengeInfo["level"] ?? 'All Levels'}',
                       style: AppTextStyles.bodyMedium.copyWith(
                         color: Colors.grey[600],
                       ),
@@ -388,7 +369,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildTrainingRulesCard() {
+  Widget _buildChallengeRulesCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -421,7 +402,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
               ),
               const SizedBox(width: 12),
               Text(
-                'Training Rules',
+                'Challenge Rules',
                 style: AppTextStyles.titleMedium.copyWith(
                   fontWeight: FontWeight.bold,
                   color: Colors.black,
@@ -430,7 +411,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
             ],
           ),
           const SizedBox(height: 16),
-          ...fakeTrainingRules.map((rule) => Padding(
+          ...fakeChallengeRules.map((rule) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _buildRuleItem(
               icon: rule["icon"],
@@ -547,7 +528,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Learn how to project your training to a flat surface',
+                        'Learn how to project your challenge to a flat surface',
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: Colors.white.withOpacity(0.9),
                         ),
@@ -568,7 +549,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildStartTrainingButton() {
+  Widget _buildStartChallengeButton() {
     return Container(
       width: double.infinity,
       height: 60,
@@ -594,7 +575,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: _startTraining,
+          onTap: _startChallenge,
           child: Center(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -606,7 +587,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Start Training',
+                  'Start Challenge',
                   style: AppTextStyles.titleLarge.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -632,11 +613,15 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  void _startTraining() {
-    // TODO: 导航到实际的训练页面
-    print('Starting training: ${widget.trainingName ?? 'Training'}');
-    
-    // 显示确认对话框
+  void _startChallenge() {
+    // 跳转到 ChallengeGamePage，携带 challengeId 参数
+    final id = widget.challengeId;
+    if (id == null || id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Challenge id not found.')),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -650,7 +635,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
           ),
         ),
         content: Text(
-          'Make sure you have completed all the setup steps and are ready to begin your training session.',
+          'Make sure you have completed all the setup steps and are ready to begin your challenge session.',
           style: AppTextStyles.bodyMedium,
         ),
         actions: [
@@ -666,10 +651,10 @@ class _TrainingRulePageState extends State<TrainingRulePage>
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              // 直接跳转到 CheckingTrainingPage 页面，无参数，无SnackBar
               Navigator.pushNamed(
                 context,
-                AppRoutes.checkinTraining,
+                AppRoutes.challengeGame,
+                arguments: {'challengeId': id},
               );
             },
             style: ElevatedButton.styleFrom(

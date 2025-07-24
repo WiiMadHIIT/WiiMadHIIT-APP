@@ -3,6 +3,7 @@ import '../../widgets/floating_logo.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:video_player/video_player.dart';
+import '../../routes/app_routes.dart';
 
 // 1. 定义playoff数据结构
 enum PlayoffStage { round32, round8, round4, semi, finalMatch }
@@ -158,6 +159,22 @@ class ChallengeDetailsPageState extends State<ChallengeDetailsPage> with SingleT
                 MaterialPageRoute(builder: (_) => const _FullScreenVideoPage()),
               );
             },
+            onJoin: () {
+              // 获取id参数并跳转
+              final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+              final id = args != null ? args['challengeId'] : null;
+              if (id != null) {
+                Navigator.pushNamed(
+                  context,
+                  AppRoutes.challengeRule,
+                  arguments: {'challengeId': id},
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Challenge id not found.')),
+                );
+              }
+            },
           )),
           SliverPersistentHeader(
             pinned: true,
@@ -297,72 +314,90 @@ class _FeatureEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).primaryColor;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
       elevation: 0,
       color: Colors.white.withOpacity(0.98),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 18),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: onVideo ?? () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Video Introduction'),
-                      content: const Text('Here you can play or preview the challenge introduction video.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Close'),
-                        ),
-                      ],
+              child: SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: onVideo ?? () {},
+                  style: ButtonStyle(
+                    shape: MaterialStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                    padding: MaterialStateProperty.all(const EdgeInsets.symmetric(horizontal: 0)),
+                    elevation: MaterialStateProperty.all(0),
+                    backgroundColor: MaterialStateProperty.resolveWith((states) {
+                      return null;
+                    }),
+                    foregroundColor: MaterialStateProperty.all(Colors.white),
+                    overlayColor: MaterialStateProperty.all(primary.withOpacity(0.08)),
+                  ),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [primary, primary.withOpacity(0.7)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.play_circle_fill, size: 28),
-                label: const Text('Video Intro', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 0),
-                  textStyle: const TextStyle(letterSpacing: 0.2),
+                    child: Container(
+                      alignment: Alignment.center,
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.play_circle_fill, size: 20, color: Colors.white),
+                          SizedBox(width: 7),
+                          Flexible(
+                            child: Text('Video Intro',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 18),
+            const SizedBox(width: 14),
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: onJoin ?? () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Join Challenge'),
-                      content: const Text('Here you can implement the join challenge logic or show a confirmation.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Close'),
+              child: SizedBox(
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: onJoin ?? () {},
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    side: BorderSide(color: primary, width: 1.5),
+                    backgroundColor: Colors.black,
+                    foregroundColor: primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 0),
+                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.emoji_events, size: 18, color: primary),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text('Join Now',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: primary),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.emoji_events, size: 26),
-                label: const Text('Join Now', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 0),
-                  textStyle: const TextStyle(letterSpacing: 0.2),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
