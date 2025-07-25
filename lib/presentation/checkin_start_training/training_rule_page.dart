@@ -172,53 +172,58 @@ class _TrainingRulePageState extends State<TrainingRulePage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      body: CustomScrollView(
-        slivers: [
-          // 顶部渐变背景和标题
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: _buildBackButton(),
-            flexibleSpace: FlexibleSpaceBar(
-              background: _buildHeaderBackground(),
-            ),
-          ),
-          
-          // 主要内容
-          SliverToBoxAdapter(
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 训练信息卡片
-                      _buildTrainingInfoCard(),
-                      const SizedBox(height: 24),
-                      
-                      // 训练规则卡片
-                      _buildTrainingRulesCard(),
-                      const SizedBox(height: 24),
-                      
-                      // 投影教程入口
-                      _buildProjectionTutorialCard(),
-                      const SizedBox(height: 32),
-                      
-                      // 开始训练按钮
-                      _buildStartTrainingButton(),
-                      const SizedBox(height: 40),
-                    ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double horizontalPad = constraints.maxWidth < 600 ? 16 : 48;
+          final double cardPad = constraints.maxWidth < 600 ? 16 : 28;
+          final double cardRadius = constraints.maxWidth < 600 ? 16 : 22;
+          final double buttonHeight = constraints.maxWidth < 600 ? 52 : 60;
+          final double buttonRadius = constraints.maxWidth < 600 ? 14 : 18;
+          final double sectionGap = constraints.maxWidth < 600 ? 16 : 28;
+          final double cardGap = constraints.maxWidth < 600 ? 14 : 22;
+          final double bottomGap = constraints.maxWidth < 600 ? 24 : 40;
+          final double topGap = constraints.maxWidth < 600 ? 16 : 32;
+          return CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 180,
+                pinned: true,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                leading: _buildBackButton(),
+                flexibleSpace: FlexibleSpaceBar(
+                  background: _buildHeaderBackground(),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(horizontalPad, topGap, horizontalPad, bottomGap),
+                      child: SingleChildScrollView(
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildTrainingInfoCard(cardPad, cardRadius),
+                            SizedBox(height: cardGap),
+                            _buildTrainingRulesCard(cardPad, cardRadius),
+                            SizedBox(height: cardGap),
+                            _buildProjectionTutorialCard(cardPad, cardRadius),
+                            SizedBox(height: sectionGap),
+                            _buildStartTrainingButton(buttonHeight, buttonRadius),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -329,76 +334,76 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildTrainingInfoCard() {
+  Widget _buildTrainingInfoCard(double pad, double radius) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(pad),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+          Container(
+            padding: EdgeInsets.all(pad * 0.7),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(radius * 0.75),
+            ),
+            child: Icon(
+              Icons.fitness_center,
+              color: AppColors.primary,
+              size: 22,
+            ),
+          ),
+          SizedBox(width: pad * 0.7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fakeTrainingInfo["name"] ?? 'Training',
+                  style: AppTextStyles.titleLarge.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Icon(
-                  Icons.fitness_center,
-                  color: AppColors.primary,
-                  size: 24,
+                SizedBox(height: 4),
+                Text(
+                  '${fakeTrainingInfo["type"] ?? 'General'} • ${fakeTrainingInfo["level"] ?? 'All Levels'}',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: Colors.grey[600],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      fakeTrainingInfo["name"] ?? 'Training',
-                      style: AppTextStyles.titleLarge.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    Text(
-                      '${fakeTrainingInfo["type"] ?? 'General'} • ${fakeTrainingInfo["level"] ?? 'All Levels'}',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTrainingRulesCard() {
+  Widget _buildTrainingRulesCard(double pad, double radius) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(pad),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -408,18 +413,18 @@ class _TrainingRulePageState extends State<TrainingRulePage>
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(pad * 0.5),
                 decoration: BoxDecoration(
                   color: const Color(0xFF6366F1).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(radius * 0.5),
                 ),
                 child: Icon(
                   Icons.rule,
                   color: const Color(0xFF6366F1),
-                  size: 20,
+                  size: 18,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: pad * 0.5),
               Text(
                 'Training Rules',
                 style: AppTextStyles.titleMedium.copyWith(
@@ -429,14 +434,16 @@ class _TrainingRulePageState extends State<TrainingRulePage>
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: pad * 0.7),
           ...fakeTrainingRules.map((rule) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: EdgeInsets.only(bottom: pad * 0.5),
             child: _buildRuleItem(
               icon: rule["icon"],
               title: rule["title"],
               description: rule["description"],
               color: rule["color"],
+              pad: pad,
+              radius: radius,
             ),
           )).toList(),
         ],
@@ -449,23 +456,25 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     required String title,
     required String description,
     required Color color,
+    required double pad,
+    required double radius,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(pad * 0.35),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(radius * 0.45),
           ),
           child: Icon(
             icon,
             color: color,
-            size: 16,
+            size: 15,
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: pad * 0.5),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -476,14 +485,18 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                   fontWeight: FontWeight.bold,
                   color: Colors.black,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 2),
               Text(
                 description,
                 style: AppTextStyles.bodyMedium.copyWith(
                   color: Colors.grey[600],
-                  height: 1.4,
+                  height: 1.32,
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -492,7 +505,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildProjectionTutorialCard() {
+  Widget _buildProjectionTutorialCard(double pad, double radius) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -503,37 +516,37 @@ class _TrainingRulePageState extends State<TrainingRulePage>
             const Color(0xFF8B5CF6),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6366F1).withOpacity(0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF6366F1).withOpacity(0.22),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(radius),
           onTap: _showProjectionTutorial,
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(pad),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(pad * 0.7),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(radius * 0.7),
                   ),
                   child: Icon(
                     Icons.cast,
                     color: Colors.white,
-                    size: 24,
+                    size: 22,
                   ),
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: pad * 0.7),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -544,13 +557,17 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 2),
                       Text(
                         'Learn how to project your training to a flat surface',
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: Colors.white.withOpacity(0.9),
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -558,7 +575,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                 Icon(
                   Icons.arrow_forward_ios,
                   color: Colors.white.withOpacity(0.8),
-                  size: 16,
+                  size: 15,
                 ),
               ],
             ),
@@ -568,10 +585,10 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildStartTrainingButton() {
+  Widget _buildStartTrainingButton(double height, double radius) {
     return Container(
       width: double.infinity,
-      height: 60,
+      height: height,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -581,19 +598,19 @@ class _TrainingRulePageState extends State<TrainingRulePage>
             AppColors.primary.withOpacity(0.8),
           ],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+            color: AppColors.primary.withOpacity(0.22),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           onTap: _startTraining,
           child: Center(
             child: Row(
@@ -602,14 +619,19 @@ class _TrainingRulePageState extends State<TrainingRulePage>
                 Icon(
                   Icons.play_arrow,
                   color: Colors.white,
-                  size: 24,
+                  size: height * 0.42,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Start Training',
-                  style: AppTextStyles.titleLarge.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                SizedBox(width: height * 0.18),
+                Flexible(
+                  child: Text(
+                    'Start Training',
+                    style: AppTextStyles.titleLarge.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: height * 0.38,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

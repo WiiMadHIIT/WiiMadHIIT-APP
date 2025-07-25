@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
 import 'dart:async';
 import '../../widgets/floating_logo.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/circle_progress_painter.dart';
+import '../../widgets/layout_bg_type.dart';
 import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
-import '../../widgets/circle_progress_painter.dart';
+import 'package:camera/camera.dart';
 
 class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -35,6 +38,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   DraggableScrollableController? _portraitController;
   DraggableScrollableController? _landscapeController;
 
+  // 背景切换相关
+  LayoutBgType bgType = LayoutBgType.color;
+  late AnimationController _videoFadeController;
+  late VideoPlayerController _videoController;
+  bool _videoReady = false;
+  CameraController? _cameraController;
+  Future<void>? _cameraInitFuture;
+
   // 假数据历史排名
   final List<Map<String, dynamic>> history = [
     {"rank": 1, "date": "May 19, 2025", "counts": 19, "note": ""},
@@ -55,7 +66,34 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     pageController = PageController();
     _portraitController = DraggableScrollableController();
     _landscapeController = DraggableScrollableController();
+    _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
+      ..setLooping(true)
+      ..setVolume(0.0)
+      ..initialize().then((_) {
+        setState(() {
+          _videoReady = true;
+        });
+        _videoController.play();
+      });
+    _videoFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+      value: 1.0,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSetupDialog());
+    // 初始化摄像头
+    availableCameras().then((cameras) {
+      if (cameras.isNotEmpty) {
+        _cameraController = CameraController(
+          cameras[0],
+          ResolutionPreset.high,
+          enableAudio: false,
+        );
+        _cameraInitFuture = _cameraController!.initialize().then((_) {
+          if (mounted) setState(() {});
+        });
+      }
+    });
   }
 
   @override
@@ -76,6 +114,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     pageController.dispose();
     _portraitController?.dispose();
     _landscapeController?.dispose();
+    _videoController.dispose();
+    _videoFadeController.dispose();
+    _cameraController?.dispose();
     super.dispose();
   }
 
@@ -582,6 +623,25 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     final bool isPortrait = orientation == Orientation.portrait;
     final DraggableScrollableController controller =
         isPortrait ? _portraitController! : _landscapeController!;
+
+    final Widget videoWidget = _videoReady
+        ? FadeTransition(
+            opacity: _videoFadeController,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _videoController.value.size.width,
+                height: _videoController.value.size.height,
+                child: VideoPlayer(_videoController),
+              ),
+            ),
+          )
+        : Container(color: Colors.black);
+
+    final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
+        ? CameraPreview(_cameraController!)
+        : Container(color: Colors.black);
+
     final Widget mainContent = isPortrait
         ? TrainingPortraitLayout(
             totalRounds: totalRounds,
@@ -598,6 +658,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             onStartPressed: _onStartPressed,
             onCountPressed: _onCountPressed,
             dynamicBgColor: _dynamicBgColor,
+            onBgSwitchPressed: _onBgSwitchPressed,
+            bgType: bgType,
+            videoWidget: videoWidget,
+            selfieWidget: selfieWidget,
             diameter: diameter,
             formatTime: _formatTime,
             showResultOverlay: showResultOverlay,
@@ -642,6 +706,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             onStartPressed: _onStartPressed,
             onCountPressed: _onCountPressed,
             dynamicBgColor: _dynamicBgColor,
+            bgType: bgType,
+            videoWidget: videoWidget,
+            selfieWidget: selfieWidget,
             diameter: diameter,
             formatTime: _formatTime,
             showResultOverlay: showResultOverlay,
@@ -656,19 +723,19 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
               );
             },
             onResultReset: () {
-                              setState(() {
-                                showResultOverlay = false;
-                                currentRound = 1;
-                                counter = 0;
-                                isStarted = false;
-                                isCounting = false;
-                                showPreCountdown = false;
-                              });
-                              _startPreCountdown();
-                            },
+              setState(() {
+                showResultOverlay = false;
+                currentRound = 1;
+                counter = 0;
+                isStarted = false;
+                isCounting = false;
+                showPreCountdown = false;
+              });
+              _startPreCountdown();
+            },
             onResultBack: () {
-                              Navigator.pop(context);
-                            },
+              Navigator.pop(context);
+            },
             onResultSetup: _showSetupDialog,
           );
 
@@ -933,5 +1000,24 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     final m = (seconds ~/ 60).toString().padLeft(2, '0');
     final s = (seconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
+  }
+
+  void _onBgSwitchPressed() {
+    setState(() {
+      // 循环切换四种背景
+      if (bgType == LayoutBgType.color) {
+        bgType = LayoutBgType.video;
+      } else if (bgType == LayoutBgType.video) {
+        bgType = LayoutBgType.selfie;
+      } else if (bgType == LayoutBgType.selfie) {
+        bgType = LayoutBgType.black;
+      } else {
+        bgType = LayoutBgType.color;
+      }
+    });
+    if (bgType == LayoutBgType.video && _videoReady) {
+      _videoController.play();
+      _videoFadeController.forward();
+    }
   }
 }

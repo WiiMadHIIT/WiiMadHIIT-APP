@@ -4,9 +4,8 @@ import 'dart:async';
 import 'package:video_player/video_player.dart';
 import '../../widgets/floating_logo.dart';
 import '../../core/theme/app_colors.dart';
-import '../../widgets/training_portrait_layout.dart';
-import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/circle_progress_painter.dart';
+import '../../widgets/layout_bg_type.dart';
 import '../../widgets/countdown_portrait_layout.dart';
 import '../../widgets/countdown_landscape_layout.dart';
 
@@ -40,6 +39,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
   late VideoPlayerController _videoController;
   late AnimationController _videoFadeController;
   bool _videoReady = false;
+  LayoutBgType bgType = LayoutBgType.video;
   bool _videoFading = false;
 
   final List<Map<String, dynamic>> history = [
@@ -573,6 +573,21 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     }
   }
 
+  void _onBgSwitchPressed() {
+    setState(() {
+      // 只在video和black之间切换
+      if (bgType == LayoutBgType.video) {
+        bgType = LayoutBgType.black;
+      } else {
+        bgType = LayoutBgType.video;
+      }
+    });
+    if (bgType == LayoutBgType.video && _videoReady) {
+      _videoController.play();
+      _videoFadeController.forward();
+    }
+  }
+
   Color get _bgColor => isCounting
     ? (countdown <= 3 ? const Color(0xFF00FF7F) : const Color(0xFFF2F2F2))
     : const Color(0xFFF2F2F2);
@@ -611,7 +626,6 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
             pageController: pageController,
             onStartPressed: _onStartPressed,
             onCountPressed: _onCountPressed,
-            dynamicBgColor: Colors.transparent, // 透明，视频为背景
             diameter: diameter,
             formatTime: _formatTime,
             showResultOverlay: showResultOverlay,
@@ -640,6 +654,21 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
             },
             onResultSetup: _showSetupDialog,
             roundDuration: roundDuration,
+            videoWidget: _videoReady
+                ? FadeTransition(
+                    opacity: _videoFadeController,
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: _videoController.value.size.width,
+                        height: _videoController.value.size.height,
+                        child: VideoPlayer(_videoController),
+                      ),
+                    ),
+                  )
+                : Container(color: Colors.black),
+            bgType: bgType,
+            onBgSwitchPressed: _onBgSwitchPressed,
           )
         : CountdownLandscapeLayout(
             totalRounds: totalRounds,
@@ -654,7 +683,6 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
             pageController: pageController,
             onStartPressed: _onStartPressed,
             onCountPressed: _onCountPressed,
-            dynamicBgColor: Colors.transparent, // 透明，视频为背景
             diameter: diameter,
             formatTime: _formatTime,
             showResultOverlay: showResultOverlay,
@@ -683,13 +711,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
             },
             onResultSetup: _showSetupDialog,
             roundDuration: roundDuration,
-          );
-
-    return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: _videoReady
+            videoWidget: _videoReady
                 ? FadeTransition(
                     opacity: _videoFadeController,
                     child: FittedBox(
@@ -702,15 +724,11 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
                     ),
                   )
                 : Container(color: Colors.black),
-          ),
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.18), // TikTok风格微遮罩
-            ),
-          ),
-          mainContent,
-        ],
-      ),
+            bgType: bgType,
+          );
+
+    return Scaffold(
+      body: mainContent,
     );
   }
 

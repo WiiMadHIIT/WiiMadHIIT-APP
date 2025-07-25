@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import 'floating_logo.dart';
 import 'circle_progress_painter.dart';
+import 'layout_bg_type.dart';
 
-// 竖屏倒计时训练布局
 class CountdownPortraitLayout extends StatelessWidget {
   final int totalRounds;
   final int currentRound;
@@ -19,7 +19,6 @@ class CountdownPortraitLayout extends StatelessWidget {
   final PageController pageController;
   final VoidCallback onStartPressed;
   final VoidCallback onCountPressed;
-  final Color dynamicBgColor;
   final double diameter;
   final String Function(int) formatTime;
   // 新增：结果遮罩和榜单参数
@@ -31,6 +30,9 @@ class CountdownPortraitLayout extends StatelessWidget {
   final VoidCallback onResultReset;
   final VoidCallback onResultBack;
   final VoidCallback onResultSetup;
+  final Widget videoWidget;
+  final LayoutBgType bgType;
+  final VoidCallback onBgSwitchPressed;
 
   const CountdownPortraitLayout({
     Key? key,
@@ -48,7 +50,6 @@ class CountdownPortraitLayout extends StatelessWidget {
     required this.pageController,
     required this.onStartPressed,
     required this.onCountPressed,
-    required this.dynamicBgColor,
     required this.diameter,
     required this.formatTime,
     // 新增
@@ -60,6 +61,9 @@ class CountdownPortraitLayout extends StatelessWidget {
     required this.onResultReset,
     required this.onResultBack,
     required this.onResultSetup,
+    required this.videoWidget,
+    required this.bgType,
+    required this.onBgSwitchPressed,
   }) : super(key: key);
 
   @override
@@ -76,12 +80,17 @@ class CountdownPortraitLayout extends StatelessWidget {
     final Color trackColor = Color(0xFFF3F4F6);
     return Stack(
       children: [
-        Container(
-          color: dynamicBgColor,
-        ),
-        Container(
-          color: Colors.transparent,
-          child: PageView.builder(
+        // 多种背景类型
+        if (bgType == LayoutBgType.video)
+          Positioned.fill(child: videoWidget)
+        else if (bgType == LayoutBgType.black)
+          Positioned.fill(child: Container(color: Colors.black))
+        else
+          Positioned.fill(child: Container(color: Colors.transparent)),
+        if (bgType == LayoutBgType.video)
+          Positioned.fill(child: Container(color: Colors.black.withOpacity(0.18))),
+        // 主内容
+        PageView.builder(
             controller: pageController,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: totalRounds,
@@ -121,82 +130,12 @@ class CountdownPortraitLayout extends StatelessWidget {
                           scale: bounceController.value,
                           child: child,
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: diameter,
-                              height: diameter,
-                              child: CustomPaint(
-                                painter: CircleProgressPainter(
-                                  progress: isCounting ? countdown / 60.0 : 1.0,
-                                  color: isWarning ? AppColors.primary : mainColor,
-                                  gradient: isWarning ? null : progressGradient,
-                                  trackColor: trackColor,
-                                  shadow: mainColor.withOpacity(0.18),
-                                  strokeWidth: 14,
-                                ),
-                              ),
-                            ),
-                            Opacity(
-                              opacity: 0.82,
-                              child: Container(
-                                width: diameter - 24,
-                                height: diameter - 24,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF8F9FB),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [Color(0xFFF8F9FB), Color(0xFFEDEEF2)],
-                                  ),
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.10),
-                                      blurRadius: 22,
-                                      offset: Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: !isStarted
-                                      ? Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.play_arrow_rounded, size: diameter / 2.2, color: mainColor),
-                                            SizedBox(height: 8),
-                                            Text(
-                                              'Tap to Start',
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                color: mainColor,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : null, // formatTime(countdown)单独放到外层
-                                ),
-                              ),
-                            ),
-                            if (isStarted)
-                              Positioned.fill(
-                                child: Center(
-                                  child: Text(
-                                    formatTime(countdown),
-                                    style: TextStyle(
-                                      fontSize: diameter / 3.2,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                      letterSpacing: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            // 不再需要底部倒计时
-                          ],
-                        ),
+                        child: (bgType != LayoutBgType.color)
+                            ? Opacity(
+                                opacity: 0.82,
+                                child: _buildMainCounter(context, diameter, isWarning, mainColor, progressGradient, trackColor),
+                              )
+                            : _buildMainCounter(context, diameter, isWarning, mainColor, progressGradient, trackColor),
                       ),
                     ),
                   ),
@@ -264,7 +203,6 @@ class CountdownPortraitLayout extends StatelessWidget {
               );
             },
           ),
-        ),
         if (showResultOverlay)
           Positioned(
             left: 0,
@@ -274,66 +212,81 @@ class CountdownPortraitLayout extends StatelessWidget {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onResultOverlayTap,
-              child: Container(
-                color: Colors.black.withOpacity(0.7),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.emoji_events, color: AppColors.primary, size: 64),
-                      SizedBox(height: 24),
-                      Text('Training Complete!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      SizedBox(height: 16),
-                      Text(
-                        'Congratulations! You worked out for ${history[0]["minutes"]} minutes.',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.1),
-                        textAlign: TextAlign.center,
-                      ),
-                      SizedBox(height: 18),
-                      Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      Text('ROUNDS:  $totalRounds', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                      Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: 18, color: Colors.white70)),
-                      SizedBox(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final double maxWidth = constraints.maxWidth;
+                  final double maxHeight = constraints.maxHeight;
+                  final double iconSize = maxWidth * 0.10 + 32;
+                  final double congratFont = maxWidth * 0.035 + 10;
+                  final double infoFont = maxWidth * 0.032 + 8;
+                  final double dateFont = maxWidth * 0.025 + 7;
+                  final double buttonFont = maxWidth * 0.030 + 8;
+                  final double buttonPadH = maxWidth * 0.045;
+                  final double buttonPadV = maxHeight * 0.018;
+                  final double buttonRadius = 16;
+                  final double buttonGap = maxWidth * 0.04;
+                  return Container(
+                    color: Colors.black.withOpacity(0.7),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          ElevatedButton(
-                            onPressed: onResultReset,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            child: Text('Try Again', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          Icon(Icons.emoji_events, color: AppColors.primary, size: iconSize),
+                          SizedBox(height: maxHeight * 0.03),
+                          Text(
+                            'Congratulations! You worked out for ${history[0]["minutes"]} minutes.',
+                            style: TextStyle(fontSize: congratFont, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.1),
+                            textAlign: TextAlign.center,
                           ),
-                          SizedBox(width: 24),
-                          ElevatedButton(
-                            onPressed: onResultSetup,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: AppColors.primary,
-                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            child: Text('Reset', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          ),
-                          SizedBox(width: 24),
-                          OutlinedButton(
-                            onPressed: onResultBack,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primary,
-                              side: BorderSide(color: AppColors.primary, width: 2),
-                              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            child: Text('Back', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          SizedBox(height: maxHeight * 0.025),
+                          Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                          Text('ROUNDS:  ${totalRounds}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: dateFont, color: Colors.white70)),
+                          SizedBox(height: maxHeight * 0.04),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton(
+                                onPressed: onResultReset,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
+                                  elevation: 8,
+                                ),
+                                child: Text('Restart', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                              ),
+                              SizedBox(width: buttonGap),
+                              ElevatedButton(
+                                onPressed: onResultSetup,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: AppColors.primary,
+                                  padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
+                                  elevation: 8,
+                                ),
+                                child: Text('Reset', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                              ),
+                              SizedBox(width: buttonGap),
+                              OutlinedButton(
+                                onPressed: onResultBack,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.primary,
+                                  side: BorderSide(color: AppColors.primary, width: 2),
+                                  padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
+                                ),
+                                child: Text('Back', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -346,15 +299,112 @@ class CountdownPortraitLayout extends StatelessWidget {
             return buildHistoryRanking(scrollController);
           },
         ),
+        // 左上角返回按钮 & 右上角背景切换按钮同行
         Positioned(
           top: MediaQuery.of(context).padding.top + 8,
           left: 8,
-          child: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 26),
-            onPressed: onResultBack,
-            splashRadius: 22,
+          right: 8,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 26),
+                onPressed: onResultBack,
+                splashRadius: 22,
+                tooltip: 'Back',
+              ),
+              Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: Icon(Icons.switch_video_rounded, color: Colors.white.withOpacity(0.82), size: 28),
+                  onPressed: onBgSwitchPressed,
+                  splashRadius: 22,
+                  tooltip: 'Switch Background',
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(),
+                  highlightColor: Colors.white.withOpacity(0.08),
+                  hoverColor: Colors.white.withOpacity(0.10),
+                ),
+              ),
+            ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildMainCounter(BuildContext context, double diameter, bool isWarning, Color mainColor, Gradient? progressGradient, Color trackColor) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        SizedBox(
+          width: diameter,
+          height: diameter,
+          child: CustomPaint(
+            painter: CircleProgressPainter(
+              progress: isCounting ? countdown / 60.0 : 1.0,
+              color: isWarning ? AppColors.primary : mainColor,
+              gradient: isWarning ? null : progressGradient,
+              trackColor: trackColor,
+              shadow: mainColor.withOpacity(0.18),
+              strokeWidth: 14,
+            ),
+          ),
+        ),
+        Container(
+          width: diameter - 24,
+          height: diameter - 24,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F9FB),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFF8F9FB), Color(0xFFEDEEF2)],
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.10),
+                blurRadius: 22,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Center(
+            child: !isStarted
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.play_arrow_rounded, size: diameter / 2.2, color: mainColor),
+                      SizedBox(height: 8),
+                      Text(
+                        'Tap to Start',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: mainColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  )
+                : null, // formatTime(countdown)单独放到外层
+          ),
+        ),
+        if (isStarted)
+          Positioned.fill(
+            child: Center(
+              child: Text(
+                formatTime(countdown),
+                style: TextStyle(
+                  fontSize: diameter / 3.2,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
