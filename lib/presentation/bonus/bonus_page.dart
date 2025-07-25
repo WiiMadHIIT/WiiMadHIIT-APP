@@ -197,49 +197,49 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
               padding: EdgeInsets.only(bottom: bottomPadding + 64),
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      constraints: BoxConstraints(
-                        minHeight: math.min(180, MediaQuery.of(context).size.height * 0.26),
-                        maxHeight: math.max(180, MediaQuery.of(context).size.height * 0.26),
-                      ),
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: activities.length,
-                        physics: const PageScrollPhysics(),
-                        onPageChanged: _onPageChanged,
-                        itemBuilder: (context, index) {
-                          return AnimatedScale(
-                            scale: _currentIndex == index ? 1.0 : 0.92,
-                            duration: const Duration(milliseconds: 300),
-                            child: _BonusCard(
-                              activity: activities[index],
-                              onTap: () {
-                                // TODO: 领奖逻辑
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Bonus claimed!')),
-                                );
-                              },
-                              index: index,
-                            ),
-                          );
-                        },
-                      ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    constraints: BoxConstraints(
+                      minHeight: math.min(180, MediaQuery.of(context).size.height * 0.26),
+                      maxHeight: math.max(180, MediaQuery.of(context).size.height * 0.26),
                     ),
-                    const SizedBox(height: 16),
-                    AnimatedSmoothIndicator(
-                      activeIndex: _currentIndex,
-                      count: activities.length,
-                      effect: ExpandingDotsEffect(
-                        dotHeight: 8,
-                        dotWidth: 8,
-                        activeDotColor: AppColors.primary,
-                        dotColor: Colors.white.withOpacity(0.3),
-                      ),
+                    child: PageView.builder(
+                      controller: _pageController,
+                      itemCount: activities.length,
+                      physics: const PageScrollPhysics(),
+                      onPageChanged: _onPageChanged,
+                      itemBuilder: (context, index) {
+                        return AnimatedScale(
+                          scale: _currentIndex == index ? 1.0 : 0.92,
+                          duration: const Duration(milliseconds: 300),
+                          child: _BonusCard(
+                            activity: activities[index],
+                            onTap: () {
+                              // TODO: 领奖逻辑
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Bonus claimed!')),
+                              );
+                            },
+                            index: index,
+                          ),
+                        );
+                      },
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 16),
+                  AnimatedSmoothIndicator(
+                    activeIndex: _currentIndex,
+                    count: activities.length,
+                    effect: ExpandingDotsEffect(
+                      dotHeight: 8,
+                      dotWidth: 8,
+                      activeDotColor: AppColors.primary,
+                      dotColor: Colors.white.withOpacity(0.3),
+                    ),
+                  ),
+                ],
                 ),
               ),
             ),

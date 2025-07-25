@@ -257,46 +257,46 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
               padding: EdgeInsets.only(bottom: bottomPadding + 64),  //底部安全区高度
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 新增 Checkinboard 入口
-                    _CheckinboardEntry(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/checkinboard');
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 新增 Checkinboard 入口
+                  _CheckinboardEntry(
+                    onTap: () {
+                      Navigator.pushNamed(context, '/checkinboard');
+                    },
+                  ),
+                  SizedBox(
+                    height: 200, // 推荐用固定高度，性能更优
+                    child: PageView.builder(
+                      controller: _pageController,
+                      itemCount: products.length,
+                      physics: const PageScrollPhysics(), // 强磁吸
+                      onPageChanged: _onPageChanged,
+                      itemBuilder: (context, index) {
+                        return AnimatedScale(
+                          scale: _currentIndex == index ? 1.0 : 0.92,
+                          duration: const Duration(milliseconds: 300),
+                          child: _ProductEntry(
+                            product: products[index],
+                            onTap: () => _onProductTap(products[index]),
+                          ),
+                        );
                       },
                     ),
-                    SizedBox(
-                      height: 200, // 推荐用固定高度，性能更优
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: products.length,
-                        physics: const PageScrollPhysics(), // 强磁吸
-                        onPageChanged: _onPageChanged,
-                        itemBuilder: (context, index) {
-                          return AnimatedScale(
-                            scale: _currentIndex == index ? 1.0 : 0.92,
-                            duration: const Duration(milliseconds: 300),
-                            child: _ProductEntry(
-                              product: products[index],
-                              onTap: () => _onProductTap(products[index]),
-                            ),
-                          );
-                        },
-                      ),
+                  ),
+                  const SizedBox(height: 16),
+                  AnimatedSmoothIndicator(
+                    activeIndex: _currentIndex,
+                    count: products.length,
+                    effect: ExpandingDotsEffect(
+                      dotHeight: 8,
+                      dotWidth: 8,
+                      activeDotColor: AppColors.primary,
+                      dotColor: Colors.white.withOpacity(0.3),
                     ),
-                    const SizedBox(height: 16),
-                    AnimatedSmoothIndicator(
-                      activeIndex: _currentIndex,
-                      count: products.length,
-                      effect: ExpandingDotsEffect(
-                        dotHeight: 8,
-                        dotWidth: 8,
-                        activeDotColor: AppColors.primary,
-                        dotColor: Colors.white.withOpacity(0.3),
-                      ),
-                    ),
-                  ],
+                  ),
+                ],
                 ),
               ),
             ),

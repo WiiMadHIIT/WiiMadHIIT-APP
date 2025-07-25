@@ -667,9 +667,17 @@ class _TrainingRulePageState extends State<TrainingRulePage>
             onPressed: () {
               Navigator.pop(context);
               // 直接跳转到 CheckingTrainingPage 页面，无参数，无SnackBar
+              // Navigator.pushNamed(
+              //   context,
+              //   AppRoutes.checkinTraining,
+              // );
+            //   Navigator.pushNamed(
+            //     context,
+            //     AppRoutes.checkinTrainingVoice,
+            //   );
               Navigator.pushNamed(
                 context,
-                AppRoutes.checkinTraining,
+                AppRoutes.checkinCountdown,
               );
             },
             style: ElevatedButton.styleFrom(

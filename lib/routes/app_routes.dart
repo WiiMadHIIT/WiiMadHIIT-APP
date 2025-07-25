@@ -8,23 +8,31 @@ import '../presentation/home/home_page.dart';
 import '../presentation/leaderboard/leaderboard_page.dart';
 import '../presentation/checkinboard/checkinboard_page.dart';
 import '../presentation/profile1/profile_page.dart';
+
 import '../presentation/checkin_start_training/training_list_page.dart';
 import '../presentation/checkin_start_training/training_rule_page.dart';
 import '../presentation/checkin_start_training/checkin_training_page.dart';
+import '../presentation/checkin_start_training/chekin_training_voice_page.dart';
+import '../presentation/checkin_start_training/checkin_countdown_page.dart';
 
 class AppRoutes {
+  static const String home = '/home';
+  static const String challenge = '/challenge';
   static const String profile = '/profile';
   static const String profile1 = '/profile1';
-  static const String challenge = '/challenge';
+
   static const String challengeDetails = '/challenge_details';
   static const String challengeRule = '/challenge_rule';
   static const String challengeGame = '/challenge_game';
-  static const String home = '/home';
+
   static const String leaderboard = '/leaderboard';
   static const String checkinboard = '/checkinboard';
-  static const String checkinTraining = '/checkin_training';
+
   static const String trainingList = '/training_list';
   static const String trainingRule = '/training_rule';
+  static const String checkinTraining = '/checkin_training';
+  static const String checkinTrainingVoice = '/checkin_training_voice';
+  static const String checkinCountdown = '/checkin_countdown';
 
   static Map<String, WidgetBuilder> get routes => {
     profile: (_) => const ProfilePage(),
@@ -50,6 +58,14 @@ class AppRoutes {
     checkinTraining: (context) {
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       return CheckinTrainingPage(trainingId: args?['trainingId'] ?? '');
+    },
+    checkinTrainingVoice: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      return ChekinTrainingVoicePage(trainingId: args?['trainingId'] ?? '');
+    },
+    checkinCountdown: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      return CheckinCountdownPage(trainingId: args?['trainingId'] ?? '');
     },
   };
 }

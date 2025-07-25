@@ -210,15 +210,31 @@ class TrainingLandscapeLayout extends StatelessWidget {
                                           ],
                                         ),
                                         child: Center(
-                                          child: Text(
-                                            '${counter}',
-                                            style: TextStyle(
-                                              fontSize: counterDiameter / 3,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black87,
-                                              letterSpacing: 1.5,
-                                            ),
-                                          ),
+                                          child: !isStarted
+                                              ? Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.play_arrow_rounded, size: counterDiameter / 2.2, color: mainColor),
+                                                    SizedBox(height: 8),
+                                                    Text(
+                                                      'Tap to Start',
+                                                      style: TextStyle(
+                                                        fontSize: 18,
+                                                        color: mainColor,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                )
+                                              : Text(
+                                                  '${counter}',
+                                                  style: TextStyle(
+                                                    fontSize: counterDiameter / 3,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.black87,
+                                                    letterSpacing: 1.5,
+                                                  ),
+                                                ),
                                         ),
                                       ),
                                       // 倒计时数字
@@ -318,7 +334,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
                                         children: [
                                           Icon(Icons.emoji_events, color: AppColors.primary, size: 64),
                                           SizedBox(height: 24),
-                                          Text('训练完成!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                          Text('Training Complete!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                           SizedBox(height: 16),
                                           Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                           Text('COUNT:  ${history[0]["counts"]}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -335,7 +351,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
                                                   padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                                 ),
-                                                child: Text('再来一次', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                                child: Text('Try Again', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                               ),
                                               SizedBox(width: 24),
                                               ElevatedButton(
@@ -346,7 +362,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
                                                   padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                                 ),
-                                                child: Text('重置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                                child: Text('Reset', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                               ),
                                               SizedBox(width: 24),
                                               OutlinedButton(
@@ -357,7 +373,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
                                                   padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                                 ),
-                                                child: Text('返回', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                                child: Text('Back', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                               ),
                                             ],
                                           ),
