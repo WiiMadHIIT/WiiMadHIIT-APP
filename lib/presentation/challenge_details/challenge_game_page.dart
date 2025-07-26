@@ -662,17 +662,11 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
 
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
         ? Container(
-            width: double.infinity,
-            height: double.infinity,
-            child: ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.center,
-                maxWidth: double.infinity,
-                maxHeight: double.infinity,
-                child: AspectRatio(
-                  aspectRatio: _cameraController!.value.previewSize!.width / _cameraController!.value.previewSize!.height,
-                  child: CameraPreview(_cameraController!),
-                ),
+            color: Colors.black,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: _cameraController!.value.previewSize?.aspectRatio ?? 9/16,
+                child: CameraPreview(_cameraController!),
               ),
             ),
           )
