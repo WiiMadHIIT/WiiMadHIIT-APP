@@ -700,13 +700,12 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
                 width: double.infinity,
                 height: double.infinity,
                 color: Colors.black,
-                child: Center(
-                  child: Transform.scale(
-                    scale: scale,
-                    child: SizedBox(
-                      width: cameraWidth,
-                      height: cameraHeight,
-                      child: CameraPreview(_cameraController!),
+                child: Transform.scale(
+                  scale: scale,
+                  child: SizedBox(
+                    width: cameraWidth,
+                    height: cameraHeight,
+                    child: CameraPreview(_cameraController!),
                     ),
                   ),
                 ),
