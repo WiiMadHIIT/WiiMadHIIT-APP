@@ -694,7 +694,7 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
               }
               
               // 稍微放大一点，确保填满屏幕
-              scale *= 1.1;
+              scale *= 1;
               
               return Container(
                 width: double.infinity,
@@ -706,7 +706,6 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
                     width: cameraWidth,
                     height: cameraHeight,
                     child: CameraPreview(_cameraController!),
-                    ),
                   ),
                 ),
               );

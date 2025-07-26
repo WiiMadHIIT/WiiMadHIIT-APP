@@ -707,7 +707,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
               }
               
               // 稍微放大一点，确保填满屏幕
-              scale *= 1.1;
+              scale *= 1;
               
               return Container(
                 width: double.infinity,
