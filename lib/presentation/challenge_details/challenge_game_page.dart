@@ -713,8 +713,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
                 width: double.infinity,
                 height: double.infinity,
                 color: Colors.black,
-                child: Transform.scale(
-                  scale: scale,
+                child: FittedBox(
+                  fit: BoxFit.cover,
                   child: SizedBox(
                     width: cameraWidth,
                     height: cameraHeight,
