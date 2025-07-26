@@ -677,18 +677,25 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
               }
               
               // 稍微放大一点，确保填满屏幕
-              scale *= 1;
+              scale *= 1.1;
               
               return Container(
                 width: double.infinity,
                 height: double.infinity,
                 color: Colors.black,
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: cameraWidth,
-                    height: cameraHeight,
-                    child: CameraPreview(_cameraController!),
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    child: Transform.scale(
+                      scale: scale,
+                      alignment: Alignment.center,
+                      child: SizedBox(
+                        width: cameraWidth,
+                        height: cameraHeight,
+                        child: CameraPreview(_cameraController!),
+                      ),
+                    ),
                   ),
                 ),
               );
