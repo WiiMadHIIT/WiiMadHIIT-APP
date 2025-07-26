@@ -644,7 +644,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         : Container(color: Colors.black);
 
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
-        ? CameraPreview(_cameraController!)
+        ? FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: _cameraController!.value.previewSize?.width ?? 1,
+              height: _cameraController!.value.previewSize?.height ?? 1,
+              child: CameraPreview(_cameraController!),
+            ),
+          )
         : Container(color: Colors.black);
 
     final Widget mainContent = isPortrait
