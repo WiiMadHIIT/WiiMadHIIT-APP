@@ -81,27 +81,40 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSetupDialog());
     // 初始化摄像头
     availableCameras().then((cameras) {
+      print('Available cameras: ${cameras.length}');
       if (cameras.isNotEmpty) {
         // 查找前置摄像头
         final frontCamera = cameras.firstWhere(
           (camera) => camera.lensDirection == CameraLensDirection.front,
           orElse: () => cameras[0], // 如果没有前置摄像头，使用第一个
         );
+        print('Selected camera: ${frontCamera.name} - ${frontCamera.lensDirection}');
+        
         _cameraController = CameraController(
           frontCamera,
           ResolutionPreset.high,
           enableAudio: false,
         );
+        
         _cameraInitFuture = _cameraController!.initialize().then((_) {
+          print('Camera initialized successfully');
           if (mounted) {
             setState(() {});
             // 启动摄像头预览
             _cameraController!.startImageStream((image) {
               // 保持摄像头活跃
+            }).catchError((error) {
+              print('Error starting image stream: $error');
             });
           }
+        }).catchError((error) {
+          print('Error initializing camera: $error');
         });
+      } else {
+        print('No cameras available');
       }
+    }).catchError((error) {
+      print('Error getting available cameras: $error');
     });
   }
 
@@ -668,44 +681,17 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
         : Container(color: Colors.black);
 
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
-        ? LayoutBuilder(
-            builder: (context, constraints) {
-              final screenWidth = constraints.maxWidth;
-              final screenHeight = constraints.maxHeight;
-              
-              // 强制使用 9:16 比例，确保不变形
-              final targetRatio = 9.0 / 16.0; // 9:16 比例
-              
-              double targetWidth, targetHeight;
-              
-              // 计算以屏幕高度为基准的 9:16 尺寸
-              targetHeight = screenHeight;
-              targetWidth = screenHeight * targetRatio;
-              
-              // 如果计算出的宽度小于屏幕宽度，则使用屏幕宽度为基准
-              if (targetWidth < screenWidth) {
-                targetWidth = screenWidth;
-                targetHeight = screenWidth / targetRatio;
-              }
-              
-              return Positioned.fill(
-                child: ClipRect(
-                  child: Center(
-                    child: SizedBox(
-                      width: targetWidth,
-                      height: targetHeight,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.zero,
-                        child: Transform.scale(
-                          scale: 1.0, // 确保不缩放
-                          child: CameraPreview(_cameraController!),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
+        ? Container(
+            width: double.infinity,
+            height: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _cameraController!.value.previewSize?.width ?? 1,
+                height: _cameraController!.value.previewSize?.height ?? 1,
+                child: CameraPreview(_cameraController!),
+              ),
+            ),
           )
         : Container(color: Colors.black);
 
