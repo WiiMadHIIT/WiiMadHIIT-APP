@@ -665,38 +665,32 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
             builder: (context, constraints) {
               final screenWidth = constraints.maxWidth;
               final screenHeight = constraints.maxHeight;
-              final cameraWidth = _cameraController!.value.previewSize?.width ?? 1;
-              final cameraHeight = _cameraController!.value.previewSize?.height ?? 1;
               
-              // 计算 TikTok 风格的全屏比例 (9:16 或 16:9)
-              final screenRatio = screenWidth / screenHeight;
-              final cameraRatio = cameraWidth / cameraHeight;
+              // 强制使用 9:16 比例，确保不变形
+              final targetRatio = 9.0 / 16.0; // 9:16 比例
               
               double targetWidth, targetHeight;
               
-              if (screenRatio > cameraRatio) {
-                // 屏幕更宽，以高度为准
-                targetHeight = screenHeight;
-                targetWidth = screenHeight * cameraRatio;
-              } else {
-                // 屏幕更高，以宽度为准
+              // 计算以屏幕高度为基准的 9:16 尺寸
+              targetHeight = screenHeight;
+              targetWidth = screenHeight * targetRatio;
+              
+              // 如果计算出的宽度小于屏幕宽度，则使用屏幕宽度为基准
+              if (targetWidth < screenWidth) {
                 targetWidth = screenWidth;
-                targetHeight = screenWidth / cameraRatio;
+                targetHeight = screenWidth / targetRatio;
               }
               
-              return Center(
-                child: SizedBox(
-                  width: targetWidth,
-                  height: targetHeight,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      maxWidth: double.infinity,
-                      maxHeight: double.infinity,
-                      child: FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: cameraWidth,
-                          height: cameraHeight,
+              return Positioned.fill(
+                child: ClipRect(
+                  child: Center(
+                    child: SizedBox(
+                      width: targetWidth,
+                      height: targetHeight,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.zero,
+                        child: Transform.scale(
+                          scale: 1.0, // 确保不缩放
                           child: CameraPreview(_cameraController!),
                         ),
                       ),
