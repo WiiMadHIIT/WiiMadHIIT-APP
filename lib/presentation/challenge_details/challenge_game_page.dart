@@ -687,6 +687,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
         ? LayoutBuilder(
             builder: (context, constraints) {
+              final screenWidth = constraints.maxWidth;
+              final screenHeight = constraints.maxHeight;
               final cameraWidth = _cameraController!.value.previewSize?.width ?? 1;
               final cameraHeight = _cameraController!.value.previewSize?.height ?? 1;
               
@@ -696,8 +698,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
                 color: Colors.black,
                 child: Center(
                   child: SizedBox(
-                    width: cameraWidth,
-                    height: cameraHeight,
+                    width: screenWidth,
+                    height: screenHeight,
                     child: CameraPreview(_cameraController!),
                   ),
                 ),
