@@ -84,8 +84,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 初始化摄像头
     availableCameras().then((cameras) {
       if (cameras.isNotEmpty) {
+        // 查找前置摄像头
+        final frontCamera = cameras.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.front,
+          orElse: () => cameras[0], // 如果没有前置摄像头，使用第一个
+        );
         _cameraController = CameraController(
-          cameras[0],
+          frontCamera,
           ResolutionPreset.high,
           enableAudio: false,
         );
