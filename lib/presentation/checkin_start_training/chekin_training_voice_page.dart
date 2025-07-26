@@ -661,14 +661,50 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
         : Container(color: Colors.black);
 
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
-        ? Container(
-            color: Colors.black,
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: _cameraController!.value.previewSize?.aspectRatio ?? 9/16,
-                child: CameraPreview(_cameraController!),
-              ),
-            ),
+        ? LayoutBuilder(
+            builder: (context, constraints) {
+              final screenWidth = constraints.maxWidth;
+              final screenHeight = constraints.maxHeight;
+              final cameraWidth = _cameraController!.value.previewSize?.width ?? 1;
+              final cameraHeight = _cameraController!.value.previewSize?.height ?? 1;
+              
+              // 计算 TikTok 风格的全屏比例 (9:16 或 16:9)
+              final screenRatio = screenWidth / screenHeight;
+              final cameraRatio = cameraWidth / cameraHeight;
+              
+              double targetWidth, targetHeight;
+              
+              if (screenRatio > cameraRatio) {
+                // 屏幕更宽，以高度为准
+                targetHeight = screenHeight;
+                targetWidth = screenHeight * cameraRatio;
+              } else {
+                // 屏幕更高，以宽度为准
+                targetWidth = screenWidth;
+                targetHeight = screenWidth / cameraRatio;
+              }
+              
+              return Center(
+                child: SizedBox(
+                  width: targetWidth,
+                  height: targetHeight,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      maxWidth: double.infinity,
+                      maxHeight: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: cameraWidth,
+                          height: cameraHeight,
+                          child: CameraPreview(_cameraController!),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           )
         : Container(color: Colors.black);
 
