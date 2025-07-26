@@ -93,7 +93,13 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
           enableAudio: false,
         );
         _cameraInitFuture = _cameraController!.initialize().then((_) {
-          if (mounted) setState(() {});
+          if (mounted) {
+            setState(() {});
+            // 启动摄像头预览
+            _cameraController!.startImageStream((image) {
+              // 保持摄像头活跃
+            });
+          }
         });
       }
     });
@@ -119,6 +125,7 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
     _landscapeController?.dispose();
     _videoController.dispose();
     _videoFadeController.dispose();
+    _cameraController?.stopImageStream();
     _cameraController?.dispose();
     super.dispose();
   }
