@@ -656,12 +656,16 @@ class _ChekinTrainingVoicePageState extends State<ChekinTrainingVoicePage> with 
     final Widget videoWidget = _videoReady
         ? FadeTransition(
             opacity: _videoFadeController,
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _videoController.value.size.width,
-                height: _videoController.value.size.height,
-                child: VideoPlayer(_videoController),
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _videoController.value.size.width,
+                  height: _videoController.value.size.height,
+                  child: VideoPlayer(_videoController),
+                ),
               ),
             ),
           )
