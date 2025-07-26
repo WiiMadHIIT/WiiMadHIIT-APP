@@ -685,17 +685,46 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
         : Container(color: Colors.black);
 
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
-        ? Container(
-            width: double.infinity,
-            height: double.infinity,
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _cameraController!.value.previewSize?.width ?? 1,
-                height: _cameraController!.value.previewSize?.height ?? 1,
-                child: CameraPreview(_cameraController!),
-              ),
-            ),
+        ? LayoutBuilder(
+            builder: (context, constraints) {
+              final screenWidth = constraints.maxWidth;
+              final screenHeight = constraints.maxHeight;
+              final cameraWidth = _cameraController!.value.previewSize?.width ?? 1;
+              final cameraHeight = _cameraController!.value.previewSize?.height ?? 1;
+              
+              // 计算摄像头和屏幕的宽高比
+              final cameraRatio = cameraWidth / cameraHeight;
+              final screenRatio = screenWidth / screenHeight;
+              
+              // 计算合适的缩放比例，保持原始比例
+              double scale;
+              if (screenRatio > cameraRatio) {
+                // 屏幕更宽，以高度为准
+                scale = screenHeight / cameraHeight;
+              } else {
+                // 屏幕更高，以宽度为准
+                scale = screenWidth / cameraWidth;
+              }
+              
+              // 稍微放大一点，确保填满屏幕
+              scale *= 1.1;
+              
+              return Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.black,
+                child: Center(
+                  child: Transform.scale(
+                    scale: scale,
+                    child: SizedBox(
+                      width: cameraWidth,
+                      height: cameraHeight,
+                      child: CameraPreview(_cameraController!),
+                    ),
+                  ),
+                ),
+              );
+            },
           )
         : Container(color: Colors.black);
 
