@@ -40,10 +40,6 @@ dependencies:
   infinite_carousel: ^1.1.1
   smooth_page_indicator: ^1.1.0
   camera: ^0.10.5+9
-  # flutter_screen_recording: ^2.0.24  # 仅在真机构建时启用
-  path_provider: ^2.1.2
-  permission_handler: ^11.3.1
-  gallery_saver: ^2.3.2
   
 
 dev_dependencies:

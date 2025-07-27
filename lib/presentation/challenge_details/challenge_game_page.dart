@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:async';
-import 'dart:io';
 import '../../widgets/floating_logo.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/training_portrait_layout.dart';
@@ -10,10 +9,6 @@ import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/circle_progress_painter.dart';
 import '../../widgets/layout_bg_type.dart';
 import 'package:camera/camera.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:gallery_saver/gallery_saver.dart';
-import 'screen_recording_wrapper.dart';
 
 class ChallengeGamePage extends StatefulWidget {
   final String challengeId;
@@ -49,11 +44,6 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   bool _videoReady = false;
   CameraController? _cameraController;
   Future<void>? _cameraInitFuture;
-
-  // 屏幕录制相关
-  bool _isRecording = false;
-  String? _recordedVideoPath;
-  bool _recordingConfirmed = false;
 
   final List<Map<String, dynamic>> history = [
     {"rank": 1, "date": "May 19, 2025", "counts": 19, "note": ""},
@@ -142,12 +132,6 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
 
   @override
   void dispose() {
-    // 如果正在录制，停止录制
-    if (_isRecording) {
-      ScreenRecordingWrapper.stopRecordScreen.catchError((e) {
-        print('Error stopping recording in dispose: $e');
-      });
-    }
     
     bounceController.dispose();
     pageController.dispose();
@@ -499,11 +483,6 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   }
 
     void _startPreCountdown() {
-    // 如果是自拍模式且未确认录制，先显示确认弹窗
-    if (bgType == LayoutBgType.selfie && !_recordingConfirmed) {
-      _showRecordingConfirmationDialog();
-      return;
-    }
     
     setState(() {
       showPreCountdown = true;
@@ -588,11 +567,6 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
           isCounting = false;
           showResultOverlay = true;
         });
-        
-        // 如果是自拍模式且正在录制，停止录制并显示保存弹窗
-        if (bgType == LayoutBgType.selfie && _isRecording) {
-          _stopRecording();
-        }
         
         // 自动收起榜单
         Future.delayed(Duration(milliseconds: 50), () {
@@ -1182,308 +1156,4 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     final s = (seconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
   }
-
-  // 屏幕录制相关方法
-  void _showRecordingConfirmationDialog() {
-    // 检查设备是否支持屏幕录制
-    if (!ScreenRecordingWrapper.isSupported) {
-      // 在模拟器上显示提示
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.orange, size: 28),
-                SizedBox(width: 12),
-                Text(
-                  'Screen Recording Not Available',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            content: Text(
-              'Screen recording is not supported on emulator. Please test this feature on a real device.',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.black54,
-                height: 1.4,
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  setState(() {
-                    _recordingConfirmed = true;
-                  });
-                  _startPreCountdown();
-                },
-                child: Text(
-                  'Continue Without Recording',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.videocam_rounded, color: Colors.blue, size: 28),
-              SizedBox(width: 12),
-              Text(
-                'Record Training Session?',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Would you like to record this training session with your selfie camera? The video will include all UI elements and can be saved to your gallery.',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.black54,
-              height: 1.4,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                setState(() {
-                  _recordingConfirmed = true;
-                });
-                // 立即开始录制
-                await _startRecording();
-                _startPreCountdown();
-              },
-              child: Text(
-                'Record',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  _recordingConfirmed = true;
-                });
-                _startPreCountdown();
-              },
-              child: Text(
-                'Skip',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _startRecording() async {
-    try {
-      // 检查存储权限
-      final storageStatus = await Permission.storage.status;
-      if (!storageStatus.isGranted) {
-        final result = await Permission.storage.request();
-        if (!result.isGranted) {
-          throw Exception('Storage permission is required for screen recording');
-        }
-      }
-
-      final directory = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      _recordedVideoPath = '${directory.path}/training_recording_$timestamp.mp4';
-      
-      // 使用高效的录制设置
-      await ScreenRecordingWrapper.startRecordScreen(
-        "training_session",
-        titleNotification: "Recording training session...",
-        messageNotification: "Tap to stop recording",
-      );
-      
-      setState(() {
-        _isRecording = true;
-      });
-      
-      print('Screen recording started: $_recordedVideoPath');
-    } catch (e) {
-      print('Error starting screen recording: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to start recording: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    try {
-      final path = await ScreenRecordingWrapper.stopRecordScreen;
-      setState(() {
-        _isRecording = false;
-        _recordedVideoPath = path;
-      });
-      
-      print('Screen recording stopped: $path');
-      
-      // 显示保存弹窗
-      _showSaveVideoDialog();
-    } catch (e) {
-      print('Error stopping screen recording: $e');
-      setState(() {
-        _isRecording = false;
-      });
-    }
-  }
-
-  void _showSaveVideoDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.save_rounded, color: Colors.green, size: 28),
-              SizedBox(width: 12),
-              Text(
-                'Save Recording?',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Your training session has been recorded! Would you like to save it to your photo gallery?',
-            style: TextStyle(
-                fontSize: 16,
-                color: Colors.black54,
-                height: 1.4,
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  if (_recordedVideoPath != null) {
-                    await _saveVideoToGallery();
-                  }
-                },
-                child: Text(
-                  'Save',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  // 删除临时文件
-                  if (_recordedVideoPath != null) {
-                    File(_recordedVideoPath!).delete().catchError((e) {
-                      print('Error deleting temp file: $e');
-                    });
-                  }
-                },
-                child: Text(
-                  'Delete',
-                  style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.red,
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-        });
-      }
-
-  Future<void> _saveVideoToGallery() async {
-    try {
-      if (_recordedVideoPath != null && File(_recordedVideoPath!).existsSync()) {
-        final result = await GallerySaver.saveVideo(_recordedVideoPath!);
-        
-        if (result == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Video saved to gallery successfully!'),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        } else {
-          throw Exception('Gallery saver returned false');
-        }
-      } else {
-        throw Exception('Video file not found');
-        }
-      } catch (e) {
-        print('Error saving video to gallery: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Failed to save video: $e'),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    }
 }
