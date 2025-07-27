@@ -44,6 +44,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   bool _videoReady = false;
   CameraController? _cameraController;
   Future<void>? _cameraInitFuture;
+  bool _cameraPermissionGranted = false; // 新增：相机权限状态
+  bool _isInitializingCamera = false; // 新增：相机初始化状态
 
   final List<Map<String, dynamic>> history = [
     {"rank": 1, "date": "May 19, 2025", "counts": 19, "note": ""},
@@ -79,43 +81,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       value: 1.0,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSetupDialog());
-    // 初始化摄像头
-    availableCameras().then((cameras) {
-      print('Available cameras: ${cameras.length}');
-      if (cameras.isNotEmpty) {
-        // 查找前置摄像头
-        final frontCamera = cameras.firstWhere(
-          (camera) => camera.lensDirection == CameraLensDirection.front,
-          orElse: () => cameras[0], // 如果没有前置摄像头，使用第一个
-        );
-        print('Selected camera: ${frontCamera.name} - ${frontCamera.lensDirection}');
-        
-        _cameraController = CameraController(
-          frontCamera,
-          ResolutionPreset.high,
-          enableAudio: false,
-        );
-        
-        _cameraInitFuture = _cameraController!.initialize().then((_) {
-          print('Camera initialized successfully');
-          if (mounted) {
-            setState(() {});
-            // 启动摄像头预览
-            _cameraController!.startImageStream((image) {
-              // 保持摄像头活跃
-            }).catchError((error) {
-              print('Error starting image stream: $error');
-            });
-          }
-        }).catchError((error) {
-          print('Error initializing camera: $error');
-        });
-      } else {
-        print('No cameras available');
-      }
-    }).catchError((error) {
-      print('Error getting available cameras: $error');
-    });
+    // 移除页面初始化时的相机权限请求
   }
 
   @override
@@ -142,6 +108,115 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     _cameraController?.stopImageStream();
     _cameraController?.dispose();
     super.dispose();
+  }
+
+  // 新增：请求相机权限并初始化相机
+  Future<bool> _requestCameraPermissionAndInitialize() async {
+    if (_cameraPermissionGranted && _cameraController != null) {
+      return true;
+    }
+
+    if (_isInitializingCamera) {
+      return false; // 正在初始化中，避免重复请求
+    }
+
+    setState(() {
+      _isInitializingCamera = true;
+    });
+
+    try {
+      // 检查可用相机
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        _showCameraErrorDialog('No cameras available on this device.');
+        return false;
+      }
+
+      // 查找前置摄像头
+      final frontCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras[0], // 如果没有前置摄像头，使用第一个
+      );
+
+      // 创建相机控制器
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      // 初始化相机（这会触发权限请求）
+      await _cameraController!.initialize();
+      
+      // 启动图像流以保持相机活跃
+      await _cameraController!.startImageStream((image) {
+        // 保持摄像头活跃
+      });
+
+      setState(() {
+        _cameraPermissionGranted = true;
+        _isInitializingCamera = false;
+      });
+
+      return true;
+    } catch (e) {
+      print('Camera initialization error: $e');
+      setState(() {
+        _isInitializingCamera = false;
+      });
+      
+      // 根据错误类型显示不同的提示
+      if (e.toString().contains('permission')) {
+        _showCameraPermissionDeniedDialog();
+      } else {
+        _showCameraErrorDialog('Failed to initialize camera. Please try again.');
+      }
+      
+      return false;
+    }
+  }
+
+  // 新增：显示相机权限被拒绝的对话框
+  void _showCameraPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Camera Permission Required'),
+        content: Text(
+          'To use the selfie background feature, please grant camera permission in your device settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // 可以在这里添加跳转到设置页面的逻辑
+            },
+            child: Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 新增：显示相机错误对话框
+  void _showCameraErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Camera Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSetupDialog() async {
@@ -680,8 +755,19 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     required LayoutBgType type,
   }) {
     final bool selected = bgType == type;
+    final bool isSelfieType = type == LayoutBgType.selfie;
+    final bool isLoading = isSelfieType && _isInitializingCamera;
+    
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
+        if (isSelfieType) {
+          // 对于自拍模式，先请求相机权限
+          final success = await _requestCameraPermissionAndInitialize();
+          if (!success) {
+            return; // 权限被拒绝或初始化失败，不切换模式
+          }
+        }
+        
         Navigator.of(context).pop();
         setState(() {
           bgType = type;
@@ -704,7 +790,18 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
                   ? [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))]
                   : [],
             ),
-            child: Icon(icon, size: 32, color: selected ? Colors.white : Colors.black54),
+            child: isLoading
+                ? SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        selected ? Colors.white : Colors.black54,
+                      ),
+                    ),
+                  )
+                : Icon(icon, size: 32, color: selected ? Colors.white : Colors.black54),
           ),
           SizedBox(height: 6),
           Text(
@@ -773,7 +870,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
           )
         : Container(color: Colors.black);
 
-    final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized)
+    final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized && _cameraPermissionGranted)
         ? LayoutBuilder(
             builder: (context, constraints) {
               final screenWidth = constraints.maxWidth;
@@ -795,7 +892,55 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
               );
             },
           )
-        : Container(color: Colors.black);
+        : Container(
+            width: double.infinity,
+            height: double.infinity,
+            color: Colors.black,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_isInitializingCamera) ...[
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Initializing camera...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ] else ...[
+                    Icon(
+                      Icons.camera_front_rounded,
+                      size: 64,
+                      color: Colors.white.withOpacity(0.6),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Camera not available',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Please grant camera permission',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
 
     final Widget mainContent = isPortrait
         ? TrainingPortraitLayout(
