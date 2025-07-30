@@ -297,97 +297,42 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     try {
       // 1. 检查当前权限状态
       PermissionStatus status = await Permission.microphone.status;
-      
+
       if (status.isGranted) {
-        // 权限已授予，直接初始化
-        print('✅ iOS: Microphone permission already granted');
-        // 直接初始化音频检测器，不需要重新请求权限
-        _audioDetector ??= RealAudioDetector();
-        
-        // 设置检测回调
-        _audioDetector!.onStrikeDetected = () {
-          print('🎯 Strike detected! Triggering count...');
-          if (isCounting && mounted) {
-            _onCountPressed();
-          }
-        };
-        
-        _audioDetector!.onError = (error) {
-          print('Audio detection error: $error');
-        };
-        
-        _audioDetector!.onStatusUpdate = (status) {
-          print('Audio detection status: $status');
-        };
-        
-        await _audioDetector!.initialize();
-        setState(() {
-          _audioDetectionEnabled = true;
-          _isInitializingAudioDetection = false;
-        });
-        if (mounted) {
-          _showSetupDialog();
-        }
+        // 已授权，安全初始化音频检测
+        await _initializeAudioDetection();
         return;
       }
-      
+
       if (status.isPermanentlyDenied) {
-        // 权限被永久拒绝，显示设置指导
-        print('❌ iOS: Microphone permission permanently denied');
-        if (mounted) {
-          _showMicrophonePermissionRequiredDialog();
-        }
+        // 永久拒绝，弹出去设置的对话框
+        if (mounted) _showMicrophonePermissionRequiredDialog();
         return;
       }
-      
-      // 2. 权限未授予，通过实际调用音频API触发权限弹窗
-      print('🎯 iOS: Triggering microphone permission via audio API...');
-      
-      // 参考相机权限的成功实现，直接初始化音频检测器
-      _audioDetector ??= RealAudioDetector();
-      
-      // 设置检测回调
-      _audioDetector!.onStrikeDetected = () {
-        print('🎯 Strike detected! Triggering count...');
-        if (isCounting && mounted) {
-          _onCountPressed();
-        }
-      };
-      
-      _audioDetector!.onError = (error) {
-        print('Audio detection error: $error');
-      };
-      
-      _audioDetector!.onStatusUpdate = (status) {
-        print('Audio detection status: $status');
-      };
-      
-      // 初始化音频检测器（这会触发iOS权限弹窗）
-      final initSuccess = await _audioDetector!.initialize();
-      
-      if (initSuccess) {
-        // 权限授予成功
-        print('✅ iOS: Microphone permission granted via audio API');
-        setState(() {
-          _audioDetectionEnabled = true;
-          _isInitializingAudioDetection = false;
-        });
-        if (mounted) {
-          _showSetupDialog();
-        }
-      } else {
-        // 权限被拒绝
-        print('❌ iOS: Microphone permission denied via audio API');
-        if (mounted) {
-          _showMicrophonePermissionRequiredDialog();
-        }
+
+      // 2. 权限未授权，尝试通过实际调用音频API触发系统弹窗
+      try {
+        status = await Permission.microphone.request();
+      } catch (e) {
+        // 兜底保护
+        print('❌ Error requesting microphone permission: '
+            '[31m$e[0m');
+        if (mounted) _showMicrophonePermissionRequiredDialog();
+        return;
       }
-      
+
+      if (status.isGranted) {
+        // 授权后再初始化音频检测
+        await _initializeAudioDetection();
+      } else if (status.isPermanentlyDenied) {
+        if (mounted) _showMicrophonePermissionRequiredDialog();
+      } else {
+        // 拒绝但未永久拒绝，弹出友好提示
+        if (mounted) _showMicrophonePermissionRequiredDialog();
+      }
     } catch (e) {
       print('❌ iOS: Error during microphone permission request: $e');
-      if (mounted) {
-        _showMicrophonePermissionRequiredDialog();
-      }
+      if (mounted) _showMicrophonePermissionRequiredDialog();
     }
   }
 
