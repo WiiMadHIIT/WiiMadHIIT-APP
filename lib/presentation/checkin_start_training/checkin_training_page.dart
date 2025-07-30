@@ -151,8 +151,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
   @override
   void dispose() {
+    // 🎯 Apple-level Resource Cleanup
     // 立即停止所有动画和定时器
     _stopAllAnimationsAndTimers();
+    
+    // 🎯 Stop audio detection before disposal
+    if (_audioDetectionEnabled) {
+      _audioDetector.stopListening().catchError((e) {
+        print('🎯 Audio detection stop error during disposal: $e');
+      });
+    }
     
     // 停止声音检测
     _audioDetector.dispose();
@@ -166,6 +174,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     _videoFadeController.dispose();
     _cameraController?.stopImageStream();
     _cameraController?.dispose();
+    
+    print('🎯 All resources cleaned up successfully');
     super.dispose();
   }
 
@@ -248,42 +258,84 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     }
   }
 
-  /// 切换声音检测开关
+  /// 🎯 Apple-level Audio Detection Toggle with Enhanced UX
   Future<void> _toggleAudioDetection() async {
     if (_isInitializingAudioDetection) return;
 
     try {
       if (_audioDetectionEnabled) {
-        // 停止声音检测
+        // 🎯 Stop audio detection with user feedback
         await _audioDetector.stopListening();
         setState(() {
           _audioDetectionEnabled = false;
         });
-        print('Audio detection stopped');
+        print('🎯 Audio detection stopped by user');
+        
+        // 可以在这里添加用户反馈，比如轻微的震动或提示音
       } else {
-        // 启动声音检测
+        // 🎯 Start audio detection with enhanced error handling
         final success = await _audioDetector.startListening();
         if (success) {
           setState(() {
             _audioDetectionEnabled = true;
           });
-          print('Audio detection started');
+          print('🎯 Audio detection started by user');
+          
+          // 如果正在训练中，立即开始检测
+          if (isCounting && mounted) {
+            print('🎯 Audio detection active during ongoing training');
+          }
         } else {
-          print('Failed to start audio detection');
-          // 可以在这里显示错误提示
+          print('❌ Failed to start audio detection');
+          // 🎯 Apple-level Error Handling: 提供用户友好的错误提示
+          _showAudioDetectionErrorDialog();
         }
       }
 
-      // 保存用户偏好设置
+      // 🎯 Save user preferences with Apple-level reliability
       final preferences = UserPreferences();
       await preferences.saveAudioDetectionEnabled(_audioDetectionEnabled);
     } catch (e) {
-      print('Error toggling audio detection: $e');
+      print('❌ Error toggling audio detection: $e');
+      _showAudioDetectionErrorDialog();
     }
   }
 
-  /// 重置训练状态（包括声音检测）
-  void _resetTraining() {
+  /// 🎯 Apple-level Error Dialog for Audio Detection
+  void _showAudioDetectionErrorDialog() {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.mic_off, color: Colors.red, size: 24),
+            SizedBox(width: 8),
+            Text('Audio Detection Error'),
+          ],
+        ),
+        content: Text(
+          'Unable to start audio detection. Please check your microphone permissions and try again.',
+          style: TextStyle(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🎯 Apple-level Training Reset with Audio Detection Management
+  void _resetTraining() async {
+    // 🎯 Stop audio detection before reset
+    if (_audioDetectionEnabled) {
+      await _stopAudioDetectionForRound();
+    }
+    
     setState(() {
       showResultOverlay = false;
       currentRound = 1;
@@ -293,11 +345,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       showPreCountdown = false;
     });
     
-    // 重置时停止声音检测
-    if (_audioDetectionEnabled) {
-      _audioDetector.stopListening();
-    }
-    
+    print('🎯 Training reset completed with audio detection cleanup');
     _startPreCountdown();
   }
 
@@ -994,16 +1042,48 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       tmpResult.clear();
     }
     
+    // 🎯 Apple-level Audio Detection Integration
     // 如果用户启用了声音检测，在训练开始时自动启动
     if (_audioDetectionEnabled) {
-      _audioDetector.startListening().then((success) {
-        if (success) {
-          print('Audio detection auto-started for training');
-        }
-      });
+      _startAudioDetectionForRound();
     }
     
     _tick();
+  }
+
+  /// 🎯 Apple-level Audio Detection Management
+  /// 为当前round启动声音检测
+  Future<void> _startAudioDetectionForRound() async {
+    try {
+      final success = await _audioDetector.startListening();
+      if (success) {
+        print('🎯 Audio detection started for round $currentRound');
+        
+        // 提供用户反馈（可选）
+        if (mounted) {
+          // 可以在这里添加轻微的视觉反馈，比如按钮闪烁
+          setState(() {
+            // 可以添加一个状态来显示音频检测已启动
+          });
+        }
+      } else {
+        print('❌ Failed to start audio detection for round $currentRound');
+        // 可以在这里添加用户提示
+      }
+    } catch (e) {
+      print('❌ Error starting audio detection: $e');
+    }
+  }
+
+  /// 🎯 Apple-level Audio Detection Stop
+  /// 停止当前round的声音检测
+  Future<void> _stopAudioDetectionForRound() async {
+    try {
+      await _audioDetector.stopListening();
+      print('🎯 Audio detection stopped for round $currentRound');
+    } catch (e) {
+      print('❌ Error stopping audio detection: $e');
+    }
   }
 
   // 立即显示训练结果（排名为null，等待API返回）
@@ -1060,11 +1140,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       isCounting = false;
     });
     
+    // 🎯 Apple-level Audio Detection Cleanup
     // 训练结束时停止声音检测
     if (_audioDetectionEnabled) {
-      _audioDetector.stopListening().then((_) {
-        print('Audio detection stopped after training');
-      });
+      await _stopAudioDetectionForRound();
+      print('🎯 Audio detection cleanup completed for training session');
     }
     
     // 自动收起榜单
@@ -1176,7 +1256,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     };
   }
 
-  // 倒计时
+  // 🎯 Apple-level Enhanced Countdown with Audio Detection
   void _tick() async {
     if (!isCounting) return;
     if (countdown > 0) {
@@ -1188,6 +1268,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       _tick();
     } else {
       if (!mounted) return;
+      
+      // 🎯 Stop audio detection when round ends
+      if (_audioDetectionEnabled) {
+        await _stopAudioDetectionForRound();
+      }
       
       // 当前round结束，记录结果到tmpResult
       _addRoundToTmpResult(counter);
