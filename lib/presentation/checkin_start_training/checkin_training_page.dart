@@ -96,61 +96,87 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   @override
   void initState() {
     super.initState();
-    bounceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-      lowerBound: 1.0,
-      upperBound: 1.18,
-    );
-    bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
-    pageController = PageController();
-    _portraitController = DraggableScrollableController();
-    _landscapeController = DraggableScrollableController();
-    _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
-      ..setLooping(true)
-      ..setVolume(0.0)
-      ..initialize().then((_) {
-        setState(() {
-          _videoReady = true;
-        });
-        _videoController.play();
-      });
-    _videoFadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-      value: 1.0,
-    );
     
-    // 初始化finalResult
-    finalResult = {
-      "productId": widget.productId,
-      "trainingId": widget.trainingId,
-      "totalRounds": totalRounds,
-      "roundDuration": roundDuration,
-      "date": DateTime.now().toIso8601String(),
-      "maxCounts": 0
-    };
-    
-    // 🎯 Apple-level Permission Management
-    // 在页面初始化时检查麦克风和相机权限
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (Platform.isIOS) {
-        // iOS: 同时触发麦克风和相机权限弹窗
-        await _checkMicrophonePermissionOnInit();
-        // 延迟一点时间再触发相机权限，避免同时弹窗
-        Future.delayed(Duration(milliseconds: 500), () async {
+    try {
+      bounceController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 180),
+        lowerBound: 1.0,
+        upperBound: 1.18,
+      );
+      bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
+      pageController = PageController();
+      _portraitController = DraggableScrollableController();
+      _landscapeController = DraggableScrollableController();
+      
+      // 安全初始化视频控制器
+      _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
+        ..setLooping(true)
+        ..setVolume(0.0)
+        ..initialize().then((_) {
           if (mounted) {
-            await _requestCameraPermissionAndInitialize();
+            setState(() {
+              _videoReady = true;
+            });
+            _videoController.play();
+          }
+        }).catchError((e) {
+          print('❌ Video initialization error: $e');
+        });
+        
+      _videoFadeController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 500),
+        value: 1.0,
+      );
+      
+      // 初始化finalResult
+      finalResult = {
+        "productId": widget.productId,
+        "trainingId": widget.trainingId,
+        "totalRounds": totalRounds,
+        "roundDuration": roundDuration,
+        "date": DateTime.now().toIso8601String(),
+        "maxCounts": 0
+      };
+      
+      // 🎯 Apple-level Permission Management
+      // 延迟执行权限检查，确保页面完全加载
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // 再延迟一点时间，确保页面稳定
+        Future.delayed(Duration(milliseconds: 100), () async {
+          if (!mounted) return;
+          
+          try {
+            if (Platform.isIOS) {
+              // iOS: 只检查麦克风权限，相机权限在需要时再请求
+              print('🎯 iOS: Starting permission check...');
+              await _checkMicrophonePermissionOnInit();
+            } else {
+              // Android: 只检查麦克风权限（相机权限在需要时再请求）
+              print('🎯 Android: Starting permission check...');
+              await _checkMicrophonePermissionOnInit();
+            }
+          } catch (e) {
+            print('❌ Error during permission initialization: $e');
+            // 即使权限初始化失败，也要显示设置对话框
+            if (mounted) {
+              _showSetupDialog();
+            }
           }
         });
-      } else {
-        // Android: 只检查麦克风权限（相机权限在需要时再请求）
-        await _checkMicrophonePermissionOnInit();
+      });
+      
+      // 🎯 添加权限状态监听
+      _startPermissionListener();
+      
+    } catch (e) {
+      print('❌ Error in initState: $e');
+      // 即使初始化失败，也要确保页面可以正常显示
+      if (mounted) {
+        _showSetupDialog();
       }
-    });
-    
-    // 🎯 添加权限状态监听
-    _startPermissionListener();
+    }
   }
 
   @override
@@ -245,35 +271,30 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   Timer? _permissionCheckTimer;
   
   void _startPermissionListener() {
-    // 每2秒检查一次权限状态
-    _permissionCheckTimer = Timer.periodic(Duration(seconds: 2), (timer) async {
+    // 每3秒检查一次权限状态，减少频率
+    _permissionCheckTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
       if (!mounted) {
         timer.cancel();
         return;
       }
       
-      final micStatus = await Permission.microphone.status;
-      final cameraStatus = await Permission.camera.status;
-      
-      if (micStatus.isGranted && cameraStatus.isGranted) {
-        // 两个权限都已授予，停止监听
-        timer.cancel();
-        print('✅ Both permissions granted, stopping listener');
+      try {
+        final micStatus = await Permission.microphone.status;
         
-        // 如果还没有初始化音频检测，则初始化
-        if (_audioDetector == null) {
+        if (micStatus.isGranted && _audioDetector == null) {
+          // 麦克风权限授予，初始化音频检测
+          print('✅ Microphone permission granted, initializing audio detection');
           await _initializeAudioDetection();
           if (mounted) {
             _showSetupDialog();
           }
+          // 停止监听
+          timer.cancel();
         }
-      } else if (micStatus.isGranted && _audioDetector == null) {
-        // 只有麦克风权限授予，初始化音频检测
-        print('✅ Microphone permission granted, initializing audio detection');
-        await _initializeAudioDetection();
-        if (mounted) {
-          _showSetupDialog();
-        }
+      } catch (e) {
+        print('❌ Error in permission listener: $e');
+        // 出错时停止监听
+        timer.cancel();
       }
     });
   }
@@ -306,27 +327,35 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 2. 权限未授予，通过实际调用音频API触发权限弹窗
       print('🎯 iOS: Triggering microphone permission via audio API...');
       
-      // 创建临时音频检测器来触发权限弹窗
-      final tempDetector = RealAudioDetector();
-      await tempDetector.initialize();
-      
-      // 尝试启动录音（这会触发iOS权限弹窗）
-      final success = await tempDetector.startListening();
-      
-      // 立即停止录音
-      await tempDetector.stopListening();
-      tempDetector.dispose();
-      
-      if (success) {
-        // 权限授予成功
-        print('✅ iOS: Microphone permission granted via audio API');
-        await _initializeAudioDetection();
-        if (mounted) {
-          _showSetupDialog();
+      try {
+        // 创建临时音频检测器来触发权限弹窗
+        final tempDetector = RealAudioDetector();
+        await tempDetector.initialize();
+        
+        // 尝试启动录音（这会触发iOS权限弹窗）
+        final success = await tempDetector.startListening();
+        
+        // 立即停止录音
+        await tempDetector.stopListening();
+        tempDetector.dispose();
+        
+        if (success) {
+          // 权限授予成功
+          print('✅ iOS: Microphone permission granted via audio API');
+          await _initializeAudioDetection();
+          if (mounted) {
+            _showSetupDialog();
+          }
+        } else {
+          // 权限被拒绝
+          print('❌ iOS: Microphone permission denied via audio API');
+          if (mounted) {
+            _showMicrophonePermissionRequiredDialog();
+          }
         }
-      } else {
-        // 权限被拒绝
-        print('❌ iOS: Microphone permission denied via audio API');
+      } catch (audioError) {
+        print('❌ iOS: Audio API error: $audioError');
+        // 音频API失败，直接显示设置指导
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
         }
@@ -2288,11 +2317,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                Text('Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                Text('Background', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                 SizedBox(height: 16),
                 // 背景选择
-                Text('Background', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
-                SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
