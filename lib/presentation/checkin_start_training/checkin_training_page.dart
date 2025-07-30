@@ -9,8 +9,9 @@ import '../../widgets/layout_bg_type.dart';
 import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
-import '../../knock_voice/simple_audio_detector.dart';
+import '../../knock_voice/real_audio_detector.dart';
 import 'package:camera/camera.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -85,7 +86,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   bool _isSubmittingResult = false;
   
   // 声音检测相关
-  late SimpleAudioDetector _audioDetector;
+  RealAudioDetector? _audioDetector;
   bool _audioDetectionEnabled = true; // 默认开启
   bool _isInitializingAudioDetection = false;
   
@@ -154,14 +155,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     _stopAllAnimationsAndTimers();
     
     // 🎯 Stop audio detection before disposal
-    if (_audioDetectionEnabled) {
-      _audioDetector.stopListening().catchError((e) {
+    if (_audioDetectionEnabled && _audioDetector != null) {
+      _audioDetector!.stopListening().catchError((e) {
         print('🎯 Audio detection stop error during disposal: $e');
       });
     }
     
     // 停止声音检测
-    _audioDetector.dispose();
+    _audioDetector?.dispose();
     
     // 释放所有控制器资源
     bounceController.dispose();
@@ -209,53 +210,113 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     print('All animations and timers stopped, memory cleaned up');
   }
 
-  /// 🎯 Apple-level Microphone Permission Check on Page Init
+  /// 🍎 Apple-level Direct Permission Flow
   Future<void> _checkMicrophonePermissionOnInit() async {
-    try {
-      // 首先初始化声音检测器
-      await _initializeAudioDetection();
-      
-      // 对于简化版本，直接显示设置对话框
-      // 不需要权限检查，因为SimpleAudioDetector是模拟的
-      print('🎯 Simplified version - showing setup dialog directly');
-      _showSetupDialog();
-    } catch (e) {
-      print('❌ Error during initialization: $e');
-      // 发生错误时也显示设置对话框
-      _showSetupDialog();
-    }
+    // 1. 直接检查并请求麦克风权限
+    await _requestMicrophonePermissionDirectly();
   }
 
-  /// 🎯 Apple-level Microphone Permission Request
-  Future<bool> _requestMicrophonePermission() async {
+  /// 🍎 Apple-level Direct Microphone Permission Request
+  Future<void> _requestMicrophonePermissionDirectly() async {
     try {
-      // 对于简化版本，我们假设权限总是可用的
-      // 因为SimpleAudioDetector不需要真实麦克风权限
-      print('🎯 Microphone permission check (simplified version)');
-      return true;
+      // 1. 检查当前权限状态
+      PermissionStatus status = await Permission.microphone.status;
+      
+      if (status.isGranted) {
+        // 2. 权限已授予，直接初始化音频检测
+        print('🎯 Microphone permission already granted');
+        await _initializeAudioDetection();
+        if (mounted) {
+          _showSetupDialog();
+        }
+        return;
+      }
+      
+      if (status.isPermanentlyDenied) {
+        // 3. 权限被永久拒绝，显示设置指导
+        print('❌ Microphone permission permanently denied');
+        if (mounted) {
+          _showMicrophonePermissionRequiredDialog();
+        }
+        return;
+      }
+      
+      // 4. 权限未授予，直接请求权限（会显示系统弹窗）
+      print('🎯 Requesting microphone permission...');
+      status = await Permission.microphone.request();
+      
+      if (status.isGranted) {
+        // 5. 权限授予成功，初始化音频检测
+        print('✅ Microphone permission granted');
+        await _initializeAudioDetection();
+        if (mounted) {
+          _showSetupDialog();
+        }
+      } else {
+        // 6. 权限被拒绝，显示友好提示
+        print('❌ Microphone permission denied');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Voice detection unavailable, but you can still train manually'),
+              duration: Duration(seconds: 3),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          _showSetupDialog();
+        }
+      }
+      
     } catch (e) {
       print('❌ Error requesting microphone permission: $e');
-      return false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Voice detection unavailable, but you can still train manually'),
+            duration: Duration(seconds: 3),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        _showSetupDialog();
+      }
     }
   }
 
-  /// 🎯 Apple-level Microphone Permission Required Dialog
+
+
+
+
+
+
+
+
+    /// 🍎 Apple-level Elegant Permission Dialog
   void _showMicrophonePermissionRequiredDialog() {
     if (!mounted) return;
     
     showDialog(
       context: context,
-      barrierDismissible: false, // 用户必须做出选择
+      barrierDismissible: true, // 允许用户关闭对话框
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
         title: Row(
           children: [
-            Icon(Icons.mic_off, color: Colors.red, size: 24),
-            SizedBox(width: 8),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.mic, color: Colors.blue, size: 24),
+            ),
+            SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Microphone Permission Required',
+                'Voice Detection',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
                 ),
@@ -268,40 +329,31 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'This training page requires microphone access to enable voice detection features.',
+              'Enable voice detection for hands-free training?',
               style: TextStyle(fontSize: 16, color: Colors.black87),
             ),
             SizedBox(height: 12),
             Text(
-              'Voice detection allows the app to automatically count your strikes by detecting sound patterns, providing a hands-free training experience.',
+              'Voice detection automatically counts your strikes by listening for sound patterns, making your training more convenient.',
               style: TextStyle(fontSize: 14, color: Colors.black54),
             ),
             SizedBox(height: 16),
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    'To enable microphone access:',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue.shade700,
+                  Icon(Icons.security, color: Colors.green, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your privacy is protected. Audio is processed locally and never shared.',
+                      style: TextStyle(fontSize: 13, color: Colors.green.shade700),
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    '1. Go to Settings > Privacy & Security > Microphone\n'
-                    '2. Find "Wiimadhiit" in the list\n'
-                    '3. Toggle the switch to enable microphone access\n'
-                    '4. Return to the app and try again',
-                    style: TextStyle(fontSize: 13, color: Colors.blue.shade600),
                   ),
                 ],
               ),
@@ -312,28 +364,26 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 返回上一页
+              // 用户选择跳过，直接显示设置对话框
+              _showSetupDialog();
             },
             child: Text(
-              'Go Back',
+              'Skip for Now',
               style: TextStyle(color: Colors.grey.shade600),
             ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              // 重新尝试获取权限
-              final hasPermission = await _requestMicrophonePermission();
-              if (hasPermission) {
-                _showSetupDialog();
-              } else {
-                // 如果仍然没有权限，再次显示对话框
-                _showMicrophonePermissionRequiredDialog();
-              }
+              // 重新尝试权限请求
+              await _requestMicrophonePermissionDirectly();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: Text('Try Again'),
           ),
@@ -349,11 +399,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         _isInitializingAudioDetection = true;
       });
 
-      // 创建声音检测器
-      _audioDetector = SimpleAudioDetector();
+      // 创建真实声音检测器实例（如果还没有创建）
+      _audioDetector ??= RealAudioDetector();
 
       // 设置检测回调
-      _audioDetector.onStrikeDetected = () {
+      _audioDetector!.onStrikeDetected = () {
         print('🎯 Strike detected! Triggering count...');
         if (isCounting && mounted) {
           _onCountPressed(); // 自动触发计数
@@ -361,40 +411,37 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       };
 
       // 设置错误回调
-      _audioDetector.onError = (error) {
+      _audioDetector!.onError = (error) {
         print('Audio detection error: $error');
-        // 可以在这里添加用户提示
+        // 不在这里显示错误对话框，让用户有机会尝试
       };
 
       // 设置状态回调
-      _audioDetector.onStatusUpdate = (status) {
+      _audioDetector!.onStatusUpdate = (status) {
         print('Audio detection status: $status');
       };
 
-      // 初始化检测器
-      final initSuccess = await _audioDetector.initialize();
+      // 初始化真实音频检测器
+      final initSuccess = await _audioDetector!.initialize();
       if (!initSuccess) {
-        throw Exception('Failed to initialize audio detector');
+        print('⚠️ Audio detector initialization failed, but continuing...');
+        // 不抛出异常，让用户有机会尝试
       }
 
-      // 加载用户偏好设置
-      // 移除UserPreferences相关代码
-      
-      // 获取用户设置的声音检测开关状态
-      // 移除UserPreferences相关代码
-      
       setState(() {
         _audioDetectionEnabled = true; // 默认开启
         _isInitializingAudioDetection = false;
       });
 
-      print('🎯 Audio detection initialized successfully');
+      print('🎯 Audio detection initialization completed');
     } catch (e) {
-      print('❌ Failed to initialize audio detection: $e');
+      print('❌ Error during audio detection initialization: $e');
       setState(() {
         _isInitializingAudioDetection = false;
         _audioDetectionEnabled = true; // 默认开启
       });
+      // 重新抛出异常让上层处理
+      rethrow;
     }
   }
 
@@ -1191,7 +1238,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   /// 为当前round启动声音检测
   Future<void> _startAudioDetectionForRound() async {
     try {
-      final success = await _audioDetector.startListening();
+      if (_audioDetector == null) {
+        print('⚠️ Audio detector not available, skipping audio detection');
+        return;
+      }
+      
+      final success = await _audioDetector!.startListening();
       if (success) {
         print('🎯 Audio detection started for round $currentRound');
         
@@ -1203,11 +1255,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           });
         }
       } else {
-        print('❌ Failed to start audio detection for round $currentRound');
-        // 可以在这里添加用户提示
+        print('⚠️ Failed to start audio detection for round $currentRound, but continuing...');
+        // 不显示错误对话框，让训练继续进行
       }
     } catch (e) {
-      print('❌ Error starting audio detection: $e');
+      print('⚠️ Error starting audio detection: $e, but continuing...');
+      // 不显示错误对话框，让训练继续进行
     }
   }
 
@@ -1216,8 +1269,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   Future<void> _stopAudioDetectionForRound() async {
     try {
       // 添加状态检查，避免重复停止
-      if (_audioDetector.isListening) {
-        await _audioDetector.stopListening();
+      if (_audioDetector != null && _audioDetector!.isListening) {
+        await _audioDetector!.stopListening();
         print('🎯 Audio detection stopped for round $currentRound');
       } else {
         print('🎯 Audio detection already stopped for round $currentRound');
@@ -1280,13 +1333,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       showResultOverlay = true;
       isCounting = false;
     });
-    
-    // 🎯 Apple-level Audio Detection Cleanup
-    // 训练结束时停止声音检测
-    if (_audioDetectionEnabled) {
-      await _stopAudioDetectionForRound();
-      print('🎯 Audio detection cleanup completed for training session');
-    }
     
     // 自动收起榜单
     Future.delayed(Duration(milliseconds: 50), () {
