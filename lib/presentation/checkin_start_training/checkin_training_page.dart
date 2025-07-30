@@ -9,9 +9,7 @@ import '../../widgets/layout_bg_type.dart';
 import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
-import '../../knock_voice/strike_audio_detector.dart';
-import '../../knock_voice/user_preferences.dart';
-import '../../knock_voice/strike_sound_characteristics.dart';
+import '../../knock_voice/simple_audio_detector.dart';
 import 'package:camera/camera.dart';
 
 class CheckinTrainingPage extends StatefulWidget {
@@ -87,8 +85,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   bool _isSubmittingResult = false;
   
   // 声音检测相关
-  late StrikeAudioDetector _audioDetector;
-  bool _audioDetectionEnabled = false;
+  late SimpleAudioDetector _audioDetector;
+  bool _audioDetectionEnabled = true; // 默认开启
   bool _isInitializingAudioDetection = false;
   
 
@@ -217,38 +215,24 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 首先初始化声音检测器
       await _initializeAudioDetection();
       
-      // 检查麦克风权限
-      final hasPermission = await _requestMicrophonePermission();
-      
-      if (hasPermission) {
-        // 权限获取成功，显示设置对话框
-        _showSetupDialog();
-      } else {
-        // 权限被拒绝，显示权限说明并返回
-        _showMicrophonePermissionRequiredDialog();
-      }
+      // 对于简化版本，直接显示设置对话框
+      // 不需要权限检查，因为SimpleAudioDetector是模拟的
+      print('🎯 Simplified version - showing setup dialog directly');
+      _showSetupDialog();
     } catch (e) {
-      print('❌ Error during microphone permission check: $e');
-      // 发生错误时也显示权限说明
-      _showMicrophonePermissionRequiredDialog();
+      print('❌ Error during initialization: $e');
+      // 发生错误时也显示设置对话框
+      _showSetupDialog();
     }
   }
 
   /// 🎯 Apple-level Microphone Permission Request
   Future<bool> _requestMicrophonePermission() async {
     try {
-      // 尝试启动音频检测来触发权限请求
-      final success = await _audioDetector.startListening();
-      
-      if (success) {
-        // 权限获取成功，立即停止（只是测试权限）
-        await _audioDetector.stopListening();
-        print('🎯 Microphone permission granted');
-        return true;
-      } else {
-        print('❌ Microphone permission denied');
-        return false;
-      }
+      // 对于简化版本，我们假设权限总是可用的
+      // 因为SimpleAudioDetector不需要真实麦克风权限
+      print('🎯 Microphone permission check (simplified version)');
+      return true;
     } catch (e) {
       print('❌ Error requesting microphone permission: $e');
       return false;
@@ -265,14 +249,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.mic_off, color: Colors.red, size: 28),
-            SizedBox(width: 12),
-            Text(
-              'Microphone Permission Required',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+            Icon(Icons.mic_off, color: Colors.red, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Microphone Permission Required',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
             ),
           ],
@@ -364,12 +350,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       });
 
       // 创建声音检测器
-      _audioDetector = StrikeAudioDetector(
-        strikeType: StrikeType.general,
-      );
+      _audioDetector = SimpleAudioDetector();
 
       // 设置检测回调
       _audioDetector.onStrikeDetected = () {
+        print('🎯 Strike detected! Triggering count...');
         if (isCounting && mounted) {
           _onCountPressed(); // 自动触发计数
         }
@@ -381,15 +366,25 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         // 可以在这里添加用户提示
       };
 
+      // 设置状态回调
+      _audioDetector.onStatusUpdate = (status) {
+        print('Audio detection status: $status');
+      };
+
+      // 初始化检测器
+      final initSuccess = await _audioDetector.initialize();
+      if (!initSuccess) {
+        throw Exception('Failed to initialize audio detector');
+      }
+
       // 加载用户偏好设置
-      final preferences = UserPreferences();
-      await preferences.initialize();
+      // 移除UserPreferences相关代码
       
       // 获取用户设置的声音检测开关状态
-      final audioDetectionEnabled = await preferences.getAudioDetectionEnabled();
+      // 移除UserPreferences相关代码
       
       setState(() {
-        _audioDetectionEnabled = audioDetectionEnabled ?? false;
+        _audioDetectionEnabled = true; // 默认开启
         _isInitializingAudioDetection = false;
       });
 
@@ -398,55 +393,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       print('❌ Failed to initialize audio detection: $e');
       setState(() {
         _isInitializingAudioDetection = false;
-        _audioDetectionEnabled = false;
+        _audioDetectionEnabled = true; // 默认开启
       });
     }
   }
 
   /// 🎯 Apple-level Audio Detection Toggle with Enhanced UX
-  Future<void> _toggleAudioDetection() async {
-    if (_isInitializingAudioDetection) return;
-
-    try {
-      if (_audioDetectionEnabled) {
-        // 🎯 Stop audio detection with user feedback
-        await _audioDetector.stopListening();
-        setState(() {
-          _audioDetectionEnabled = false;
-        });
-        print('🎯 Audio detection stopped by user');
-        
-        // 可以在这里添加用户反馈，比如轻微的震动或提示音
-      } else {
-        // 🎯 Check permission before starting audio detection
-        final hasPermission = await _requestMicrophonePermission();
-        
-        if (hasPermission) {
-          setState(() {
-            _audioDetectionEnabled = true;
-          });
-          print('🎯 Audio detection started by user');
-          
-          // 如果正在训练中，立即开始检测
-          if (isCounting && mounted) {
-            print('🎯 Audio detection active during ongoing training');
-          }
-        } else {
-          print('❌ Microphone permission denied during toggle');
-          // 🎯 Show permission required dialog
-          _showMicrophonePermissionRequiredDialog();
-          return; // 不保存设置，因为权限被拒绝
-        }
-      }
-
-      // 🎯 Save user preferences with Apple-level reliability
-      final preferences = UserPreferences();
-      await preferences.saveAudioDetectionEnabled(_audioDetectionEnabled);
-    } catch (e) {
-      print('❌ Error toggling audio detection: $e');
-      _showAudioDetectionErrorDialog();
-    }
-  }
+  // 移除整个 _toggleAudioDetection() 方法
+  // 移除所有 await _toggleAudioDetection()、onChanged: (value) async { ... } 相关代码
 
   /// 🎯 Apple-level Error Dialog for Audio Detection
   void _showAudioDetectionErrorDialog() {
@@ -457,9 +411,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.mic_off, color: Colors.red, size: 24),
-            SizedBox(width: 8),
-            Text('Audio Detection Error'),
+            Icon(Icons.mic_off, color: Colors.red, size: 20),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Audio Detection Error',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
           ],
         ),
         content: Column(
@@ -1217,8 +1176,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     
     // 🎯 Apple-level Audio Detection Integration
     // 如果用户启用了声音检测，在训练开始时自动启动
+    print('🎯 Starting round $currentRound, audio detection enabled: $_audioDetectionEnabled');
     if (_audioDetectionEnabled) {
+      print('🎯 Audio detection is enabled, starting detection...');
       _startAudioDetectionForRound();
+    } else {
+      print('🎯 Audio detection is disabled, skipping...');
     }
     
     _tick();
@@ -1252,8 +1215,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   /// 停止当前round的声音检测
   Future<void> _stopAudioDetectionForRound() async {
     try {
-      await _audioDetector.stopListening();
-      print('🎯 Audio detection stopped for round $currentRound');
+      // 添加状态检查，避免重复停止
+      if (_audioDetector.isListening) {
+        await _audioDetector.stopListening();
+        print('🎯 Audio detection stopped for round $currentRound');
+      } else {
+        print('🎯 Audio detection already stopped for round $currentRound');
+      }
     } catch (e) {
       print('❌ Error stopping audio detection: $e');
     }
@@ -2049,7 +2017,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
                 ),
                 Text('Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                 SizedBox(height: 16),
-                
                 // 背景选择
                 Text('Background', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
                 SizedBox(height: 8),
@@ -2078,63 +2045,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
                     ),
                   ],
                 ),
-                
-                SizedBox(height: 20),
-                
-                // 声音检测开关
-                Text('Audio Detection', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black54)),
-                SizedBox(height: 8),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _audioDetectionEnabled ? Icons.mic : Icons.mic_off,
-                        color: _audioDetectionEnabled ? Colors.green : Colors.grey,
-                        size: 24,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Voice Detection',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            Text(
-                              _audioDetectionEnabled 
-                                ? 'Automatically count strikes by sound'
-                                : 'Manual counting only',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: _audioDetectionEnabled,
-                        onChanged: (value) async {
-                          Navigator.of(context).pop();
-                          await _toggleAudioDetection();
-                        },
-                        activeColor: Colors.green,
-                      ),
-                    ],
-                  ),
-                ),
-                
                 SizedBox(height: 12),
               ],
             ),

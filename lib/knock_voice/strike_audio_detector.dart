@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'audio_capture_config.dart';
 import 'adaptive_strike_detector.dart';
 import 'strike_sound_characteristics.dart';
+import 'real_audio_capture.dart';
 
 /// Strike Audio Detector
 /// Apple-level optimized main orchestrator for strike sound detection
@@ -19,8 +20,8 @@ class StrikeAudioDetector {
   bool _isListening = false;
   bool _isCapturing = false;
   
-  // Apple optimization: Audio capture
-  StreamSubscription? _audioSubscription;
+  // Apple optimization: Real audio capture
+  RealAudioCapture? _realAudioCapture;
   final List<double> _audioBuffer = [];
   int _bufferIndex = 0;
   
@@ -67,6 +68,10 @@ class StrikeAudioDetector {
         config: _config,
         strikeType: strikeType,
       );
+      
+      // Apple optimization: Initialize real audio capture
+      _realAudioCapture = RealAudioCapture();
+      await _realAudioCapture!.initialize();
       
       // Apple optimization: Set up callbacks
       _setupCallbacks();
@@ -119,6 +124,19 @@ class StrikeAudioDetector {
     
     _detector.onPerformanceUpdate = (metrics) {
       _updatePerformanceMetrics(metrics);
+    };
+    
+    // Apple optimization: Set up real audio capture callbacks
+    _realAudioCapture?.onAudioData = (audioData) {
+      _processRealAudioData(audioData);
+    };
+    
+    _realAudioCapture?.onError = (error) {
+      _handleError('Audio capture error: $error');
+    };
+    
+    _realAudioCapture?.onStatusUpdate = (status) {
+      _updateStatus('Audio: $status');
     };
   }
   
@@ -193,7 +211,7 @@ class StrikeAudioDetector {
     }
   }
   
-  /// Apple optimization: Start audio capture (simplified implementation)
+  /// Apple optimization: Start real audio capture
   Future<void> _startAudioCapture() async {
     try {
       // Apple optimization: Initialize audio buffer
@@ -201,116 +219,42 @@ class StrikeAudioDetector {
       _audioBuffer.addAll(List.filled(_config.optimizedBufferSize, 0.0));
       _bufferIndex = 0;
       
-      // Apple optimization: Start audio stream (simplified)
-      // In real implementation, use actual audio capture library
-      _isCapturing = true;
-      
-      // Apple optimization: Simulate audio capture for demonstration
-      _startSimulatedAudioCapture();
+      // Apple optimization: Start real audio capture
+      final success = await _realAudioCapture?.startCapture();
+      if (success == true) {
+        _isCapturing = true;
+        _updateStatus('Real audio capture started');
+      } else {
+        _handleError('Failed to start real audio capture');
+      }
       
     } catch (e) {
       _handleError('Failed to start audio capture: $e');
     }
   }
   
-  /// Apple optimization: Stop audio capture
+  /// Apple optimization: Stop real audio capture
   Future<void> _stopAudioCapture() async {
     try {
       _isCapturing = false;
-      _audioSubscription?.cancel();
-      _audioSubscription = null;
+      await _realAudioCapture?.stopCapture();
       
     } catch (e) {
       _handleError('Failed to stop audio capture: $e');
     }
   }
   
-  /// Apple optimization: Simulated audio capture for demonstration
-  void _startSimulatedAudioCapture() {
-    // Apple optimization: Simulate audio data for testing
-    // In real implementation, this would be actual audio capture
-    Timer.periodic(Duration(milliseconds: (1000 / _config.frameRate).round()), (timer) {
-      if (!_isCapturing || !_isListening) {
-        timer.cancel();
-        return;
-      }
-      
-      // Apple optimization: Generate simulated audio data
-      final simulatedAudioData = _generateSimulatedAudioData();
-      
-      // Apple optimization: Process audio buffer
-      _processAudioBuffer(simulatedAudioData);
-    });
-  }
+
   
-  /// Apple optimization: Generate simulated audio data for testing
-  List<double> _generateSimulatedAudioData() {
-    final bufferSize = _config.optimizedBufferSize;
-    final audioData = <double>[];
-    
-    // Apple optimization: Generate realistic audio simulation
-    for (int i = 0; i < bufferSize; i++) {
-      // Simulate ambient noise with occasional strike sounds
-      double sample = 0.0;
-      
-      // Add ambient noise
-      sample += 0.01 * _generateRandomNoise();
-      
-      // Occasionally add strike sound (for testing)
-      if (DateTime.now().millisecondsSinceEpoch % 5000 < 100) {
-        sample += 0.5 * _generateStrikeSound(i, bufferSize);
-      }
-      
-      audioData.add(sample);
-    }
-    
-    return audioData;
-  }
-  
-  /// Apple optimization: Generate random noise
-  double _generateRandomNoise() {
-    return (DateTime.now().millisecondsSinceEpoch % 1000) / 1000.0 - 0.5;
-  }
-  
-  /// Apple optimization: Generate simulated strike sound
-  double _generateStrikeSound(int index, int bufferSize) {
-    // Apple optimization: Generate realistic strike sound envelope
-    final attackTime = 0.001; // 1ms attack
-    final decayTime = 0.1; // 100ms decay
-    final sampleRate = _config.sampleRate.toDouble();
-    
-    final attackSamples = (attackTime * sampleRate).round();
-    final decaySamples = (decayTime * sampleRate).round();
-    
-    if (index < attackSamples) {
-      // Attack phase
-      return (index / attackSamples) * 0.5;
-    } else if (index < attackSamples + decaySamples) {
-      // Decay phase
-      final decayIndex = index - attackSamples;
-      return 0.5 * exp(-decayIndex / (decaySamples * 0.1));
-    }
-    
-    return 0.0;
-  }
-  
-  /// Apple optimization: Process audio buffer
-  void _processAudioBuffer(List<double> audioData) {
+  /// Apple optimization: Process real audio data
+  void _processRealAudioData(List<double> audioData) {
     try {
-      // Apple optimization: Update audio buffer
-      for (int i = 0; i < audioData.length; i++) {
-        _audioBuffer[_bufferIndex] = audioData[i];
-        _bufferIndex = (_bufferIndex + 1) % _config.optimizedBufferSize;
-        
-        // Apple optimization: Process complete buffer
-        if (_bufferIndex == 0) {
-          final bufferCopy = List<double>.from(_audioBuffer);
-          _detector.processAudioBuffer(bufferCopy);
-        }
-      }
+      // Apple optimization: Process audio data directly
+      final bufferCopy = List<double>.from(audioData);
+      _detector.processAudioBuffer(bufferCopy);
       
     } catch (e) {
-      _handleError('Error processing audio buffer: $e');
+      _handleError('Error processing real audio data: $e');
     }
   }
   
@@ -489,7 +433,7 @@ class StrikeAudioDetector {
     try {
       stopListening();
       _detector.dispose();
-      _audioSubscription?.cancel();
+      _realAudioCapture?.dispose();
       _powerOptimizationTimer?.cancel();
       
     } catch (e) {
