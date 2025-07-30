@@ -13,6 +13,7 @@ import '../../knock_voice/real_audio_detector.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:audio_session/audio_session.dart';
 import 'dart:io' show Platform;
 
 class CheckinTrainingPage extends StatefulWidget {
@@ -208,6 +209,15 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 停止声音检测
     _audioDetector?.dispose();
     
+    // 🎯 清理 audio_session（audio_session 最佳实践）
+    AudioSession.instance.then((session) {
+      session.setActive(false).catchError((e) {
+        print('🎯 Audio session deactivation error during disposal: $e');
+      });
+    }).catchError((e) {
+      print('🎯 Audio session cleanup error during disposal: $e');
+    });
+    
     // 释放所有控制器资源
     bounceController.dispose();
     pageController.dispose();
@@ -311,94 +321,295 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   /// 🍎 Apple-level iOS-Specific Permission Request
+  /// 参考 audio_session 最佳实践：https://github.com/ryanheise/audio_session
   Future<void> _requestMicrophonePermissionForIOS() async {
     try {
-      // 1. 检查麦克风权限状态
+      // 1. 首先配置音频会话（audio_session 最佳实践）
+      print("🎯 iOS: 配置音频会话...");
+      final session = await AudioSession.instance;
+      await session.configure(AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth,
+        avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+        avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+        androidAudioAttributes: const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          flags: AndroidAudioFlags.none,
+          usage: AndroidAudioUsage.voiceCommunication,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: true,
+      ));
+      print("✅ iOS: 音频会话配置完成");
+
+      // 2. 检查麦克风权限状态
       PermissionStatus status = await Permission.microphone.status;
+      print("🎯 iOS: 当前麦克风权限状态: $status");
 
       if (status.isGranted) {
         // 权限已授予，安全初始化音频检测
-        print("✅ iOS: 麦克风权限已授予");
+        print("✅ iOS: 麦克风权限已授予，开始初始化音频检测");
         await _initializeAudioDetection();
         return;
       }
 
-      // 2. 权限被拒绝或永久拒绝，请求权限
-      if (status.isDenied || status.isPermanentlyDenied) {
-        print("🎯 iOS: 请求麦克风权限...");
+      // 3. 处理权限被拒绝的情况
+      if (status.isDenied) {
+        print("🎯 iOS: 麦克风权限被拒绝，请求权限...");
         
         try {
+          // 请求麦克风权限
           PermissionStatus newStatus = await Permission.microphone.request();
+          print("🎯 iOS: 权限请求结果: $newStatus");
           
           if (newStatus.isGranted) {
             // 权限授予成功
-            print("✅ iOS: 麦克风权限已授予");
+            print("✅ iOS: 麦克风权限已授予，开始初始化音频检测");
             await _initializeAudioDetection();
           } else if (newStatus.isPermanentlyDenied) {
-            // 用户永久拒绝权限，提示用户去设置中开启
+            // 用户永久拒绝权限
             print("❌ iOS: 麦克风权限被永久拒绝");
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text("请在设置中启用麦克风权限"),
-                  backgroundColor: Colors.orange,
-                  duration: Duration(seconds: 4),
-                  action: SnackBarAction(
-                    label: "设置",
-                    textColor: Colors.white,
-                    onPressed: () async {
-                      await AppSettings.openAppSettings();
-                    },
-                  ),
-                ),
-              );
-              // 同时显示详细对话框
-              _showMicrophonePermissionRequiredDialog();
+              _showPermanentlyDeniedDialog();
             }
           } else {
             // 权限被拒绝但未永久拒绝
             print("❌ iOS: 麦克风权限被拒绝");
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text("麦克风权限被拒绝，部分功能可能无法使用"),
-                  backgroundColor: Colors.orange,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-              // 显示设置对话框
-              _showMicrophonePermissionRequiredDialog();
+              _showPermissionDeniedDialog();
             }
           }
         } catch (e) {
           // 请求权限时出现异常
           print('❌ iOS: 请求麦克风权限时出错: $e');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text("麦克风权限请求失败，请稍后重试"),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-            _showMicrophonePermissionRequiredDialog();
+            _showPermissionErrorDialog();
           }
         }
       }
+
+      // 4. 处理权限被永久拒绝的情况
+      if (status.isPermanentlyDenied) {
+        print("❌ iOS: 麦克风权限被永久拒绝");
+        if (mounted) {
+          _showPermanentlyDeniedDialog();
+        }
+      }
+
+      // 5. 处理其他权限状态
+      if (status.isRestricted) {
+        print("❌ iOS: 麦克风权限被系统限制");
+        if (mounted) {
+          _showRestrictedDialog();
+        }
+      }
+
     } catch (e) {
       // 整体异常处理
       print('❌ iOS: 麦克风权限处理过程中出错: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("麦克风权限检查失败，请检查设备设置"),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-        _showMicrophonePermissionRequiredDialog();
+        _showPermissionErrorDialog();
       }
     }
+  }
+
+  /// 显示权限被永久拒绝的对话框
+  void _showPermanentlyDeniedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.settings, color: Colors.orange, size: 24),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Microphone Permission Required',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'To provide a better training experience, we need access to your microphone to detect strike sounds.',
+              style: TextStyle(fontSize: 16, color: Colors.black87),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Setup Steps:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '1. Tap "Open Settings"\n'
+                    '2. Find "Microphone" permission\n'
+                    '3. Enable it\n'
+                    '4. Return to the app',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // 返回上一页
+              Navigator.of(context).pop();
+            },
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await AppSettings.openAppSettings();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示权限被拒绝的对话框
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.mic_off, color: Colors.orange, size: 20),
+            SizedBox(width: 8),
+            Text('Microphone Permission Denied'),
+          ],
+        ),
+        content: Text(
+          'Microphone permission was denied. You won\'t be able to use voice detection features.\n\n'
+          'You can re-enable microphone permission in Settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Got it'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await AppSettings.openAppSettings();
+            },
+            child: Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示权限被系统限制的对话框
+  void _showRestrictedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.block, color: Colors.red, size: 20),
+            SizedBox(width: 8),
+            Text('Permission Restricted'),
+          ],
+        ),
+        content: Text(
+          'Microphone permission is restricted by the system, possibly due to parental controls or other system settings.\n\n'
+          'Please check your device settings or contact your device administrator.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示权限错误的对话框
+  void _showPermissionErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red, size: 20),
+            SizedBox(width: 8),
+            Text('Permission Check Failed'),
+          ],
+        ),
+        content: Text(
+          'Failed to check microphone permission. Please check your device settings or restart the app.\n\n'
+          'You can still train manually by tapping the button.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Got it'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 🍎 Apple-level Direct Microphone Permission Request
@@ -597,16 +808,27 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   /// 🎯 Apple-level Audio Detection Initialization
+  /// 参考 audio_session 最佳实践：https://github.com/ryanheise/audio_session
   Future<void> _initializeAudioDetection() async {
     try {
       setState(() {
         _isInitializingAudioDetection = true;
       });
 
-      // 创建真实声音检测器实例（如果还没有创建）
+      // 1. 激活音频会话（audio_session 最佳实践）
+      print("🎯 iOS: 激活音频会话...");
+      final session = await AudioSession.instance;
+      final activated = await session.setActive(true);
+      if (!activated) {
+        print("⚠️ iOS: 音频会话激活失败，但继续初始化...");
+      } else {
+        print("✅ iOS: 音频会话激活成功");
+      }
+
+      // 2. 创建真实声音检测器实例（如果还没有创建）
       _audioDetector ??= RealAudioDetector();
 
-      // 设置检测回调
+      // 3. 设置检测回调
       _audioDetector!.onStrikeDetected = () {
         print('🎯 Strike detected! Triggering count...');
         if (isCounting && mounted) {
@@ -614,30 +836,68 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         }
       };
 
-      // 设置错误回调
+      // 4. 设置错误回调
       _audioDetector!.onError = (error) {
         print('Audio detection error: $error');
         // 不在这里显示错误对话框，让用户有机会尝试
       };
 
-      // 设置状态回调
+      // 5. 设置状态回调
       _audioDetector!.onStatusUpdate = (status) {
         print('Audio detection status: $status');
       };
 
-      // 初始化真实音频检测器
+      // 6. 初始化真实音频检测器
       final initSuccess = await _audioDetector!.initialize();
       if (!initSuccess) {
         print('⚠️ Audio detector initialization failed, but continuing...');
         // 不抛出异常，让用户有机会尝试
       }
 
+      // 7. 监听音频中断事件（audio_session 最佳实践）
+      session.interruptionEventStream.listen((event) {
+        print('🎯 Audio interruption: ${event.type} - ${event.begin ? "begin" : "end"}');
+        if (event.begin) {
+          switch (event.type) {
+            case AudioInterruptionType.duck:
+              // 其他应用开始播放音频，我们应该降低音量
+              print('🎯 Ducking audio due to interruption');
+              break;
+            case AudioInterruptionType.pause:
+            case AudioInterruptionType.unknown:
+              // 其他应用开始播放音频，我们应该暂停
+              print('🎯 Pausing audio due to interruption');
+              break;
+          }
+        } else {
+          switch (event.type) {
+            case AudioInterruptionType.duck:
+              // 中断结束，我们应该恢复音量
+              print('🎯 Unducking audio after interruption');
+              break;
+            case AudioInterruptionType.pause:
+              // 中断结束，我们应该恢复播放
+              print('🎯 Resuming audio after interruption');
+              break;
+            case AudioInterruptionType.unknown:
+              // 中断结束但不应该恢复
+              print('🎯 Interruption ended but not resuming');
+              break;
+          }
+        }
+      });
+
+      // 8. 监听设备变化事件
+      session.devicesChangedEventStream.listen((event) {
+        print('🎯 Audio devices changed: added=${event.devicesAdded}, removed=${event.devicesRemoved}');
+      });
+
       setState(() {
         _audioDetectionEnabled = true; // 默认开启
         _isInitializingAudioDetection = false;
       });
 
-      print('🎯 Audio detection initialization completed');
+      print('🎯 Audio detection initialization completed with audio_session integration');
     } catch (e) {
       print('❌ Error during audio detection initialization: $e');
       setState(() {
