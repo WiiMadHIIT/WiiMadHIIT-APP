@@ -47,5 +47,7 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires camera access to enable selfie video backgrounds during training and challenge sessions. No audio will be recorded.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app requires microphone access to enable voice detection for automatic strike counting during your workout sessions. Your voice data is processed locally and never stored or transmitted.</string>
 </dict>
 </plist>

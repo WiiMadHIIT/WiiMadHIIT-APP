@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -7,84 +8,134 @@ import 'dart:ui';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'dart:math' as math;
 import '../../widgets/floating_logo.dart';
+import '../../domain/entities/bonus_activity.dart';
+import '../../domain/usecases/get_bonus_activities_usecase.dart';
+import '../../domain/usecases/claim_bonus_usecase.dart';
+import '../../domain/services/bonus_service.dart';
+import '../../data/repository/bonus_repository.dart';
+import '../../data/api/bonus_api.dart';
+import 'bonus_viewmodel.dart';
 
-class BonusActivity {
-  final String name;
-  final String description;
-  final String reward;
-  final String regionLimit;
-  final String videoAsset;
-
-  BonusActivity({
-    required this.name,
-    required this.description,
-    required this.reward,
-    required this.regionLimit,
-    required this.videoAsset,
-  });
-}
-
-class BonusPage extends StatefulWidget {
+class BonusPage extends StatelessWidget {
   const BonusPage({Key? key}) : super(key: key);
 
   @override
-  State<BonusPage> createState() => _BonusPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => BonusViewModel(
+        getBonusActivitiesUseCase: GetBonusActivitiesUseCase(
+          BonusRepository(BonusApi()),
+        ),
+        claimBonusUseCase: ClaimBonusUseCase(
+          BonusRepository(BonusApi()),
+        ),
+        bonusService: BonusService(),
+      )..loadBonusActivities(),
+      child: Consumer<BonusViewModel>(
+        builder: (context, viewModel, _) {
+          // 错误处理
+          if (viewModel.hasError) {
+            return Scaffold(
+              backgroundColor: Colors.black,
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 64, color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      'Error: ${viewModel.error}',
+                      style: TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => viewModel.refresh(),
+                      child: Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // 加载中
+          if (viewModel.isLoading) {
+            return Scaffold(
+              backgroundColor: Colors.black,
+              body: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            );
+          }
+
+          // 没有数据
+          if (!viewModel.hasActivities) {
+            return Scaffold(
+              backgroundColor: Colors.black,
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 64, color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      'No bonus activities available',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => viewModel.refresh(),
+                      child: Text('Refresh'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // 正常显示
+          return _BonusPageContent(viewModel: viewModel);
+        },
+      ),
+    );
+  }
 }
 
-class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMixin {
-  late final PageController _pageController = PageController(viewportFraction: 0.78);
-  int _currentIndex = 0;
-  late final List<VideoPlayerController> _videoControllers;
+class _BonusPageContent extends StatefulWidget {
+  final BonusViewModel viewModel;
 
-  final List<BonusActivity> activities = [
-    BonusActivity(
-      name: "Spring Challenge Spring Challenge Spring Challenge Spring Challenge",
-      description: "Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big! Join the spring fitness challenge and win big!",
-      reward: "Up to 1000 WiiCoins + Exclusive Badge",
-      regionLimit: "US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK US, Canada, UK",
-      videoAsset: "assets/video/video_bonus1.mp4",
-    ),
-    BonusActivity(
-      name: "Yoga Marathon",
-      description: "Complete 30 days of yoga for a special bonus.",
-      reward: "500 WiiCoins + Yoga Mat",
-      regionLimit: "Global",
-      videoAsset: "assets/video/video2.mp4",
-    ),
-    BonusActivity(
-      name: "HIIT Pro Bonus",
-      description: "Push your HIIT limits and unlock rewards.",
-      reward: "700 WiiCoins + Pro T-shirt",
-      regionLimit: "US Only",
-      videoAsset: "assets/video/video3.mp4",
-    ),
-    BonusActivity(
-      name: "Cardio Blast",
-      description: "Burn calories and earn extra bonuses!",
-      reward: "300 WiiCoins + Energy Drink",
-      regionLimit: "Europe, Asia",
-      videoAsset: "assets/video/video1.mp4",
-    ),
-    BonusActivity(
-      name: "Endurance King",
-      description: "Longest streak wins the grand prize!",
-      reward: "2000 WiiCoins + Crown Badge",
-      regionLimit: "Global",
-      videoAsset: "assets/video/video2.mp4",
-    ),
-  ];
+  const _BonusPageContent({required this.viewModel});
+
+  @override
+  State<_BonusPageContent> createState() => _BonusPageContentState();
+}
+
+class _BonusPageContentState extends State<_BonusPageContent> with SingleTickerProviderStateMixin {
+  late final PageController _pageController = PageController(viewportFraction: 0.78);
+  late final List<VideoPlayerController> _videoControllers;
 
   @override
   void initState() {
     super.initState();
+    _initializeVideoControllers();
+  }
+
+  void _initializeVideoControllers() {
+    final activities = widget.viewModel.filteredActivities;
     _videoControllers = List.generate(activities.length, (i) {
-      final controller = VideoPlayerController.asset(activities[i].videoAsset)
-        ..setLooping(true)
-        ..setVolume(0); // 已经静音
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(activities[i].videoUrl),
+      )..setLooping(true)
+        ..setVolume(0);
+      
       controller.initialize().then((_) {
         if (i == 0) controller.play();
         if (mounted) setState(() {});
       });
+      
       return controller;
     });
   }
@@ -99,9 +150,9 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
   }
 
   void _onPageChanged(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+    widget.viewModel.setCurrentIndex(index);
+    
+    // 控制视频播放
     for (int i = 0; i < _videoControllers.length; i++) {
       if (i == index) {
         _videoControllers[i].play();
@@ -112,19 +163,26 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
   }
 
   Widget _buildVideoStack() {
+    final activities = widget.viewModel.filteredActivities;
+    
     return AnimatedBuilder(
       animation: _pageController,
       builder: (context, child) {
         final page = _pageController.hasClients && _pageController.page != null
             ? _pageController.page!
-            : _currentIndex.toDouble();
+            : widget.viewModel.currentIndex.toDouble();
+        
         List<Widget> stack = [];
         bool hasInitialized = false;
+        
         for (int i = 0; i < activities.length; i++) {
           if ((i - page).abs() > 1.2) continue;
+          
           final offset = (i - page) * MediaQuery.of(context).size.height;
           final opacity = (1.0 - (i - page).abs()).clamp(0.0, 1.0);
+          
           if (_videoControllers[i].value.isInitialized) hasInitialized = true;
+          
           stack.add(
             Positioned.fill(
               child: Transform.translate(
@@ -146,6 +204,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
             ),
           );
         }
+        
         if (!hasInitialized) {
           stack.add(
             Positioned.fill(
@@ -153,6 +212,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
             ),
           );
         }
+        
         // 顶部渐变遮罩，提升可读性
         stack.add(Positioned.fill(
           child: Container(
@@ -170,6 +230,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
             ),
           ),
         ));
+        
         return Stack(children: stack);
       },
     );
@@ -179,8 +240,8 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double cardWidth = screenWidth * 0.78;
-    final double bottomPadding = MediaQuery.of(context).padding.bottom; //safty安全区高度 
-    // final double bottomPadding2 = MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight; //safty安全区高度 + 底部tabbar高度
+    final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final activities = widget.viewModel.filteredActivities;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -211,13 +272,15 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
                       physics: const PageScrollPhysics(),
                       onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) {
+                          final activity = activities[index];
                         return AnimatedScale(
-                          scale: _currentIndex == index ? 1.0 : 0.92,
+                            scale: widget.viewModel.currentIndex == index ? 1.0 : 0.92,
                           duration: const Duration(milliseconds: 300),
                           child: _BonusCard(
-                            activity: activities[index],
+                              activity: activity,
                             onTap: () {
-                              // TODO: 领奖逻辑
+                                // 领取奖励逻辑
+                                widget.viewModel.claimBonus(activity.id);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('Bonus claimed!')),
                               );
@@ -230,7 +293,7 @@ class _BonusPageState extends State<BonusPage> with SingleTickerProviderStateMix
                   ),
                   const SizedBox(height: 16),
                   AnimatedSmoothIndicator(
-                    activeIndex: _currentIndex,
+                      activeIndex: widget.viewModel.currentIndex,
                     count: activities.length,
                     effect: ExpandingDotsEffect(
                       dotHeight: 8,
@@ -254,7 +317,12 @@ class _BonusCard extends StatefulWidget {
   final BonusActivity activity;
   final VoidCallback onTap;
   final int index;
-  const _BonusCard({required this.activity, required this.onTap, required this.index});
+  
+  const _BonusCard({
+    required this.activity, 
+    required this.onTap, 
+    required this.index,
+  });
 
   @override
   State<_BonusCard> createState() => _BonusCardState();
@@ -280,13 +348,16 @@ class _BonusCardState extends State<_BonusCard> {
       [Color(0xFFB2FEFA), Color(0xFF0ED2F7)], // 青-蓝
       [Color(0xFFFFE29F), Color(0xFFFFA07A)], // 黄-橙
     ];
+    
     final gradient = cardGradients[widget.index % cardGradients.length];
+    
     // 自动选择主色或黑色，提升对比度
     Color _autoTextColor(Color bg) {
-      // 亮色用primary，深色用黑色
       return bg.computeLuminance() > 0.5 ? AppColors.primary : Colors.black87;
     }
+    
     final mainTextColor = _autoTextColor(gradient.last);
+    
     return AnimatedScale(
       scale: _scale,
       duration: const Duration(milliseconds: 120),

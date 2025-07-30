@@ -409,10 +409,7 @@ class ProfileFunctionGridState extends State<_ProfileFunctionGrid> with SingleTi
       {'icon': Icons.emoji_events, 'label': 'Rewards'},
       {'icon': Icons.shopping_bag, 'label': 'Gear'},
       {'icon': Icons.bar_chart, 'label': 'Challenges'},
-      {'icon': Icons.check_circle, 'label': 'Check-ins'},
-      {'icon': Icons.fitness_center, 'label': 'Workouts'},
-      {'icon': Icons.analytics, 'label': 'Stats'},
-      {'icon': Icons.group, 'label': 'Friends'},
+      {'icon': Icons.check_circle, 'label': 'Check-ins'}
       // 如有更多，继续添加
     ];
     

@@ -40,6 +40,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
   final double diameter;
   // 格式化倒计时文本
   final String Function(int) formatTime;
+  final int roundDuration; // 新增：轮次持续时间
   // 新增：结果遮罩和榜单参数
   final bool showResultOverlay;
   final List<Map<String, dynamic>> history;
@@ -50,6 +51,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
   final VoidCallback onResultBack;
   final VoidCallback onResultSetup;
   final Widget? selfieWidget;
+  final bool isSubmittingResult; // 新增：是否正在提交结果
 
   const TrainingLandscapeLayout({
     Key? key,
@@ -71,6 +73,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
     required this.videoWidget,
     required this.diameter,
     required this.formatTime,
+    required this.roundDuration, // 新增
     // 新增
     required this.showResultOverlay,
     required this.history,
@@ -81,6 +84,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
     required this.onResultBack,
     required this.onResultSetup,
     this.selfieWidget,
+    required this.isSubmittingResult, // 新增
   }) : super(key: key);
 
   @override
@@ -258,7 +262,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
                                     builder: (context, constraints) {
                                       final double maxWidth = constraints.maxWidth;
                                       final double maxHeight = constraints.maxHeight;
-                                      final double iconSize = maxWidth * 0.10 + 32;
+                                      final double iconSize = maxWidth * 0.10 + 26;
                                       final double titleFont = maxWidth * 0.045 + 12;
                                       final double infoFont = maxWidth * 0.032 + 8;
                                       final double dateFont = maxWidth * 0.025 + 7;
@@ -272,12 +276,41 @@ class TrainingLandscapeLayout extends StatelessWidget {
                                         child: Center(
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
-                                            children: [
+                                                                                        children: [
                                               Icon(Icons.emoji_events, color: AppColors.primary, size: iconSize),
                                               SizedBox(height: maxHeight * 0.03),
                                               Text('Training Complete!', style: TextStyle(fontSize: titleFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                               SizedBox(height: maxHeight * 0.025),
-                                              Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                              // 显示用户在totalRounds次挑战中的最佳成绩
+                                              Text(
+                                                'Best Score in $totalRounds Rounds',
+                                                style: TextStyle(
+                                                  fontSize: dateFont,
+                                                  color: Colors.white70,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              SizedBox(height: maxHeight * 0.02),
+                                              // 排名显示逻辑：如果为null则显示加载中，否则显示实际排名
+                                              if (history[0]["rank"] == null) ...[
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 16,
+                                                      height: 16,
+                                                      child: CircularProgressIndicator(
+                                                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                                        strokeWidth: 2,
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 8),
+                                                    Text('RANK: Loading...', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                                  ],
+                                                ),
+                                              ] else ...[
+                                                Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                              ],
                                               Text('COUNT:  ${history[0]["counts"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: Colors.white)),
                                               Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: dateFont, color: Colors.white70)),
                                               SizedBox(height: maxHeight * 0.04),
@@ -367,7 +400,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
           height: counterDiameter,
           child: CustomPaint(
             painter: CircleProgressPainter(
-              progress: isCounting ? countdown / 60.0 : 1.0,
+              progress: isCounting ? countdown / roundDuration.toDouble() : 1.0,
               color: isWarning ? AppColors.primary : mainColor,
               gradient: isWarning ? null : progressGradient,
               trackColor: trackColor,

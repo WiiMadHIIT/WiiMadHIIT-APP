@@ -1,36 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
+import '../../routes/app_routes.dart';
+import '../../domain/entities/training_product.dart';
+import '../../domain/entities/training_item.dart';
+import '../../domain/services/training_service.dart';
+import '../../domain/usecases/get_training_product_usecase.dart';
+import '../../data/repository/training_repository.dart';
+import '../../data/api/training_api.dart';
+import 'training_list_viewmodel.dart';
 import 'dart:ui';
-import 'dart:convert';
 
-class TrainingListPage extends StatefulWidget {
-  final String? configJson; // 可选的JSON配置字符串
-  final String? configAssetPath; // 可选的配置文件路径
+class TrainingListPage extends StatelessWidget {
   final String? productId; // 产品ID，用于加载对应配置
   
   const TrainingListPage({
     Key? key,
-    this.configJson,
-    this.configAssetPath,
     this.productId,
   }) : super(key: key);
 
   @override
-  State<TrainingListPage> createState() => _TrainingListPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) {
+        final trainingApi = TrainingApi();
+        final trainingRepository = TrainingRepository(trainingApi);
+        final trainingService = TrainingService();
+        final getTrainingProductUseCase = GetTrainingProductUseCase(trainingRepository, trainingService);
+        final viewModel = TrainingListViewModel(getTrainingProductUseCase);
+        
+        // 加载数据
+        if (productId != null && productId!.isNotEmpty) {
+          viewModel.loadTrainingProduct(productId!);
+        }
+        
+        return viewModel;
+      },
+      child: _TrainingListPageContent(),
+    );
+  }
 }
 
-class _TrainingListPageState extends State<TrainingListPage> with SingleTickerProviderStateMixin {
+class _TrainingListPageContent extends StatefulWidget {
+  @override
+  State<_TrainingListPageContent> createState() => _TrainingListPageContentState();
+}
+
+class _TrainingListPageContentState extends State<_TrainingListPageContent> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   VideoPlayerController? _videoController;
   bool _isVideoPlaying = false;
   bool _isVideoInitialized = false;
-  
-  // 动态配置数据
-  late TrainingPageConfig _config;
-  bool _isConfigLoaded = false;
 
   @override
   void initState() {
@@ -48,197 +71,65 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
     ));
     _animationController.forward();
     
-    // 加载配置
-    _loadConfig();
-  }
-
-  Future<void> _loadConfig() async {
-    try {
-      if (widget.configJson != null) {
-        // 从传入的JSON字符串加载
-        _config = TrainingPageConfig.fromJson(jsonDecode(widget.configJson!));
-      } else if (widget.configAssetPath != null) {
-        // 从资源文件加载
-        final jsonString = await DefaultAssetBundle.of(context).loadString(widget.configAssetPath!);
-        _config = TrainingPageConfig.fromJson(jsonDecode(jsonString));
-      } else if (widget.productId != null) {
-        // 根据产品ID加载对应配置
-        _config = _getConfigByProductId(widget.productId!);
-      } else {
-        // 没有配置数据，抛出异常
-        throw Exception('No configuration provided');
+    // 监听数据变化，初始化视频
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final viewModel = context.read<TrainingListViewModel>();
+      if (viewModel.hasData && viewModel.pageConfig != null) {
+        _initializeVideo();
       }
-      
-      setState(() {
-        _isConfigLoaded = true;
-      });
-      
-      // 初始化视频
+    });
+    
+    // 添加监听器，当数据加载完成后重新初始化视频
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final viewModel = context.read<TrainingListViewModel>();
+      viewModel.addListener(() {
+        if (viewModel.hasData && viewModel.pageConfig != null && !_isVideoInitialized) {
       _initializeVideo();
-    } catch (e) {
-      print('Error loading config: $e');
-      // 不设置默认配置，保持加载状态
-      setState(() {
-        _isConfigLoaded = false;
+        }
       });
+      });
+    }
+
+  void _initializeVideo() {
+    final viewModel = context.read<TrainingListViewModel>();
+    final pageConfig = viewModel.pageConfig;
+    
+    if (pageConfig == null) return;
+    
+    // 使用新的获取器方法，自动处理回退逻辑
+    final videoUrl = pageConfig.displayVideoUrl;
+    
+    if (pageConfig.hasCustomVideo) {
+      // 网络视频
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
+        ..setLooping(true)
+        ..setVolume(0.0)
+        ..addListener(() {
+          if (mounted) {
+            setState(() {
+              // 同步视频播放状态
+              _isVideoPlaying = _videoController!.value.isPlaying;
+            });
+          }
+        })
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _isVideoInitialized = true;
+            });
+          }
+        }).catchError((error) {
+          // 网络视频加载失败，回退到本地视频
+          print('Network video failed, falling back to local video: $error');
+          _initializeLocalVideo();
+        });
+    } else {
+      // 本地视频
+      _initializeLocalVideo();
     }
   }
 
-  // 根据产品ID获取对应配置（模拟数据，后续可替换为API调用）
-  TrainingPageConfig _getConfigByProductId(String productId) {
-    switch (productId) {
-      case 'hiit_pro':
-        return TrainingPageConfig(
-          videoPath: 'assets/video/video1.mp4',
-          fallbackImagePath: 'assets/images/player_cover.png',
-          pageTitle: 'HIIT Pro Training',
-          pageSubtitle: 'High-intensity interval training for maximum results',
-          trainings: [
-            PersonalTraining(
-              id: '1',
-              name: 'HIIT Beginner',
-              type: 'Interval',
-              intensity: '70 BPM',
-              duration: '10 min',
-              level: 'Beginner',
-              description: 'Perfect introduction to HIIT training',
-            ),
-            PersonalTraining(
-              id: '2',
-              name: 'HIIT Intermediate',
-              type: 'Tabata',
-              intensity: '85 BPM',
-              duration: '15 min',
-              level: 'Intermediate',
-              description: 'Classic Tabata protocol for maximum fat burn',
-            ),
-            PersonalTraining(
-              id: '3',
-              name: 'HIIT Advanced',
-              type: 'Pyramid',
-              intensity: '100 BPM',
-              duration: '20 min',
-              level: 'Advanced',
-              description: 'Pyramid intervals for elite athletes',
-            ),
-          ],
-        );
-      
-      case 'yoga_flex':
-        return TrainingPageConfig(
-          videoPath: 'assets/video/video2.mp4',
-          fallbackImagePath: 'assets/images/player_cover.png',
-          pageTitle: 'Yoga Flex Training',
-          pageSubtitle: 'Find your inner peace and flexibility',
-          trainings: [
-            PersonalTraining(
-              id: '4',
-              name: 'Yoga Basics',
-              type: 'Flow',
-              intensity: '60 BPM',
-              duration: '15 min',
-              level: 'Beginner',
-              description: 'Gentle yoga flow for beginners',
-            ),
-            PersonalTraining(
-              id: '5',
-              name: 'Power Yoga',
-              type: 'Vinyasa',
-              intensity: '75 BPM',
-              duration: '25 min',
-              level: 'Intermediate',
-              description: 'Dynamic vinyasa flow for strength building',
-            ),
-            PersonalTraining(
-              id: '6',
-              name: 'Advanced Asanas',
-              type: 'Hatha',
-              intensity: '50 BPM',
-              duration: '30 min',
-              level: 'Advanced',
-              description: 'Advanced poses for experienced practitioners',
-            ),
-          ],
-        );
-      
-      case 'strength_training':
-        return TrainingPageConfig(
-          videoPath: 'assets/video/video3.mp4',
-          fallbackImagePath: 'assets/images/player_cover.png',
-          pageTitle: 'Strength Training',
-          pageSubtitle: 'Transform your body with power training',
-          trainings: [
-            PersonalTraining(
-              id: '7',
-              name: 'Bodyweight Basics',
-              type: 'Circuit',
-              intensity: '65 BPM',
-              duration: '12 min',
-              level: 'Beginner',
-              description: 'Bodyweight exercises for beginners',
-            ),
-            PersonalTraining(
-              id: '8',
-              name: 'Muscle Builder',
-              type: 'Progressive',
-              intensity: '80 BPM',
-              duration: '18 min',
-              level: 'Intermediate',
-              description: 'Progressive overload for muscle growth',
-            ),
-            PersonalTraining(
-              id: '9',
-              name: 'Power Lifting',
-              type: 'Heavy',
-              intensity: '90 BPM',
-              duration: '25 min',
-              level: 'Advanced',
-              description: 'Heavy compound movements for strength',
-            ),
-          ],
-        );
-      
-      case 'cardio_blast':
-        return TrainingPageConfig(
-          videoPath: 'assets/video/video1.mp4',
-          fallbackImagePath: 'assets/images/player_cover.png',
-          pageTitle: 'Cardio Training',
-          pageSubtitle: 'Boost your cardiovascular fitness',
-          trainings: [
-            PersonalTraining(
-              id: '10',
-              name: 'Cardio Warm-up',
-              type: 'Steady',
-              intensity: '70 BPM',
-              duration: '8 min',
-              level: 'Beginner',
-              description: 'Gentle cardio warm-up session',
-            ),
-            PersonalTraining(
-              id: '11',
-              name: 'Cardio Burn',
-              type: 'Interval',
-              intensity: '95 BPM',
-              duration: '15 min',
-              level: 'Intermediate',
-              description: 'High-intensity cardio intervals',
-            ),
-            PersonalTraining(
-              id: '12',
-              name: 'Cardio Extreme',
-              type: 'Sprint',
-              intensity: '110 BPM',
-              duration: '20 min',
-              level: 'Advanced',
-              description: 'Extreme cardio challenge for endurance',
-            ),
-          ],
-        );
-      
-      default:
-        throw Exception('Unknown product ID: $productId');
-    }
-  }
+
 
   @override
   void dispose() {
@@ -250,7 +141,40 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    if (!_isConfigLoaded) {
+    return Consumer<TrainingListViewModel>(
+      builder: (context, viewModel, child) {
+        // 显示加载状态
+        if (viewModel.isLoading) {
+          return Scaffold(
+            backgroundColor: const Color(0xFFF8F9FA),
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              iconTheme: const IconThemeData(color: Colors.black),
+            ),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading training data...',
+                    style: AppTextStyles.titleLarge.copyWith(
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // 显示错误状态
+        if (viewModel.hasError) {
       return Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         appBar: AppBar(
@@ -267,6 +191,51 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
                 size: 64,
                 color: Colors.grey[400],
               ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Failed to load training data',
+                    style: AppTextStyles.titleLarge.copyWith(
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    viewModel.error ?? 'Unknown error occurred',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: Colors.grey[500],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => viewModel.refresh(viewModel.trainingProduct?.productId ?? ''),
+                    child: Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // 显示无数据状态
+        if (!viewModel.hasData || !viewModel.hasAvailableTrainings) {
+          return Scaffold(
+            backgroundColor: const Color(0xFFF8F9FA),
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              iconTheme: const IconThemeData(color: Colors.black),
+            ),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.fitness_center,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
               const SizedBox(height: 16),
               Text(
                 'No training data available',
@@ -277,7 +246,7 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
               ),
               const SizedBox(height: 8),
               Text(
-                'Please check your configuration',
+                    'Please check back later',
                 style: AppTextStyles.bodyMedium.copyWith(
                   color: Colors.grey[500],
                 ),
@@ -287,6 +256,10 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
         ),
       );
     }
+
+        // 显示主要内容
+        final pageConfig = viewModel.pageConfig!;
+        final trainings = viewModel.displayTrainings;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -299,7 +272,7 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
             backgroundColor: Colors.transparent,
             elevation: 0,
             flexibleSpace: FlexibleSpaceBar(
-              background: _buildVideoSection(),
+                  background: _buildVideoSection(pageConfig),
             ),
           ),
           
@@ -311,7 +284,7 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _config.pageTitle,
+                        pageConfig.pageTitle,
                     style: AppTextStyles.headlineLarge.copyWith(
                       fontWeight: FontWeight.w600,
                       color: Colors.black,
@@ -319,7 +292,7 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _config.pageSubtitle,
+                        pageConfig.pageSubtitle,
                     style: AppTextStyles.bodyLarge.copyWith(
                       color: Colors.grey[600],
                     ),
@@ -336,12 +309,12 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   return _TrainingCard(
-                    training: _config.trainings[index],
-                    levelColor: _getLevelColor(_config.trainings[index].level),
-                    onTap: () => _onTrainingTap(_config.trainings[index]),
+                        training: trainings[index],
+                        levelColor: _getLevelColor(trainings[index].level),
+                        onTap: () => _onTrainingTap(trainings[index]),
                   );
                 },
-                childCount: _config.trainings.length,
+                    childCount: trainings.length,
               ),
             ),
           ),
@@ -352,10 +325,12 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
           ),
         ],
       ),
+        );
+      },
     );
   }
 
-  Widget _buildVideoSection() {
+  Widget _buildVideoSection(TrainingPageConfig pageConfig) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -382,15 +357,46 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
               : Container(
                   decoration: BoxDecoration(
                     color: Colors.black,
-                    image: DecorationImage(
-                      image: _config.fallbackImagePath.startsWith('http://') || _config.fallbackImagePath.startsWith('https://')
-                          ? NetworkImage(_config.fallbackImagePath)
-                          : AssetImage(_config.fallbackImagePath) as ImageProvider,
-                      fit: BoxFit.cover,
-                      colorFilter: ColorFilter.mode(
-                        Colors.black.withOpacity(0.3),
-                        BlendMode.darken,
-                      ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Stack(
+                      children: [
+                        // 根据 hasCustomThumbnail 决定使用网络图片还是本地图片
+                        pageConfig.hasCustomThumbnail
+                            ? Image.network(
+                                pageConfig.displayThumbnailUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Container(
+                                    color: Colors.black,
+                                    child: Center(
+                                      child: CircularProgressIndicator(
+                                        value: loadingProgress.expectedTotalBytes != null
+                                            ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                            : null,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Image.asset(
+                                pageConfig.displayThumbnailUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                              ),
+                        // 颜色滤镜覆盖层
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.3),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -468,24 +474,54 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
               ),
             ),
           
-          // 视频标题
+          // 视频标题和全屏按钮
           Positioned(
             left: 24,
             right: 24,
             bottom: 32,
-            child: Text(
-              'Must-see before workout',
-              style: AppTextStyles.headlineMedium.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                shadows: [
-                  Shadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Must-see before workout',
+                    style: AppTextStyles.headlineMedium.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+                // 全屏按钮
+                if (_isVideoInitialized)
+                  GestureDetector(
+                    onTap: _showFullscreenVideo,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.fullscreen,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -493,11 +529,10 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
     );
   }
 
-  void _initializeVideo() {
-    // 判断是本地资源还是远程链接
-    if (_config.videoPath.startsWith('http://') || _config.videoPath.startsWith('https://')) {
-      // 远程视频
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(_config.videoPath))
+
+
+  void _initializeLocalVideo() {
+    _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
         ..setLooping(true)
         ..setVolume(0.0)
         ..addListener(() {
@@ -515,53 +550,66 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
             });
           }
         });
-    } else {
-      // 本地视频
-      _videoController = VideoPlayerController.asset(_config.videoPath)
-        ..setLooping(true)
-        ..setVolume(0.0)
-        ..addListener(() {
-          if (mounted) {
-            setState(() {
-              // 同步视频播放状态
-              _isVideoPlaying = _videoController!.value.isPlaying;
-            });
-          }
-        })
-        ..initialize().then((_) {
-          if (mounted) {
-            setState(() {
-              _isVideoInitialized = true;
-            });
-          }
-        });
-    }
   }
 
+  // 共享的播放/暂停控制方法
   void _toggleVideo() {
     if (_videoController == null || !_isVideoInitialized) return;
     
-    setState(() {
-      _isVideoPlaying = !_isVideoPlaying;
-    });
-    
-    if (_isVideoPlaying) {
-      _videoController!.play();
-    } else {
+    if (_videoController!.value.isPlaying) {
       _videoController!.pause();
+    } else {
+      _videoController!.play();
     }
+    // 状态会通过监听器自动更新
   }
 
-  void _onTrainingTap(PersonalTraining training) {
-    // 导航到训练规则页面
+  void _showFullscreenVideo() {
+    if (_videoController == null || !_isVideoInitialized) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _FullscreenVideoPage(
+          videoController: _videoController!,
+          videoTitle: 'Must-see before workout',
+          getVideoProgress: _getVideoProgress,
+          formatDuration: _formatDuration,
+          toggleVideo: _toggleVideo,
+        ),
+      ),
+    );
+  }
+
+  double _getVideoProgress() {
+    if (_videoController == null || !_videoController!.value.isInitialized) {
+      return 0.0;
+    }
+    final duration = _videoController!.value.duration;
+    final position = _videoController!.value.position;
+    return duration.inMilliseconds > 0 ? position.inMilliseconds / duration.inMilliseconds : 0.0;
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$twoDigitMinutes:$twoDigitSeconds";
+  }
+
+  void _onTrainingTap(TrainingItem training) {
+    // 从 ViewModel 获取 productId
+    final viewModel = context.read<TrainingListViewModel>();
+    final productId = viewModel.productId ?? '';
+    
+    // 导航到训练规则页面，传递 trainingId 和 productId
     Navigator.pushNamed(
       context,
-      '/training_rule',
+      AppRoutes.trainingRule,
       arguments: {
         'trainingId': training.id,
-        'trainingName': training.name,
-        'trainingType': training.type,
-        'trainingLevel': training.level,
+        'productId': productId,
       },
     );
   }
@@ -583,95 +631,11 @@ class _TrainingListPageState extends State<TrainingListPage> with SingleTickerPr
   }
 }
 
-// 页面配置数据模型
-class TrainingPageConfig {
-  final String videoPath;
-  final String fallbackImagePath;
-  final String pageTitle;
-  final String pageSubtitle;
-  final List<PersonalTraining> trainings;
 
-  TrainingPageConfig({
-    required this.videoPath,
-    required this.fallbackImagePath,
-    required this.pageTitle,
-    required this.pageSubtitle,
-    required this.trainings,
-  });
-
-  factory TrainingPageConfig.fromJson(Map<String, dynamic> json) {
-    return TrainingPageConfig(
-      videoPath: json['videoPath'] ?? 'assets/video/video1.mp4',
-      fallbackImagePath: json['fallbackImagePath'] ?? 'assets/images/beatx_bg.jpg',
-      pageTitle: json['pageTitle'] ?? 'Personal Training',
-      pageSubtitle: json['pageSubtitle'] ?? 'Choose your workout',
-      trainings: (json['trainings'] as List?)
-          ?.map((training) => PersonalTraining.fromJson(training))
-          .toList() ?? [],
-    );
-  }
-
-
-
-  Map<String, dynamic> toJson() {
-    return {
-      'videoPath': videoPath,
-      'fallbackImagePath': fallbackImagePath,
-      'pageTitle': pageTitle,
-      'pageSubtitle': pageSubtitle,
-      'trainings': trainings.map((training) => training.toJson()).toList(),
-    };
-  }
-}
-
-// 个人训练数据模型
-class PersonalTraining {
-  final String id; // 训练ID
-  final String name;
-  final String type; // 训练类型
-  final String intensity; // 强度
-  final String duration;
-  final String level; // 难度等级
-  final String description;
-
-  PersonalTraining({
-    required this.id,
-    required this.name,
-    required this.type,
-    required this.intensity,
-    required this.duration,
-    required this.level,
-    required this.description,
-  });
-
-  factory PersonalTraining.fromJson(Map<String, dynamic> json) {
-    return PersonalTraining(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      type: json['type'] ?? '',
-      intensity: json['intensity'] ?? '',
-      duration: json['duration'] ?? '',
-      level: json['level'] ?? '',
-      description: json['description'] ?? '',
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'type': type,
-      'intensity': intensity,
-      'duration': duration,
-      'level': level,
-      'description': description,
-    };
-  }
-}
 
 // 训练卡片组件
 class _TrainingCard extends StatelessWidget {
-  final PersonalTraining training;
+  final TrainingItem training;
   final Color levelColor;
   final VoidCallback onTap;
 
@@ -749,24 +713,20 @@ class _TrainingCard extends StatelessWidget {
                       
                       const SizedBox(height: 12),
                       
-                      // 训练类型、强度和时长
+                      // 参与人数和完成率
                       Row(
                         children: [
                           _InfoChip(
-                            icon: Icons.fitness_center,
-                            label: training.type,
+                            icon: Icons.people,
+                            label: '${training.participantCount}',
+                            subtitle: 'Joined',
                             color: levelColor,
                           ),
                           const SizedBox(width: 12),
                           _InfoChip(
-                            icon: Icons.speed,
-                            label: training.intensity,
-                            color: levelColor,
-                          ),
-                          const SizedBox(width: 12),
-                          _InfoChip(
-                            icon: Icons.timer,
-                            label: training.duration,
+                            icon: Icons.check_circle,
+                            label: '${training.completionRate.toStringAsFixed(1)}%',
+                            subtitle: 'Success',
                             color: levelColor,
                           ),
                         ],
@@ -830,39 +790,279 @@ class _TrainingCard extends StatelessWidget {
 class _InfoChip extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? subtitle;
   final Color color;
 
   const _InfoChip({
     required this.icon,
     required this.label,
+    this.subtitle,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             icon,
-            size: 14,
+                size: 16,
             color: color,
           ),
-          const SizedBox(width: 4),
+              const SizedBox(width: 6),
           Text(
             label,
-            style: AppTextStyles.labelSmall.copyWith(
+                style: AppTextStyles.labelMedium.copyWith(
               color: color,
-              fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              style: AppTextStyles.labelSmall.copyWith(
+                color: color.withOpacity(0.7),
+                fontWeight: FontWeight.w500,
             ),
           ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+// 全屏视频播放页面
+class _FullscreenVideoPage extends StatefulWidget {
+  final VideoPlayerController videoController;
+  final String videoTitle;
+  final double Function() getVideoProgress;
+  final String Function(Duration) formatDuration;
+  final VoidCallback toggleVideo;
+
+  const _FullscreenVideoPage({
+    Key? key,
+    required this.videoController,
+    required this.videoTitle,
+    required this.getVideoProgress,
+    required this.formatDuration,
+    required this.toggleVideo,
+  }) : super(key: key);
+
+  @override
+  State<_FullscreenVideoPage> createState() => _FullscreenVideoPageState();
+}
+
+class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
+  bool _isVideoPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 初始化播放状态
+    _isVideoPlaying = widget.videoController.value.isPlaying;
+    // 添加监听器来更新播放状态
+    widget.videoController.addListener(_onVideoStateChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.videoController.removeListener(_onVideoStateChanged);
+    super.dispose();
+  }
+
+  void _onVideoStateChanged() {
+    if (mounted) {
+      setState(() {
+        _isVideoPlaying = widget.videoController.value.isPlaying;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 全屏视频播放器
+            Center(
+              child: AspectRatio(
+                aspectRatio: widget.videoController.value.aspectRatio,
+                child: VideoPlayer(widget.videoController),
+              ),
+            ),
+            // 顶部控制栏
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        widget.videoTitle,
+                        style: AppTextStyles.titleMedium.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // 中间播放/暂停按钮
+            Center(
+              child: GestureDetector(
+                onTap: widget.toggleVideo,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(_isVideoPlaying ? 0.2 : 0.9),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _isVideoPlaying ? Icons.pause : Icons.play_arrow,
+                    color: _isVideoPlaying ? Colors.white : Colors.black,
+                    size: 36,
+                  ),
+                ),
+              ),
+            ),
+            // 底部控制栏
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.7),
+                    ],
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 进度条
+                    Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(1.5),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: widget.getVideoProgress(),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // 时间显示
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${widget.formatDuration(widget.videoController.value.position)} / ${widget.formatDuration(widget.videoController.value.duration)}',
+                            style: AppTextStyles.labelMedium.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // 退出全屏按钮
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.fullscreen_exit,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

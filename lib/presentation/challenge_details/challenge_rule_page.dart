@@ -636,10 +636,7 @@ class _ChallengeRulePageState extends State<ChallengeRulePage>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ProjectionTutorialSheet(
-        videoInfo: fakeVideoInfo,
-        tutorialSteps: fakeTutorialSteps,
-      ),
+      builder: (context) => ProjectionTutorialSheet(),
     );
   }
 

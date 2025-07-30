@@ -12,7 +12,7 @@ import '../presentation/profile1/profile_page.dart';
 import '../presentation/checkin_start_training/training_list_page.dart';
 import '../presentation/checkin_start_training/training_rule_page.dart';
 import '../presentation/checkin_start_training/checkin_training_page.dart';
-import '../presentation/checkin_start_training/chekin_training_voice_page.dart';
+import '../presentation/checkin_start_training/checkin_training_voice_page.dart';
 import '../presentation/checkin_start_training/checkin_countdown_page.dart';
 
 class AppRoutes {
@@ -50,22 +50,37 @@ class AppRoutes {
     home: (_) => const HomePage(),
     leaderboard: (_) => LeaderboardPage(),
     checkinboard: (_) => CheckinboardPage(),
-    trainingList: (_) => TrainingListPage(), // 添加TrainingListPage路由
+    trainingList: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      return TrainingListPage(productId: args?['productId'] ?? '');
+    },
     trainingRule: (context) {
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return TrainingRulePage.fromRoute(args ?? {});
+      return TrainingRulePage(
+        trainingId: args?['trainingId'] ?? '',
+        productId: args?['productId'] ?? '',
+      );
     },
     checkinTraining: (context) {
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return CheckinTrainingPage(trainingId: args?['trainingId'] ?? '');
+      return CheckinTrainingPage(
+        trainingId: args?['trainingId'] ?? '',
+        productId: args?['productId'] ?? '',
+      );
     },
     checkinTrainingVoice: (context) {
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return ChekinTrainingVoicePage(trainingId: args?['trainingId'] ?? '');
+      return CheckinTrainingVoicePage(
+        trainingId: args?['trainingId'] ?? '',
+        productId: args?['productId'] ?? '',
+      );
     },
     checkinCountdown: (context) {
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return CheckinCountdownPage(trainingId: args?['trainingId'] ?? '');
+      return CheckinCountdownPage(
+        trainingId: args?['trainingId'] ?? '',
+        productId: args?['productId'] ?? '',
+      );
     },
   };
 }

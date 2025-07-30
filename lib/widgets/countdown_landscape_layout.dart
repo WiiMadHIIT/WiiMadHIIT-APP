@@ -9,7 +9,6 @@ class CountdownLandscapeLayout extends StatelessWidget {
   final int currentRound;
   final int counter;
   final int countdown;
-  final int roundDuration;
   final bool isStarted;
   final bool isCounting;
   final bool showPreCountdown;
@@ -21,6 +20,7 @@ class CountdownLandscapeLayout extends StatelessWidget {
   final VoidCallback onCountPressed;
   final double diameter;
   final String Function(int) formatTime;
+  final int roundDuration; // 新增：轮次持续时间
   final bool showResultOverlay;
   final List<Map<String, dynamic>> history;
   final DraggableScrollableController draggableController;
@@ -30,7 +30,10 @@ class CountdownLandscapeLayout extends StatelessWidget {
   final VoidCallback onResultBack;
   final VoidCallback onResultSetup;
   final Widget videoWidget;
+  final Widget selfieWidget;
   final LayoutBgType bgType;
+  final Color dynamicBgColor;
+  final bool isSubmittingResult; // 新增：是否正在提交结果
 
   const CountdownLandscapeLayout({
     Key? key,
@@ -38,7 +41,6 @@ class CountdownLandscapeLayout extends StatelessWidget {
     required this.currentRound,
     this.counter = 0,
     required this.countdown,
-    required this.roundDuration,
     required this.isStarted,
     required this.isCounting,
     required this.showPreCountdown,
@@ -50,6 +52,7 @@ class CountdownLandscapeLayout extends StatelessWidget {
     required this.onCountPressed,
     required this.diameter,
     required this.formatTime,
+    required this.roundDuration, // 新增
     required this.showResultOverlay,
     required this.history,
     required this.draggableController,
@@ -59,7 +62,10 @@ class CountdownLandscapeLayout extends StatelessWidget {
     required this.onResultBack,
     required this.onResultSetup,
     required this.videoWidget,
+    required this.selfieWidget,
     required this.bgType,
+    required this.dynamicBgColor,
+    required this.isSubmittingResult, // 新增
   }) : super(key: key);
 
   @override
@@ -86,10 +92,12 @@ class CountdownLandscapeLayout extends StatelessWidget {
         // 多种背景类型
         if (bgType == LayoutBgType.video)
           Positioned.fill(child: videoWidget)
+        else if (bgType == LayoutBgType.selfie)
+          Positioned.fill(child: selfieWidget)
         else if (bgType == LayoutBgType.black)
           Positioned.fill(child: Container(color: Colors.black))
         else
-          Positioned.fill(child: Container(color: Colors.transparent)),
+          Positioned.fill(child: Container(color: dynamicBgColor)),
         if (bgType == LayoutBgType.video)
           Positioned.fill(child: Container(color: Colors.black.withOpacity(0.18))),
         // 主内容
@@ -99,202 +107,264 @@ class CountdownLandscapeLayout extends StatelessWidget {
             SizedBox(
               width: leftPanelWidth,
               height: screenHeight,
-              child: Stack(
-                children: [
-                  // 顶部浮动Logo（动态距离，苹果美学）
-                  FloatingLogoPlus(
-                    scale: 0.8,
-                    top: logoTop,
-                  ),
-                  // 顶部轮次文本（左对齐，离左侧10px）
-                  Positioned(
-                    top: logoTop - 16,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Text(
-                        'ROUND $currentRound/$totalRounds',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 1.2,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withOpacity(0.18),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
+              child: Container(
+                width: leftPanelWidth,
+                height: screenHeight,
+                child: PageView.builder(
+                  controller: pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: totalRounds,
+                  itemBuilder: (context, index) {
+                    return Stack(
+                      children: [
+                        // 顶部浮动Logo（动态距离，苹果美学）
+                        FloatingLogoPlus(
+                          scale: 0.8,
+                          top: logoTop,
+                        ),
+                        // 顶部轮次文本（左对齐，离左侧10px）
+                        Positioned(
+                          top: logoTop - 16,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Text(
+                              'ROUND ${index + 1}/$totalRounds',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 1.2,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.18),
+                                    blurRadius: 8,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // 主计数器整体位置
-                  Align(
-                    alignment: Alignment(0, 5/7*2-1), // y=5/7处
-                    child: GestureDetector(
-                      onTap: isStarted ? null : onStartPressed,
-                      child: AnimatedBuilder(
-                        animation: bounceController,
-                        builder: (context, child) => Transform.scale(
-                          scale: bounceController.value,
-                          child: child,
-                        ),
-                        child: (bgType != LayoutBgType.color)
-                            ? Opacity(
-                                opacity: 0.82,
-                                child: _buildMainCounter(context, counterDiameter, isWarning, mainColor, progressGradient, trackColor),
-                              )
-                            : _buildMainCounter(context, counterDiameter, isWarning, mainColor, progressGradient, trackColor),
-                      ),
-                    ),
-                  ),
-                  if (showPreCountdown)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withOpacity(0.7),
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'ROUND $currentRound/$totalRounds',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  letterSpacing: 1.2,
-                                  shadows: [
-                                    Shadow(color: Colors.black54, blurRadius: 12),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 400),
-                                switchInCurve: Curves.easeOutCubic,
-                                switchOutCurve: Curves.easeInCubic,
-                                layoutBuilder: (currentChild, previousChildren) => Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    ...previousChildren,
-                                    if (currentChild != null) currentChild,
-                                  ],
-                                ),
-                                transitionBuilder: (child, anim) => FadeTransition(
-                                  opacity: anim,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, 0.4),
-                                      end: Offset.zero,
-                                    ).animate(anim),
-                                    child: child,
-                                  ),
-                                ),
-                                child: Text(
-                                  '$preCountdown',
-                                  key: ValueKey(preCountdown),
-                                  style: const TextStyle(
-                                    fontSize: 120,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    shadows: [
-                                      Shadow(color: Colors.black54, blurRadius: 12),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
                           ),
                         ),
-                      ),
-                    ),
-                  if (showResultOverlay)
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: onResultOverlayTap,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final double maxWidth = constraints.maxWidth;
-                            final double maxHeight = constraints.maxHeight;
-                            final double iconSize = maxWidth * 0.10 + 32;
-                            final double titleFont = maxWidth * 0.045 + 12;
-                            final double congratFont = maxWidth * 0.035 + 10;
-                            final double infoFont = maxWidth * 0.032 + 8;
-                            final double dateFont = maxWidth * 0.025 + 7;
-                            final double buttonFont = maxWidth * 0.030 + 8;
-                            final double buttonPadH = maxWidth * 0.045;
-                            final double buttonPadV = maxHeight * 0.018;
-                            final double buttonRadius = 16;
-                            final double buttonGap = maxWidth * 0.04;
-                            return Container(
+                        // 主计数器整体位置
+                        Align(
+                          alignment: Alignment(0, 5/7*2-1), // y=5/7处
+                          child: GestureDetector(
+                            onTap: isStarted ? null : onStartPressed,
+                            child: AnimatedBuilder(
+                              animation: bounceController,
+                              builder: (context, child) => Transform.scale(
+                                scale: bounceController.value,
+                                child: child,
+                              ),
+                              child: (bgType != LayoutBgType.color)
+                                  ? Opacity(
+                                      opacity: 0.82,
+                                      child: _buildMainCounter(context, counterDiameter, isWarning, mainColor, progressGradient, trackColor),
+                                    )
+                                  : _buildMainCounter(context, counterDiameter, isWarning, mainColor, progressGradient, trackColor),
+                            ),
+                          ),
+                        ),
+                        // 预倒计时遮罩动画
+                        if (showPreCountdown)
+                          Positioned.fill(
+                            child: Container(
                               color: Colors.black.withOpacity(0.7),
                               child: Center(
                                 child: Column(
-                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.emoji_events, color: AppColors.primary, size: iconSize),
-                                    SizedBox(height: maxHeight * 0.03),
                                     Text(
-                                      'Congratulations! You worked out for ${history[0]["minutes"]} minutes.',
-                                      style: TextStyle(fontSize: congratFont, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.1),
-                                      textAlign: TextAlign.center,
+                                      'ROUND $currentRound/$totalRounds',
+                                      style: const TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 1.2,
+                                        shadows: [
+                                          Shadow(color: Colors.black54, blurRadius: 12),
+                                        ],
+                                      ),
                                     ),
-                                    SizedBox(height: maxHeight * 0.025),
-                                    Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                                    Text('ROUNDS:  $totalRounds', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: Colors.white)),
-                                    Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: dateFont, color: Colors.white70)),
-                                    SizedBox(height: maxHeight * 0.04),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        ElevatedButton(
-                                          onPressed: onResultReset,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.primary,
-                                            foregroundColor: Colors.white,
-                                            padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
-                                            elevation: 8,
-                                          ),
-                                          child: Text('Restart', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 24),
+                                    AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 400),
+                                      switchInCurve: Curves.easeOutCubic,
+                                      switchOutCurve: Curves.easeInCubic,
+                                      layoutBuilder: (currentChild, previousChildren) => Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          ...previousChildren,
+                                          if (currentChild != null) currentChild,
+                                        ],
+                                      ),
+                                      transitionBuilder: (child, anim) => FadeTransition(
+                                        opacity: anim,
+                                        child: SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(0, 0.4),
+                                            end: Offset.zero,
+                                          ).animate(anim),
+                                          child: child,
                                         ),
-                                        SizedBox(width: buttonGap),
-                                        ElevatedButton(
-                                          onPressed: onResultSetup,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.white,
-                                            foregroundColor: AppColors.primary,
-                                            padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
-                                            elevation: 8,
-                                          ),
-                                          child: Text('Reset', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                                      ),
+                                      child: Text(
+                                        '$preCountdown',
+                                        key: ValueKey(preCountdown),
+                                        style: const TextStyle(
+                                          fontSize: 120,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                          shadows: [
+                                            Shadow(color: Colors.black54, blurRadius: 12),
+                                          ],
                                         ),
-                                        SizedBox(width: buttonGap),
-                                        OutlinedButton(
-                                          onPressed: onResultBack,
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: AppColors.primary,
-                                            side: BorderSide(color: AppColors.primary, width: 2),
-                                            padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
-                                          ),
-                                          child: Text('Back', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                ],
+                            ),
+                          ),
+                        // 结果遮罩只覆盖左侧
+                        if (showResultOverlay)
+                          Positioned.fill(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: onResultOverlayTap,
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final double maxWidth = constraints.maxWidth;
+                                  final double maxHeight = constraints.maxHeight;
+                                  final double iconSize = (maxWidth * 0.08 + 24).clamp(32.0, 64.0);
+                                  final double congratFont = (maxWidth * 0.032 + 8).clamp(12.0, 20.0);
+                                  final double infoFont = (maxWidth * 0.028 + 6).clamp(10.0, 16.0);
+                                  final double dateFont = (maxWidth * 0.022 + 5).clamp(8.0, 14.0);
+                                  final double buttonFont = (maxWidth * 0.026 + 6).clamp(10.0, 16.0);
+                                  final double buttonPadH = (maxWidth * 0.035).clamp(12.0, 24.0);
+                                  final double buttonPadV = (maxHeight * 0.015).clamp(8.0, 16.0);
+                                  final double buttonRadius = 12;
+                                  final double buttonGap = (maxWidth * 0.025).clamp(8.0, 16.0);
+                                  final double verticalSpacing = (maxHeight * 0.015).clamp(8.0, 16.0);
+                                  return Container(
+                                    color: Colors.black.withOpacity(0.7),
+                                    child: SafeArea(
+                                      child: Center(
+                                        child: SingleChildScrollView(
+                                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.emoji_events, color: AppColors.primary, size: iconSize),
+                                              SizedBox(height: verticalSpacing),
+                                              Text(
+                                                'Congratulations! You worked out for ${_formatTimeForDisplay(history[0]["seconds"])} in $totalRounds rounds.',
+                                                style: TextStyle(fontSize: congratFont, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.1),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                              SizedBox(height: verticalSpacing),
+                                              // 显示今天该项目的累计运动时长和排名
+                                              if (history[0]["daySeconds"] == null) ...[
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 16,
+                                                      height: 16,
+                                                      child: CircularProgressIndicator(
+                                                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                                        strokeWidth: 2,
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 8),
+                                                    Text('Today\'s total: Loading...', style: TextStyle(fontSize: dateFont, color: Colors.white70, fontWeight: FontWeight.w500)),
+                                                  ],
+                                                ),
+                                                SizedBox(height: verticalSpacing),
+                                              ] else ...[
+                                                Text(
+                                                  'Today\'s total: ${_formatTimeForDisplay(history[0]["daySeconds"])}',
+                                                  style: TextStyle(fontSize: dateFont, color: Colors.white70, fontWeight: FontWeight.w500),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                                SizedBox(height: verticalSpacing),
+                                              ],
+                                              // 排名显示逻辑：如果为null则显示加载中，否则显示实际排名
+                                              if (history[0]["rank"] == null) ...[
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 16,
+                                                      height: 16,
+                                                      child: CircularProgressIndicator(
+                                                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                                        strokeWidth: 2,
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 8),
+                                                    Text('Rank: Loading...', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                                  ],
+                                                ),
+                                              ] else ...[
+                                                Text('Rank: ${history[0]["rank"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                              ],
+                                              Text('Date: ${history[0]["date"]}', style: TextStyle(fontSize: dateFont, color: Colors.white70)),
+                                              SizedBox(height: verticalSpacing * 2),
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  ElevatedButton(
+                                                    onPressed: onResultReset,
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: AppColors.primary,
+                                                      foregroundColor: Colors.white,
+                                                      padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
+                                                      elevation: 8,
+                                                    ),
+                                                    child: Text('Restart', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                                                  ),
+                                                  SizedBox(width: buttonGap),
+                                                  ElevatedButton(
+                                                    onPressed: onResultSetup,
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.white,
+                                                      foregroundColor: AppColors.primary,
+                                                      padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
+                                                      elevation: 8,
+                                                    ),
+                                                    child: Text('Reset', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                                                  ),
+                                                  SizedBox(width: buttonGap),
+                                                  OutlinedButton(
+                                                    onPressed: onResultBack,
+                                                    style: OutlinedButton.styleFrom(
+                                                      foregroundColor: AppColors.primary,
+                                                      side: BorderSide(color: AppColors.primary, width: 2),
+                                                      padding: EdgeInsets.symmetric(horizontal: buttonPadH, vertical: buttonPadV),
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(buttonRadius)),
+                                                    ),
+                                                    child: Text('Back', style: TextStyle(fontSize: buttonFont, fontWeight: FontWeight.bold)),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
             // 右侧榜单区域
@@ -327,7 +397,7 @@ class CountdownLandscapeLayout extends StatelessWidget {
           height: counterDiameter,
           child: CustomPaint(
             painter: CircleProgressPainter(
-              progress: isCounting ? countdown / 60.0 : 1.0,
+              progress: isCounting ? countdown / roundDuration.toDouble() : 1.0,
               color: isWarning ? AppColors.primary : mainColor,
               gradient: isWarning ? null : progressGradient,
               trackColor: trackColor,
@@ -391,5 +461,18 @@ class CountdownLandscapeLayout extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  String _formatTimeForDisplay(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    
+    if (minutes == 0) {
+      return '$remainingSeconds seconds';
+    } else if (remainingSeconds == 0) {
+      return '$minutes minute${minutes == 1 ? '' : 's'}';
+    } else {
+      return '$minutes minute${minutes == 1 ? '' : 's'} $remainingSeconds second${remainingSeconds == 1 ? '' : 's'}';
+    }
   }
 }

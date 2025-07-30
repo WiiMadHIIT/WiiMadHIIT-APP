@@ -1,118 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 import 'dart:ui';
+import 'dart:math';
 import '../../routes/app_routes.dart';
 import '../../widgets/projection_tutorial_sheet.dart';
+import '../../domain/entities/training_rule.dart';
+import '../../domain/entities/projection_tutorial.dart';
+import '../../domain/entities/training_config.dart';
+import 'training_rule_viewmodel.dart';
 
-// ================== 伪数据 ==================
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../core/theme/app_colors.dart';
-import 'dart:ui';
 
-final Map<String, dynamic> fakeTrainingInfo = {
-  "name": "Projection Training",
-  "type": "General",
-  "level": "All Levels",
-};
 
-final List<Map<String, dynamic>> fakeTrainingRules = [
-  {
-    "icon": Icons.settings,
-    "title": "Device Setup",
-    "description": "Switch to P10 mode and P9 speed for optimal training experience",
-    "color": const Color(0xFF10B981),
-  },
-  {
-    "icon": Icons.timer,
-    "title": "System Calibration",
-    "description": "Wait 3 seconds after adjustment for system to respond",
-    "color": const Color(0xFFF59E0B),
-  },
-  {
-    "icon": Icons.check_circle,
-    "title": "Ready Check",
-    "description": "Ensure you are in a safe environment with proper space",
-    "color": const Color(0xFFEF4444),
-  },
-];
-
-final Map<String, dynamic> fakeVideoInfo = {
-  "asset": "assets/video/video1.mp4",
-  "duration": "2 min",
-  "quality": "HD",
-  "title": "Watch Video Tutorial",
-  "subtitle": "Learn projection setup step by step",
-};
-
-final List<Map<String, dynamic>> fakeTutorialSteps = [
-  {
-    "number": 1,
-    "title": "Find a Flat Surface",
-    "description": "Choose a wall or flat surface that is at least 2 meters wide and 1.5 meters tall.",
-    "icon": Icons.wallpaper,
-  },
-  {
-    "number": 2,
-    "title": "Position Your Device",
-    "description": "Place your device on a stable surface, approximately 1-2 meters from the projection surface.",
-    "icon": Icons.phone_android,
-  },
-  {
-    "number": 3,
-    "title": "Enable Projection",
-    "description": "Tap the projection button in the training interface to start casting.",
-    "icon": Icons.cast_connected,
-  },
-  {
-    "number": 4,
-    "title": "Adjust Position",
-    "description": "Use the on-screen controls to adjust the projection size and position.",
-    "icon": Icons.tune,
-  },
-  {
-    "number": 5,
-    "title": "Start Training",
-    "description": "Once the projection is properly set up, you can begin your training session.",
-    "icon": Icons.play_circle,
-  },
-];
-// ================== 伪数据 END ==================
-
-class TrainingRulePage extends StatefulWidget {
+class TrainingRulePage extends StatelessWidget {
   final String? trainingId;
-  final String? trainingName;
-  final String? trainingType;
-  final String? trainingLevel;
+  final String? productId;
   
   const TrainingRulePage({
     Key? key,
     this.trainingId,
-    this.trainingName,
-    this.trainingType,
-    this.trainingLevel,
+    this.productId,
   }) : super(key: key);
 
   @override
-  State<TrainingRulePage> createState() => _TrainingRulePageState();
-
-  // 从路由参数创建页面的静态方法
-  static TrainingRulePage fromRoute(Map<String, dynamic> arguments) {
-    return TrainingRulePage(
-      trainingId: arguments['trainingId'] as String?,
-      trainingName: arguments['trainingName'] as String?,
-      trainingType: arguments['trainingType'] as String?,
-      trainingLevel: arguments['trainingLevel'] as String?,
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => TrainingRuleViewModel(),
+      child: _TrainingRulePageContent(trainingId: trainingId, productId: productId),
     );
   }
 }
 
-class _TrainingRulePageState extends State<TrainingRulePage> 
+class _TrainingRulePageContent extends StatefulWidget {
+  final String? trainingId;
+  final String? productId;
+  
+  const _TrainingRulePageContent({
+    Key? key,
+    this.trainingId,
+    this.productId,
+  }) : super(key: key);
+
+  @override
+  State<_TrainingRulePageContent> createState() => _TrainingRulePageContentState();
+}
+
+class _TrainingRulePageContentState extends State<_TrainingRulePageContent> 
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -152,6 +88,60 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     ));
     
     _startAnimations();
+    
+    // 加载训练规则数据
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final viewModel = Provider.of<TrainingRuleViewModel>(context, listen: false);
+      if (widget.trainingId != null && widget.productId != null) {
+        viewModel.loadTrainingRule(widget.trainingId!, widget.productId!);
+      }
+    });
+  }
+
+  /// 获取随机图标
+  IconData _getRandomIcon() {
+    final random = Random();
+    final icons = [
+      Icons.settings,
+      Icons.timer,
+      Icons.check_circle,
+      Icons.warning,
+      Icons.info,
+      Icons.help,
+      Icons.security,
+      Icons.sports_esports,
+      Icons.fitness_center,
+      Icons.health_and_safety,
+      Icons.psychology,
+      Icons.science,
+      Icons.engineering,
+      Icons.build,
+      Icons.construction,
+      Icons.handyman,
+      Icons.precision_manufacturing,
+      Icons.memory,
+      Icons.speed,
+      Icons.tune,
+    ];
+    return icons[random.nextInt(icons.length)];
+  }
+
+  /// 获取随机颜色
+  Color _getRandomColor() {
+    final random = Random();
+    final colors = [
+      const Color(0xFF10B981), // 绿色
+      const Color(0xFFF59E0B), // 橙色
+      const Color(0xFFEF4444), // 红色
+      const Color(0xFF3B82F6), // 蓝色
+      const Color(0xFF8B5CF6), // 紫色
+      const Color(0xFF06B6D4), // 青色
+      const Color(0xFF84CC16), // 青绿色
+      const Color(0xFFF97316), // 深橙色
+      const Color(0xFFEC4899), // 粉色
+      const Color(0xFF6366F1), // 靛蓝色
+    ];
+    return colors[random.nextInt(colors.length)];
   }
 
   void _startAnimations() async {
@@ -172,56 +162,72 @@ class _TrainingRulePageState extends State<TrainingRulePage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final double horizontalPad = constraints.maxWidth < 600 ? 16 : 48;
-          final double cardPad = constraints.maxWidth < 600 ? 16 : 28;
-          final double cardRadius = constraints.maxWidth < 600 ? 16 : 22;
-          final double buttonHeight = constraints.maxWidth < 600 ? 52 : 60;
-          final double buttonRadius = constraints.maxWidth < 600 ? 14 : 18;
-          final double sectionGap = constraints.maxWidth < 600 ? 16 : 28;
-          final double cardGap = constraints.maxWidth < 600 ? 14 : 22;
-          final double bottomGap = constraints.maxWidth < 600 ? 24 : 40;
-          final double topGap = constraints.maxWidth < 600 ? 16 : 32;
-          return CustomScrollView(
-            slivers: [
-              SliverAppBar(
-                expandedHeight: 180,
-                pinned: true,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                leading: _buildBackButton(),
-                flexibleSpace: FlexibleSpaceBar(
-                  background: _buildHeaderBackground(),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(horizontalPad, topGap, horizontalPad, bottomGap),
-                      child: SingleChildScrollView(
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildTrainingInfoCard(cardPad, cardRadius),
-                            SizedBox(height: cardGap),
-                            _buildTrainingRulesCard(cardPad, cardRadius),
-                            SizedBox(height: cardGap),
-                            _buildProjectionTutorialCard(cardPad, cardRadius),
-                            SizedBox(height: sectionGap),
-                            _buildStartTrainingButton(buttonHeight, buttonRadius),
-                          ],
+      body: Consumer<TrainingRuleViewModel>(
+        builder: (context, viewModel, child) {
+          // 显示加载状态
+          if (viewModel.isLoading) {
+            return _buildLoadingState();
+          }
+
+          // 显示错误状态
+          if (viewModel.hasError) {
+            return _buildErrorState(viewModel);
+          }
+
+          // 显示数据状态
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final double horizontalPad = constraints.maxWidth < 600 ? 16 : 48;
+              final double cardPad = constraints.maxWidth < 600 ? 16 : 28;
+              final double cardRadius = constraints.maxWidth < 600 ? 16 : 22;
+              final double buttonHeight = constraints.maxWidth < 600 ? 52 : 60;
+              final double buttonRadius = constraints.maxWidth < 600 ? 14 : 18;
+              final double sectionGap = constraints.maxWidth < 600 ? 16 : 28;
+              final double cardGap = constraints.maxWidth < 600 ? 14 : 22;
+              final double bottomGap = constraints.maxWidth < 600 ? 24 : 40;
+              final double topGap = constraints.maxWidth < 600 ? 16 : 32;
+              
+              return CustomScrollView(
+                slivers: [
+                  SliverAppBar(
+                    expandedHeight: 180,
+                    pinned: true,
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    leading: _buildBackButton(),
+                    flexibleSpace: FlexibleSpaceBar(
+                      background: _buildHeaderBackground(),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(horizontalPad, topGap, horizontalPad, bottomGap),
+                          child: SingleChildScrollView(
+                            physics: const NeverScrollableScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (viewModel.hasTrainingRules)
+                                  _buildTrainingRulesCard(cardPad, cardRadius, viewModel),
+                                if (viewModel.hasTrainingRules) SizedBox(height: cardGap),
+                                if (viewModel.hasProjectionTutorial)
+                                  _buildProjectionTutorialCard(cardPad, cardRadius, viewModel),
+                                if (viewModel.hasProjectionTutorial) SizedBox(height: sectionGap),
+                                _buildStartTrainingButton(buttonHeight, buttonRadius, viewModel),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           );
         },
       ),
@@ -334,66 +340,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildTrainingInfoCard(double pad, double radius) {
-    return Container(
-      padding: EdgeInsets.all(pad),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(pad * 0.7),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(radius * 0.75),
-            ),
-            child: Icon(
-              Icons.fitness_center,
-              color: AppColors.primary,
-              size: 22,
-            ),
-          ),
-          SizedBox(width: pad * 0.7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fakeTrainingInfo["name"] ?? 'Training',
-                  style: AppTextStyles.titleLarge.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '${fakeTrainingInfo["type"] ?? 'General'} • ${fakeTrainingInfo["level"] ?? 'All Levels'}',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: Colors.grey[600],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrainingRulesCard(double pad, double radius) {
+  Widget _buildTrainingRulesCard(double pad, double radius, TrainingRuleViewModel viewModel) {
     return Container(
       padding: EdgeInsets.all(pad),
       decoration: BoxDecoration(
@@ -435,13 +382,13 @@ class _TrainingRulePageState extends State<TrainingRulePage>
             ],
           ),
           SizedBox(height: pad * 0.7),
-          ...fakeTrainingRules.map((rule) => Padding(
+          ...viewModel.sortedTrainingRules.map((rule) => Padding(
             padding: EdgeInsets.only(bottom: pad * 0.5),
             child: _buildRuleItem(
-              icon: rule["icon"],
-              title: rule["title"],
-              description: rule["description"],
-              color: rule["color"],
+              icon: _getRandomIcon(),
+              title: rule.displayTitle,
+              description: rule.displayDescription,
+              color: _getRandomColor(),
               pad: pad,
               radius: radius,
             ),
@@ -505,7 +452,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildProjectionTutorialCard(double pad, double radius) {
+  Widget _buildProjectionTutorialCard(double pad, double radius, TrainingRuleViewModel viewModel) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -529,7 +476,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(radius),
-          onTap: _showProjectionTutorial,
+          onTap: () => _showProjectionTutorial(viewModel),
           child: Padding(
             padding: EdgeInsets.all(pad),
             child: Row(
@@ -585,7 +532,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  Widget _buildStartTrainingButton(double height, double radius) {
+  Widget _buildStartTrainingButton(double height, double radius, TrainingRuleViewModel viewModel) {
     return Container(
       width: double.infinity,
       height: height,
@@ -611,7 +558,7 @@ class _TrainingRulePageState extends State<TrainingRulePage>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(radius),
-          onTap: _startTraining,
+          onTap: () => _startTraining(viewModel),
           child: Center(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -642,77 +589,252 @@ class _TrainingRulePageState extends State<TrainingRulePage>
     );
   }
 
-  void _showProjectionTutorial() {
+  void _showProjectionTutorial(TrainingRuleViewModel viewModel) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ProjectionTutorialSheet(
-        videoInfo: fakeVideoInfo,
-        tutorialSteps: fakeTutorialSteps,
+      builder: (context) => ProjectionTutorialSheet(),
+    );
+  }
+
+
+
+  void _startTraining(TrainingRuleViewModel viewModel) {
+    // 显示确认对话框
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: 320,
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 顶部图标区域
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.primary,
+                      AppColors.primary.withOpacity(0.8),
+                    ],
+                  ),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Ready to Start?',
+                      style: AppTextStyles.headlineSmall.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // 内容区域
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Make sure you have completed all the setup steps and are ready to begin your training session.',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: Colors.grey[700],
+                          height: 1.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // 按钮区域
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.grey[600],
+                                side: BorderSide(color: Colors.grey[300]!),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: AppTextStyles.labelLarge.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                // 根据训练配置动态跳转到相应页面
+                                _navigateToTrainingPage(viewModel);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Start',
+                                style: AppTextStyles.labelLarge.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  void _startTraining() {
-    // TODO: 导航到实际的训练页面
-    print('Starting training: ${widget.trainingName ?? 'Training'}');
+  /// 根据训练配置动态跳转到相应的训练页面
+  void _navigateToTrainingPage(TrainingRuleViewModel viewModel) {
+    // 从ViewModel获取的 trainingConfig.nextPageRoute 决定跳转目标
+    final nextPageRoute = viewModel.nextPageRoute;
     
-    // 显示确认对话框
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Text(
-          'Ready to Start?',
-          style: AppTextStyles.titleLarge.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'Make sure you have completed all the setup steps and are ready to begin your training session.',
-          style: AppTextStyles.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: AppTextStyles.labelLarge.copyWith(
+    Navigator.pushNamed(
+      context,
+      nextPageRoute,
+      arguments: {
+        'trainingId': widget.trainingId,
+        'productId': widget.productId,
+      },
+    );
+  }
+
+  /// 构建加载状态
+  Widget _buildLoadingState() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading training rules...',
+              style: AppTextStyles.bodyLarge.copyWith(
                 color: Colors.grey[600],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建错误状态
+  Widget _buildErrorState(TrainingRuleViewModel viewModel) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
+      body: Stack(
+        children: [
+          // 返回按钮
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 8,
+            child: _buildBackButton(),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // 直接跳转到 CheckingTrainingPage 页面，无参数，无SnackBar
-              // Navigator.pushNamed(
-              //   context,
-              //   AppRoutes.checkinTraining,
-              // );
-            //   Navigator.pushNamed(
-            //     context,
-            //     AppRoutes.checkinTrainingVoice,
-            //   );
-              Navigator.pushNamed(
-                context,
-                AppRoutes.checkinCountdown,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: Text(
-              'Start',
-              style: AppTextStyles.labelLarge.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+          // 错误内容
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Failed to load training rules',
+                    style: AppTextStyles.titleMedium.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    viewModel.error ?? 'Unknown error occurred',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => viewModel.refresh(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

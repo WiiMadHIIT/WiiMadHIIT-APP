@@ -4,52 +4,8 @@ import 'package:video_player/video_player.dart';
 import '../core/theme/app_text_styles.dart';
 import '../core/theme/app_colors.dart';
 
-// 伪数据（可根据需要导出/复用）
-final Map<String, dynamic> fakeVideoInfo = {
-  "asset": "assets/video/video1.mp4",
-  "duration": "2 min",
-  "quality": "HD",
-  "title": "Watch Video Tutorial",
-  "subtitle": "Learn projection setup step by step",
-};
-
-final List<Map<String, dynamic>> fakeTutorialSteps = [
-  {
-    "number": 1,
-    "title": "Find a Flat Surface",
-    "description": "Choose a wall or flat surface that is at least 2 meters wide and 1.5 meters tall.",
-    "icon": Icons.wallpaper,
-  },
-  {
-    "number": 2,
-    "title": "Position Your Device",
-    "description": "Place your device on a stable surface, approximately 1-2 meters from the projection surface.",
-    "icon": Icons.phone_android,
-  },
-  {
-    "number": 3,
-    "title": "Enable Projection",
-    "description": "Tap the projection button in the training interface to start casting.",
-    "icon": Icons.cast_connected,
-  },
-  {
-    "number": 4,
-    "title": "Adjust Position",
-    "description": "Use the on-screen controls to adjust the projection size and position.",
-    "icon": Icons.tune,
-  },
-  {
-    "number": 5,
-    "title": "Start Training",
-    "description": "Once the projection is properly set up, you can begin your training session.",
-    "icon": Icons.play_circle,
-  },
-];
-
 class ProjectionTutorialSheet extends StatefulWidget {
-  final Map<String, dynamic>? videoInfo;
-  final List<Map<String, dynamic>>? tutorialSteps;
-  const ProjectionTutorialSheet({Key? key, this.videoInfo, this.tutorialSteps}) : super(key: key);
+  const ProjectionTutorialSheet({Key? key}) : super(key: key);
 
   @override
   State<ProjectionTutorialSheet> createState() => _ProjectionTutorialSheetState();
@@ -61,12 +17,51 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
   bool _isVideoExpanded = false;
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
-  bool _isVideoLoading = true;
+  bool _isVideoLoading = false;
   bool _isVideoReady = false;
   late AnimationController _scaleController;
   late AnimationController _fadeController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
+
+  // 内部伪数据
+  final Map<String, dynamic> _videoInfo = {
+    "videoUrl": "assets/video/video1.mp4",
+    "title": "Watch Video Tutorial",
+  };
+
+  final List<Map<String, dynamic>> _tutorialSteps = [
+    {
+      "number": 1,
+      "title": "Find a Flat Surface",
+      "description": "Choose a wall or flat surface that is at least 2 meters wide and 1.5 meters tall.",
+      "icon": Icons.wallpaper,
+    },
+    {
+      "number": 2,
+      "title": "Position Your Device",
+      "description": "Place your device on a stable surface, approximately 1-2 meters from the projection surface.",
+      "icon": Icons.phone_android,
+    },
+    {
+      "number": 3,
+      "title": "Enable Projection",
+      "description": "Tap the projection button in the training interface to start casting.",
+      "icon": Icons.cast_connected,
+    },
+    {
+      "number": 4,
+      "title": "Adjust Position",
+      "description": "Use the on-screen controls to adjust the projection size and position.",
+      "icon": Icons.tune,
+    },
+    {
+      "number": 5,
+      "title": "Start Training",
+      "description": "Once the projection is properly set up, you can begin your training session.",
+      "icon": Icons.play_circle,
+    },
+  ];
 
   @override
   void initState() {
@@ -111,10 +106,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
 
   Future<void> _initializeVideo() async {
     try {
-      setState(() {
-        _isVideoLoading = true;
-      });
-      
+      // 创建本地视频控制器
       _videoController = VideoPlayerController.asset('assets/video/video1.mp4');
       await _videoController!.initialize();
       
@@ -124,13 +116,9 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
           setState(() {
             _isVideoPlaying = _videoController!.value.isPlaying;
           });
-          // 检查视频是否播放完毕
-          if (_videoController!.value.position >= _videoController!.value.duration) {
-            // 视频播放完毕，可以在这里添加一些逻辑
-            // print('Video playback completed');
-          }
         }
       });
+      
       // 设置循环播放
       _videoController!.setLooping(true);
       setState(() {
@@ -138,6 +126,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
         _isVideoLoading = false;
         _isVideoReady = true;
       });
+      
       // 启动淡入动画
       _fadeController.forward();
     } catch (e) {
@@ -146,6 +135,8 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
       });
     }
   }
+
+
 
   double _getVideoProgress() {
     if (_videoController == null || !_videoController!.value.isInitialized) {
@@ -184,10 +175,41 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
     return "$twoDigitMinutes:$twoDigitSeconds";
   }
 
+  // 共享的播放/暂停控制方法
+  void _togglePlayPause() {
+    if (_videoController == null || !_videoController!.value.isInitialized) {
+      return;
+    }
+    
+    HapticFeedback.selectionClick();
+    if (_videoController!.value.isPlaying) {
+      _videoController!.pause();
+    } else {
+      _videoController!.play();
+    }
+    // 状态会通过监听器自动更新
+  }
+
+  void _showFullscreenVideo() {
+    if (_videoController == null || !_videoController!.value.isInitialized) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _FullscreenVideoPage(
+          videoController: _videoController!,
+          videoInfo: _videoInfo,
+          getVideoProgress: _getVideoProgress,
+          formatDuration: _formatDuration,
+          togglePlayPause: _togglePlayPause,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final Map<String, dynamic> videoInfo = widget.videoInfo ?? fakeVideoInfo;
-    final List<Map<String, dynamic>> tutorialSteps = widget.tutorialSteps ?? fakeTutorialSteps;
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: const BoxDecoration(
@@ -240,13 +262,13 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildVideoTutorialSection(videoInfo),
+                  _buildVideoTutorialSection(),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ...tutorialSteps.map((step) => _buildTutorialStep(
+                        ..._tutorialSteps.map((step) => _buildTutorialStep(
                           number: step["number"],
                           title: step["title"],
                           description: step["description"],
@@ -289,7 +311,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
     );
   }
 
-  Widget _buildVideoTutorialSection(Map<String, dynamic> videoInfo) {
+  Widget _buildVideoTutorialSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Column(
@@ -353,7 +375,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        videoInfo["title"] ?? 'Watch Video Tutorial',
+                        _videoInfo["title"] ?? 'Watch Video Tutorial',
                         style: AppTextStyles.titleMedium.copyWith(
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF222222),
@@ -386,10 +408,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
             child: _isVideoExpanded
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: _buildVideoPlayer(
-                      customMaxHeight: 180,
-                      asset: videoInfo["asset"],
-                    ),
+                    child: _buildVideoPlayer(),
                   )
                 : null,
           ),
@@ -398,11 +417,11 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
     );
   }
 
-  Widget _buildVideoPlayer({double? customMaxHeight, String? asset}) {
+  Widget _buildVideoPlayer() {
     return LayoutBuilder(
       builder: (context, constraints) {
         double maxWidth = constraints.maxWidth;
-        double maxHeight = customMaxHeight ?? 220.0;
+        double maxHeight = 180.0;
         bool isSmallScreen = maxWidth < 350;
         Map<String, double> dimensions = _calculateVideoDimensions(
           maxWidth: maxWidth,
@@ -410,17 +429,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
         );
         double videoWidth = dimensions['width']!;
         double videoHeight = dimensions['height']!;
-        if (_videoController == null && asset != null) {
-          _videoController = VideoPlayerController.asset(asset);
-          _videoController!.initialize().then((_) {
-            setState(() {
-              _isVideoInitialized = true;
-              _isVideoLoading = false;
-              _isVideoReady = true;
-            });
-            _fadeController.forward();
-          });
-        }
+        
         return Container(
           decoration: BoxDecoration(
             color: Colors.black,
@@ -505,7 +514,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
                           ),
                         SizedBox(height: isSmallScreen ? 12 : 16),
                         Text(
-                          _isVideoLoading ? 'Loading video...' : 'Video unavailable',
+                          _isVideoLoading ? 'Preparing video...' : 'Video unavailable',
                           style: AppTextStyles.bodyMedium.copyWith(
                             color: Colors.white.withOpacity(0.8),
                             fontWeight: FontWeight.w500,
@@ -531,18 +540,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
               if (_isVideoInitialized)
                 Center(
                   child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      setState(() {
-                        if (_videoController!.value.isPlaying) {
-                          _videoController!.pause();
-                          _isVideoPlaying = false;
-                        } else {
-                          _videoController!.play();
-                          _isVideoPlaying = true;
-                        }
-                      });
-                    },
+                    onTap: _togglePlayPause,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
@@ -647,7 +645,7 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
                             GestureDetector(
                               onTap: () {
                                 HapticFeedback.mediumImpact();
-                                // 可扩展全屏播放
+                                _showFullscreenVideo();
                               },
                               child: Container(
                                 padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
@@ -746,6 +744,229 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 全屏视频播放页面
+class _FullscreenVideoPage extends StatefulWidget {
+  final VideoPlayerController videoController;
+  final Map<String, dynamic> videoInfo;
+  final double Function() getVideoProgress;
+  final String Function(Duration) formatDuration;
+  final VoidCallback togglePlayPause;
+
+  const _FullscreenVideoPage({
+    Key? key,
+    required this.videoController,
+    required this.videoInfo,
+    required this.getVideoProgress,
+    required this.formatDuration,
+    required this.togglePlayPause,
+  }) : super(key: key);
+
+  @override
+  State<_FullscreenVideoPage> createState() => _FullscreenVideoPageState();
+}
+
+class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
+  bool _isVideoPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 初始化播放状态
+    _isVideoPlaying = widget.videoController.value.isPlaying;
+    // 添加监听器来更新播放状态
+    widget.videoController.addListener(_onVideoStateChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.videoController.removeListener(_onVideoStateChanged);
+    super.dispose();
+  }
+
+  void _onVideoStateChanged() {
+    if (mounted) {
+      setState(() {
+        _isVideoPlaying = widget.videoController.value.isPlaying;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 全屏视频播放器
+            Center(
+              child: AspectRatio(
+                aspectRatio: widget.videoController.value.aspectRatio,
+                child: VideoPlayer(widget.videoController),
+              ),
+            ),
+            // 顶部控制栏
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        widget.videoInfo['title'] ?? 'Video Tutorial',
+                        style: AppTextStyles.titleMedium.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // 中间播放/暂停按钮（模仿小屏幕风格）
+            Center(
+              child: GestureDetector(
+                onTap: widget.togglePlayPause,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(_isVideoPlaying ? 0.2 : 0.9),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _isVideoPlaying ? Icons.pause : Icons.play_arrow,
+                    color: _isVideoPlaying ? Colors.white : Colors.black,
+                    size: 36,
+                  ),
+                ),
+              ),
+            ),
+            // 底部控制栏
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.7),
+                    ],
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 进度条
+                    Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(1.5),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: widget.getVideoProgress(),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // 时间显示
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${widget.formatDuration(widget.videoController.value.position)} / ${widget.formatDuration(widget.videoController.value.duration)}',
+                            style: AppTextStyles.labelMedium.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // 退出全屏按钮
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.fullscreen_exit,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

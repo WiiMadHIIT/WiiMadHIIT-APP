@@ -40,6 +40,7 @@ dependencies:
   infinite_carousel: ^1.1.1
   smooth_page_indicator: ^1.1.0
   camera: ^0.10.5+9
+  shared_preferences: ^2.2.2
   
 
 dev_dependencies:

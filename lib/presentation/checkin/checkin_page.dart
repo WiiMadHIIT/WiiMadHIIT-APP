@@ -1,86 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:math' as math;
 import 'dart:ui';
+import 'dart:math';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:infinite_carousel/infinite_carousel.dart';
 import '../../widgets/floating_logo.dart';
-import '../checkin_start_training/training_list_page.dart';
+import '../../routes/app_routes.dart';
+import '../../domain/entities/checkin_product.dart';
+import '../../domain/services/checkin_service.dart';
+import '../../domain/usecases/get_checkin_products_usecase.dart';
+import '../../data/api/checkin_api.dart';
+import '../../data/repository/checkin_repository.dart';
+import 'checkin_viewmodel.dart';
 
-class ProductCheckin {
-  final String id; // 新增ID字段
-  final String name;
-  final String description;
-  final String iconAsset;
-  final String routeName;
-  final String? videoAsset; // 新增，可选
+// 移除旧的ProductCheckin类，使用CheckinProduct实体
 
-  ProductCheckin({
-    required this.id,
-    required this.name,
-    required this.description,
-    required this.iconAsset,
-    required this.routeName,
-    this.videoAsset,
-  });
-}
-
-class CheckinPage extends StatefulWidget {
+class CheckinPage extends StatelessWidget {
   const CheckinPage({Key? key}) : super(key: key);
 
   @override
-  State<CheckinPage> createState() => _CheckinPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => CheckinViewModel(
+        GetCheckinProductsUseCase(
+          CheckinRepository(CheckinApi()),
+          CheckinService(),
+        ),
+      )..loadCheckinProducts(),
+      child: const _CheckinPageContent(),
+    );
+  }
 }
 
-class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStateMixin {
+class _CheckinPageContent extends StatefulWidget {
+  const _CheckinPageContent({Key? key}) : super(key: key);
+
+  @override
+  State<_CheckinPageContent> createState() => _CheckinPageContentState();
+}
+
+class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTickerProviderStateMixin {
   late VideoPlayerController _controller;
   VideoPlayerController? _nextController;
   late InfiniteScrollController _carouselController;
-  int _currentIndex = 0;
   late final PageController _pageController = PageController(viewportFraction: 0.78);
   late final AnimationController _videoSwitchAnim;
   bool _isSwitchingVideo = false;
-  late final List<VideoPlayerController> _videoControllers;
-
-  // 这里必须有
-  final List<ProductCheckin> products = [
-    ProductCheckin(
-      id: "hiit_pro",
-      name: "HIIT Pro",
-      description: "High-Intensity Interval Training for maximum results",
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: "/training_list",
-      videoAsset: "assets/video/video1.mp4",
-    ),
-    ProductCheckin(
-      id: "yoga_flex",
-      name: "Yoga Flex",
-      description: "Daily Yoga Flexibility and Mindfulness",
-      iconAsset: "assets/icons/yoga.svg",
-      routeName: "/training_list",
-      videoAsset: "assets/video/video2.mp4",
-    ),
-    ProductCheckin(
-      id: "strength_training",
-      name: "Strength Training",
-      description: "Build muscle and increase strength",
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: "/training_list",
-      videoAsset: "assets/video/video3.mp4",
-    ),
-    ProductCheckin(
-      id: "cardio_blast",
-      name: "Cardio Blast",
-      description: "High-energy cardio workout",
-      iconAsset: "assets/icons/yoga.svg",
-      routeName: "/training_list",
-      videoAsset: "assets/video/video1.mp4",
-    ),
-    // ... 其他产品
-  ];
+  List<VideoPlayerController> _videoControllers = [];
 
   @override
   void initState() {
@@ -90,22 +61,58 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
+  }
+
+  // 初始化视频控制器
+  void _initializeVideoControllers(List<CheckinProduct> products) {
+    // 清理旧的控制器
+    for (final controller in _videoControllers) {
+      controller.dispose();
+    }
+    
     _videoControllers = List.generate(products.length, (i) {
-      final asset = (products[i].videoAsset == null || products[i].videoAsset!.isEmpty)
-          ? 'assets/video/video1.mp4'
-          : products[i].videoAsset!;
-      final controller = VideoPlayerController.asset(asset)
+      final product = products[i];
+      VideoPlayerController controller;
+      
+      // 优先使用网络视频URL，失败时回退到本地视频
+      if (product.hasCustomVideo) {
+        controller = VideoPlayerController.networkUrl(Uri.parse(product.videoUrl!))
         ..setLooping(true)
         ..setVolume(0);
+        
       controller.initialize().then((_) {
         if (i == 0) {
           controller.play();
         }
-        // 触发刷新，确保 build 能感知到初始化完成
         if (mounted) setState(() {});
+        }).catchError((error) {
+          // 网络视频加载失败，回退到本地视频
+          print('Network video failed for ${product.name}, falling back to local video: $error');
+          _initializeLocalVideoController(i);
       });
+      } else {
+        // 直接使用本地视频
+        controller = _initializeLocalVideoController(i);
+      }
+      
       return controller;
     });
+  }
+
+  // 初始化本地视频控制器
+  VideoPlayerController _initializeLocalVideoController(int index) {
+    final controller = VideoPlayerController.asset('assets/video/video1.mp4')
+      ..setLooping(true)
+      ..setVolume(0);
+    
+    controller.initialize().then((_) {
+      if (index == 0) {
+        controller.play();
+      }
+      if (mounted) setState(() {});
+    });
+    
+    return controller;
   }
 
   @override
@@ -117,15 +124,13 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
     super.dispose();
   }
 
-  void _onProductTap(ProductCheckin product) {
+  void _onProductTap(CheckinProduct product) {
+    // 使用统一的路由系统
     if (product.routeName == "/training_list" || product.routeName == "/trainingList") {
-      Navigator.push(
+      Navigator.pushNamed(
         context,
-        MaterialPageRoute(
-          builder: (context) => TrainingListPage(
-            productId: product.id, // 传递产品ID
-          ),
-        ),
+        AppRoutes.trainingList,
+        arguments: {'productId': product.id},
       );
     } else {
       Navigator.pushNamed(context, product.routeName);
@@ -133,9 +138,9 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
   }
 
   void _onPageChanged(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+    final viewModel = context.read<CheckinViewModel>();
+    viewModel.updateCurrentIndex(index);
+    
     for (int i = 0; i < _videoControllers.length; i++) {
       if (i == index) {
         _videoControllers[i].play();
@@ -145,13 +150,14 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
     }
   }
 
-  Widget _buildVideoStack() {
+  Widget _buildVideoStack(List<CheckinProduct> products) {
     return AnimatedBuilder(
       animation: _pageController,
       builder: (context, child) {
+        final viewModel = context.watch<CheckinViewModel>();
         final page = _pageController.hasClients && _pageController.page != null
             ? _pageController.page!
-            : _currentIndex.toDouble();
+            : viewModel.currentIndex.toDouble();
 
         List<Widget> stack = [];
         bool hasInitialized = false;
@@ -161,7 +167,9 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
           final offset = (i - page) * MediaQuery.of(context).size.height;
           final opacity = (1.0 - (i - page).abs()).clamp(0.0, 1.0);
 
-          if (_videoControllers[i].value.isInitialized) hasInitialized = true;
+          if (i < _videoControllers.length && _videoControllers[i].value.isInitialized) {
+            hasInitialized = true;
+          }
 
           stack.add(
             Positioned.fill(
@@ -169,7 +177,7 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
                 offset: Offset(0, offset),
                 child: Opacity(
                   opacity: opacity,
-                  child: _videoControllers[i].value.isInitialized
+                  child: i < _videoControllers.length && _videoControllers[i].value.isInitialized
                       ? FittedBox(
                           fit: BoxFit.cover,
                           child: SizedBox(
@@ -211,18 +219,27 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    return Consumer<CheckinViewModel>(
+      builder: (context, viewModel, child) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double cardWidth = screenWidth * 0.78; // 78% 屏幕宽度
     final double bottomPadding = MediaQuery.of(context).padding.bottom; //safty安全区高度 
-    // final double bottomPadding2 = MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight; //safty安全区高度 + 底部tabbar高度
+
+        // 当产品列表更新时，重新初始化视频控制器
+        if (viewModel.products.isNotEmpty && _videoControllers.length != viewModel.products.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _initializeVideoControllers(viewModel.products);
+          });
+        }
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           // 全屏视频背景（TikTok风格上下滑动切换）
+              if (viewModel.products.isNotEmpty)
           Positioned.fill(
-            child: _buildVideoStack(),
+                  child: _buildVideoStack(viewModel.products),
           ),
 
           // 顶部状态栏毛玻璃
@@ -250,7 +267,38 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
           // 顶部悬浮Logo（黑色半透明背景+红色发光阴影）
           const FloatingLogo(),
 
+              // 加载状态
+              if (viewModel.isLoading)
+                const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.primary,
+                  ),
+                ),
+
+              // 错误状态
+              if (viewModel.hasError)
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Error: ${viewModel.error}',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => viewModel.refresh(),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+
           // 悬浮入口
+              if (!viewModel.isLoading && !viewModel.hasError)
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
@@ -263,23 +311,24 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
                   // 新增 Checkinboard 入口
                   _CheckinboardEntry(
                     onTap: () {
-                      Navigator.pushNamed(context, '/checkinboard');
+                              Navigator.pushNamed(context, AppRoutes.checkinboard);
                     },
                   ),
+                          if (viewModel.hasProducts) ...[
                   SizedBox(
                     height: 200, // 推荐用固定高度，性能更优
                     child: PageView.builder(
                       controller: _pageController,
-                      itemCount: products.length,
+                                itemCount: viewModel.products.length,
                       physics: const PageScrollPhysics(), // 强磁吸
                       onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) {
                         return AnimatedScale(
-                          scale: _currentIndex == index ? 1.0 : 0.92,
+                                    scale: viewModel.currentIndex == index ? 1.0 : 0.92,
                           duration: const Duration(milliseconds: 300),
                           child: _ProductEntry(
-                            product: products[index],
-                            onTap: () => _onProductTap(products[index]),
+                                      product: viewModel.products[index],
+                                      onTap: () => _onProductTap(viewModel.products[index]),
                           ),
                         );
                       },
@@ -287,8 +336,8 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
                   ),
                   const SizedBox(height: 16),
                   AnimatedSmoothIndicator(
-                    activeIndex: _currentIndex,
-                    count: products.length,
+                              activeIndex: viewModel.currentIndex,
+                              count: viewModel.products.length,
                     effect: ExpandingDotsEffect(
                       dotHeight: 8,
                       dotWidth: 8,
@@ -296,13 +345,15 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
                       dotColor: Colors.white.withOpacity(0.3),
                     ),
                   ),
+                          ],
                 ],
                 ),
               ),
             ),
           ),
-          // 无入口时显示激励语
-          if (products.isEmpty)
+
+              // 无产品时显示激励语
+              if (!viewModel.isLoading && !viewModel.hasError && !viewModel.hasProducts)
             Center(
               child: Text(
                 "Stay active, stay strong!",
@@ -320,6 +371,8 @@ class _CheckinPageState extends State<CheckinPage> with SingleTickerProviderStat
             ),
         ],
       ),
+        );
+      },
     );
   }
 }
@@ -383,7 +436,7 @@ class _PowerfulTapEffectState extends State<PowerfulTapEffect> {
 }
 
 class _ProductEntry extends StatefulWidget {
-  final ProductCheckin product;
+  final CheckinProduct product;
   final VoidCallback onTap;
 
   const _ProductEntry({required this.product, required this.onTap});
@@ -477,7 +530,14 @@ class _ProductEntryState extends State<_ProductEntry> {
                           shape: BoxShape.circle,
                         ),
                         child: Center(
-                          child: Icon(Icons.fitness_center, color: AppColors.primary, size: 24),
+                          child: Icon(
+                            IconData(
+                              int.parse(widget.product.displayIcon),
+                              fontFamily: 'MaterialIcons',
+                            ),
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),

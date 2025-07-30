@@ -8,10 +8,13 @@ import '../../widgets/circle_progress_painter.dart';
 import '../../widgets/layout_bg_type.dart';
 import '../../widgets/countdown_portrait_layout.dart';
 import '../../widgets/countdown_landscape_layout.dart';
+import '../../widgets/tiktok_wheel_picker.dart';
+import 'package:camera/camera.dart';
 
 class CheckinCountdownPage extends StatefulWidget {
   final String trainingId;
-  const CheckinCountdownPage({Key? key, required this.trainingId}) : super(key: key);
+  final String? productId;
+  const CheckinCountdownPage({Key? key, required this.trainingId, this.productId}) : super(key: key);
 
   @override
   State<CheckinCountdownPage> createState() => _CheckinCountdownPageState();
@@ -20,20 +23,24 @@ class CheckinCountdownPage extends StatefulWidget {
 class _CheckinCountdownPageState extends State<CheckinCountdownPage> with TickerProviderStateMixin {
   Map<String, dynamic>? currentResult;
   int totalRounds = 1;
-  int roundDuration = 1; // 单位：分钟
+  int roundDuration = 60; // 单位：秒（修改为秒）
   int currentRound = 1;
   int countdown = 0; // 秒
   bool isStarted = false;
   bool isCounting = false;
   bool showPreCountdown = false;
-  int preCountdown = 3;
+  int preCountdown = 10;
   late AnimationController bounceController;
   late Animation<double> bounceAnim;
   late PageController pageController;
   int _lastBounceTime = 0;
   bool showResultOverlay = false;
+  bool _isSetupDialogOpen = false;
   DraggableScrollableController? _portraitController;
   DraggableScrollableController? _landscapeController;
+
+  // 新增：Timer管理
+  Timer? _preCountdownTimer;
 
   // 视频相关
   late VideoPlayerController _videoController;
@@ -41,12 +48,30 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
   bool _videoReady = false;
   LayoutBgType bgType = LayoutBgType.video;
   bool _videoFading = false;
+  CameraController? _cameraController;
+  Future<void>? _cameraInitFuture;
+  bool _cameraPermissionGranted = false; // 新增：相机权限状态
+  bool _isInitializingCamera = false; // 新增：相机初始化状态
 
   final List<Map<String, dynamic>> history = [
-    {"rank": 1, "date": "May 19, 2025", "minutes": 19, "note": ""},
-    {"rank": 2, "date": "May 13, 2025", "minutes": 18, "note": ""},
-    {"rank": 3, "date": "May 13, 2025", "minutes": 15, "note": ""},
+    {"rank": 1, "date": "May 19, 2025", "daySeconds": 1140, "seconds": 1140, "note": ""}, // 19分钟 = 1140秒
+    {"rank": 2, "date": "May 13, 2025", "daySeconds": 1080, "seconds": 1080, "note": ""}, // 18分钟 = 1080秒
+    {"rank": 3, "date": "May 11, 2025", "daySeconds": 900, "seconds": 900, "note": ""}, // 15分钟 = 900秒
   ];
+
+  // 最终结果 - 用于API请求
+  // finalResult= {
+  //   "productId": widget.productId,
+  //   "trainingId": widget.trainingId,
+  //   "totalRounds": totalRounds,
+  //   "roundDuration": roundDuration,
+  //   "date": DateTime.now().toIso8601String(),
+  //   "seconds": 0,
+  // };
+  Map<String, dynamic> finalResult = {};
+  
+  // API请求状态
+  bool _isSubmittingResult = false;
 
   @override
   void initState() {
@@ -75,8 +100,20 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
       duration: const Duration(milliseconds: 500),
       value: 1.0,
     );
-    countdown = roundDuration * 60;
+    
+    // 初始化finalResult
+    finalResult = {
+      "productId": widget.productId,
+      "trainingId": widget.trainingId,
+      "totalRounds": totalRounds,
+      "roundDuration": roundDuration,
+      "date": DateTime.now().toIso8601String(),
+      "seconds": 0
+    };
+    
+    countdown = roundDuration; // 直接使用秒，不需要乘以60
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSetupDialog());
+    // 移除页面初始化时的相机权限请求
   }
 
   @override
@@ -93,12 +130,17 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
 
   @override
   void dispose() {
+    // 取消Timer
+    _preCountdownTimer?.cancel();
+    
     bounceController.dispose();
     pageController.dispose();
     _portraitController?.dispose();
     _landscapeController?.dispose();
     _videoController.dispose();
     _videoFadeController.dispose();
+    _cameraController?.stopImageStream();
+    _cameraController?.dispose();
     super.dispose();
   }
 
@@ -113,356 +155,678 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     setState(() => _videoFading = false);
   }
 
-  void _showSetupDialog() async {
-    final orientation = MediaQuery.of(context).orientation;
-    if (orientation == Orientation.landscape) {
-      _showSetupDialogLandscape();
-      return;
+  // 新增：请求相机权限并初始化相机
+  Future<bool> _requestCameraPermissionAndInitialize() async {
+    if (_cameraPermissionGranted && _cameraController != null) {
+      return true;
     }
+
+    if (_isInitializingCamera) {
+      return false; // 正在初始化中，避免重复请求
+    }
+
+    setState(() {
+      _isInitializingCamera = true;
+    });
+
+    try {
+      // 检查可用相机
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        _showCameraErrorDialog('No cameras available on this device.');
+        return false;
+      }
+
+      // 查找前置摄像头
+      final frontCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras[0], // 如果没有前置摄像头，使用第一个
+      );
+
+      // 创建相机控制器
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      // 初始化相机（这会触发权限请求）
+      await _cameraController!.initialize();
+      
+      // 启动图像流以保持相机活跃
+      await _cameraController!.startImageStream((image) {
+        // 保持摄像头活跃
+      });
+
+      setState(() {
+        _cameraPermissionGranted = true;
+        _isInitializingCamera = false;
+      });
+
+      return true;
+    } catch (e) {
+      print('Camera initialization error: $e');
+      setState(() {
+        _isInitializingCamera = false;
+      });
+      
+      // 根据错误类型显示不同的提示
+      if (e.toString().contains('permission')) {
+        _showCameraPermissionDeniedDialog();
+      } else {
+        _showCameraErrorDialog('Failed to initialize camera. Please try again.');
+      }
+      
+      return false;
+    }
+  }
+
+  // 新增：显示相机权限被拒绝的对话框
+  void _showCameraPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Camera Permission Required'),
+        content: Text(
+          'To use the selfie background feature, please grant camera permission in your device settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // 可以在这里添加跳转到设置页面的逻辑
+            },
+            child: Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 新增：显示相机错误对话框
+  void _showCameraErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Camera Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSetupDialog() async {
+    setState(() {
+      _isSetupDialogOpen = true;
+    });
+    
     int tempRounds = totalRounds;
-    int tempMinutes = roundDuration;
-    await showModalBottomSheet(
+    int tempMinutes = roundDuration ~/ 60; // 从秒转换为分钟
+    int tempSeconds = roundDuration % 60; // 从秒转换为秒数
+    
+    final result = await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      isDismissible: true,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setStateModal) {
-            return Container(
-              padding: EdgeInsets.only(
-                left: 24, right: 24,
-                top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.95),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.10),
-                    blurRadius: 32,
-                    offset: Offset(0, -8),
+        return OrientationBuilder(
+          builder: (context, orientation) {
+            // 如果方向改变为横屏，关闭当前对话框并打开横屏对话框
+            if (orientation == Orientation.landscape) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                setState(() {
+                  _isSetupDialogOpen = false;
+                });
+                Navigator.of(context).pop();
+                _showSetupDialogLandscape();
+              });
+            }
+            
+            return StatefulBuilder(
+              builder: (context, setStateModal) {
+                final totalSeconds = tempRounds * (tempMinutes * 60 + tempSeconds);
+                final totalMinutes = totalSeconds ~/ 60;
+                final remainingSeconds = totalSeconds % 60;
+                
+                return Container(
+                  padding: EdgeInsets.only(
+                    left: 24, right: 24,
+                    top: 16,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 24,
                   ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40, height: 4,
-                    margin: EdgeInsets.only(bottom: 18),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Text(
-                    'Set Rounds & Time',
-                    style: TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1,
-                    ),
-                  ),
-                  SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _tiktokWheelPicker(
-                        label: 'Rounds',
-                        value: tempRounds,
-                        min: 1,
-                        max: 10,
-                        onChanged: (v) => setStateModal(() => tempRounds = v),
-                        color: Colors.orange,
-                      ),
-                      SizedBox(width: 32),
-                      _tiktokWheelPicker(
-                        label: 'Minutes',
-                        value: tempMinutes,
-                        min: 1,
-                        max: 60,
-                        onChanged: (v) => setStateModal(() => tempMinutes = v),
-                        color: Colors.deepPurple,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.10),
+                        blurRadius: 32,
+                        offset: Offset(0, -8),
                       ),
                     ],
                   ),
-                  SizedBox(height: 18),
-                  Text(
-                    '\t ${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
-                    style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 15),
-                  ),
-                  SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          totalRounds = tempRounds;
-                          roundDuration = tempMinutes;
-                          currentRound = 1;
-                          countdown = tempMinutes * 60;
-                        });
-                        Navigator.of(context).pop();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 40, height: 4,
+                          margin: EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                        elevation: 8,
+                        Text(
+                          'Set Rounds & Time',
+                          style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1,
+                          ),
+                                                ),
+                        SizedBox(height: 16),
+                        
+                        // 设置区域 - 轮次和时间并排
+                      Row(
+                        children: [
+                          // 轮次设置
+                          Expanded(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.orange.withOpacity(0.1), width: 1),
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    'Rounds',
+                                    style: TextStyle(
+                                      fontSize: 15, 
+                                      fontWeight: FontWeight.w600, 
+                                      color: Colors.orange.shade700,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8),
+                                  TikTokWheelPicker(
+                                    label: '',
+                                    value: tempRounds,
+                                    min: 1,
+                                    max: 10,
+                                    onChanged: (v) => setStateModal(() => tempRounds = v),
+                                    color: Colors.orange,
+                                    compact: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          
+                          SizedBox(width: 16),
+                          
+                          // 时间设置
+                          Expanded(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.deepPurple.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.deepPurple.withOpacity(0.1), width: 1),
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    'Duration',
+                                    style: TextStyle(
+                                      fontSize: 15, 
+                                      fontWeight: FontWeight.w600, 
+                                      color: Colors.deepPurple.shade700,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      // 分钟选择器
+                                      Expanded(
+                                        child: TikTokWheelPicker(
+                                          label: 'Min',
+                                          value: tempMinutes,
+                                          min: 0,
+                                          max: 60,
+                                          onChanged: (v) => setStateModal(() => tempMinutes = v),
+                                          color: Colors.deepPurple,
+                                          compact: true,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 6),
+                                        child: Text(
+                                          ':',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.deepPurple.shade400,
+                                          ),
+                                        ),
+                                      ),
+                                      // 秒选择器
+                                      Expanded(
+                                        child: TikTokWheelPicker(
+                                          label: 'Sec',
+                                          value: tempSeconds,
+                                          min: 0,
+                                          max: 59,
+                                          onChanged: (v) => setStateModal(() => tempSeconds = v),
+                                          color: Colors.deepPurple,
+                                          compact: true,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Text('OK', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                    ),
+                      
+                      SizedBox(height: 16),
+                      
+                      // 总时间显示
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.black.withOpacity(0.1), width: 1),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 20,
+                              color: Colors.black54,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              '${tempRounds} Rounds × ${tempMinutes.toString().padLeft(2, '0')}:${tempSeconds.toString().padLeft(2, '0')} = ${totalMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}',
+                              style: TextStyle(
+                                color: Colors.black87, 
+                                fontWeight: FontWeight.w600, 
+                                fontSize: 16,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      SizedBox(height: 20),
+                      
+                      // 确认按钮
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              totalRounds = tempRounds;
+                              roundDuration = tempMinutes * 60 + tempSeconds; // 转换为秒
+                              currentRound = 1;
+                              countdown = roundDuration; // 直接使用roundDuration（已经是秒）
+                              _isSetupDialogOpen = false;
+                            });
+                            Navigator.of(context).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 8,
+                          ),
+                          child: Text(
+                            'OK', 
+                            style: TextStyle(
+                              fontSize: 18, 
+                              fontWeight: FontWeight.bold, 
+                              letterSpacing: 1.2
+                            )
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                    ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+    
+    // 对话框关闭后重置状态
+    setState(() {
+      _isSetupDialogOpen = false;
+    });
+  }
+
+  void _showSetupDialogLandscape() async {
+    setState(() {
+      _isSetupDialogOpen = true;
+    });
+    
+    int tempRounds = totalRounds;
+    int tempMinutes = roundDuration ~/ 60; // 从秒转换为分钟
+    int tempSeconds = roundDuration % 60; // 从秒转换为秒数
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double dialogWidth = screenWidth > 468 ? 420 : screenWidth - 48;
+    final bool isFinalResult = showResultOverlay;
+    
+    final result = await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return OrientationBuilder(
+          builder: (context, orientation) {
+            // 如果方向改变为竖屏，关闭当前对话框并打开竖屏对话框
+            if (orientation == Orientation.portrait) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                setState(() {
+                  _isSetupDialogOpen = false;
+                });
+                Navigator.of(context).pop();
+                _showSetupDialog();
+              });
+            }
+            
+            return Center(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: dialogWidth,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.10),
+                        blurRadius: 28,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: StatefulBuilder(
+                    builder: (context, setStateModal) {
+                      final totalSeconds = tempRounds * (tempMinutes * 60 + tempSeconds);
+                      final totalMinutes = totalSeconds ~/ 60;
+                      final remainingSeconds = totalSeconds % 60;
+                      
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+                        child: Stack(
+                          children: [
+                            // 右上角关闭按钮
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: IconButton(
+                                icon: Icon(Icons.close_rounded, color: Colors.black54),
+                                onPressed: () {
+                                  setState(() {
+                                    _isSetupDialogOpen = false;
+                                  });
+                                  Navigator.of(context).pop();
+                                  if (isFinalResult) {
+                                    Navigator.of(context).maybePop();
+                                  }
+                                },
+                              ),
+                            ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(height: 2),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Text(
+                                    'Set Rounds & Time',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1),
+                                  ),
+                                ),
+                                
+                                // 设置区域 - 轮次和时间并排
+                                Row(
+                                  children: [
+                                    // 轮次设置
+                                    Expanded(
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.withOpacity(0.05),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: Colors.orange.withOpacity(0.1), width: 1),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Text(
+                                              'Rounds',
+                                              style: TextStyle(
+                                                fontSize: 13, 
+                                                fontWeight: FontWeight.w600, 
+                                                color: Colors.orange.shade700,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                            SizedBox(height: 4),
+                                            TikTokWheelPicker(
+                                              label: '',
+                                              value: tempRounds,
+                                              min: 1,
+                                              max: 10,
+                                              onChanged: (v) => setStateModal(() => tempRounds = v),
+                                              color: Colors.orange,
+                                              compact: true,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    
+                                    SizedBox(width: 12),
+                                    
+                                    // 时间设置
+                                    Expanded(
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.deepPurple.withOpacity(0.05),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: Colors.deepPurple.withOpacity(0.1), width: 1),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Text(
+                                              'Duration',
+                                              style: TextStyle(
+                                                fontSize: 13, 
+                                                fontWeight: FontWeight.w600, 
+                                                color: Colors.deepPurple.shade700,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                            SizedBox(height: 4),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                // 分钟选择器
+                                                Expanded(
+                                                  child: TikTokWheelPicker(
+                                                    label: 'Min',
+                                                    value: tempMinutes,
+                                                    min: 0,
+                                                    max: 60,
+                                                    onChanged: (v) => setStateModal(() => tempMinutes = v),
+                                                    color: Colors.deepPurple,
+                                                    compact: true,
+                                                  ),
+                                                ),
+                                                Container(
+                                                  padding: EdgeInsets.symmetric(horizontal: 4),
+                                                  child: Text(
+                                                    ':',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.deepPurple.shade400,
+                                                    ),
+                                                  ),
+                                                ),
+                                                // 秒选择器
+                                                Expanded(
+                                                  child: TikTokWheelPicker(
+                                                    label: 'Sec',
+                                                    value: tempSeconds,
+                                                    min: 0,
+                                                    max: 59,
+                                                    onChanged: (v) => setStateModal(() => tempSeconds = v),
+                                                    color: Colors.deepPurple,
+                                                    compact: true,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                
+                                SizedBox(height: 8),
+                                
+                                // 总时间显示
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.black.withOpacity(0.1), width: 1),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.timer_outlined,
+                                        size: 16,
+                                        color: Colors.black54,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        '${tempRounds} × ${tempMinutes.toString().padLeft(2, '0')}:${tempSeconds.toString().padLeft(2, '0')} = ${totalMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}',
+                                        style: TextStyle(
+                                          color: Colors.black87, 
+                                          fontWeight: FontWeight.w600, 
+                                          fontSize: 13,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                
+                                SizedBox(height: 12),
+                                
+                                // 确认按钮
+                                SizedBox(
+                                  width: 120,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        totalRounds = tempRounds;
+                                        roundDuration = tempMinutes * 60 + tempSeconds; // 转换为秒
+                                        currentRound = 1;
+                                        countdown = roundDuration; // 直接使用roundDuration（已经是秒）
+                                        _isSetupDialogOpen = false;
+                                      });
+                                      Navigator.of(context).pop();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.black,
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      elevation: 8,
+                                    ),
+                                    child: Text(
+                                      'OK', 
+                                      style: TextStyle(
+                                        fontSize: 15, 
+                                        fontWeight: FontWeight.bold, 
+                                        letterSpacing: 1.1
+                                      )
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
             );
           },
         );
       },
     );
+    
+    // 对话框关闭后重置状态
+    setState(() {
+      _isSetupDialogOpen = false;
+    });
   }
 
-  void _showSetupDialogLandscape() async {
-    int tempRounds = totalRounds;
-    int tempMinutes = roundDuration;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double dialogWidth = screenWidth > 468 ? 420 : screenWidth - 48;
-    final bool isFinalResult = showResultOverlay;
-    await showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return Center(
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: dialogWidth,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.10),
-                    blurRadius: 28,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: StatefulBuilder(
-                builder: (context, setStateModal) {
-                  return Stack(
-                    children: [
-                      // 右上角关闭按钮
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: IconButton(
-                          icon: Icon(Icons.close_rounded, color: Colors.black54),
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            if (isFinalResult) {
-                              Navigator.of(context).maybePop();
-                            }
-                          },
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(height: 4),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              'Set Rounds & Time',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1),
-                            ),
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: _tiktokWheelPicker(
-                                  label: 'Rounds',
-                                  value: tempRounds,
-                                  min: 1,
-                                  max: 10,
-                                  onChanged: (v) => setStateModal(() => tempRounds = v),
-                                  color: Colors.orange,
-                                ),
-                              ),
-                              SizedBox(width: 24),
-                              Expanded(
-                                child: _tiktokWheelPicker(
-                                  label: 'Minutes',
-                                  value: tempMinutes,
-                                  min: 1,
-                                  max: 60,
-                                  onChanged: (v) => setStateModal(() => tempMinutes = v),
-                                  color: Colors.deepPurple,
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            '\t ${tempRounds} Rounds × ${tempMinutes} min = ${tempRounds * tempMinutes} min',
-                            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 14),
-                          ),
-                          SizedBox(height: 16),
-                          SizedBox(
-                            width: 120,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                setState(() {
-                                  totalRounds = tempRounds;
-                                  roundDuration = tempMinutes;
-                                  currentRound = 1;
-                                  countdown = tempMinutes * 60;
-                                });
-                                Navigator.of(context).pop();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                elevation: 8,
-                              ),
-                              child: Text('OK', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
-  Widget _tiktokWheelPicker({
-    required String label,
-    required int value,
-    required int min,
-    required int max,
-    required ValueChanged<int> onChanged,
-    required Color color,
-  }) {
-    final controller = FixedExtentScrollController(initialItem: value - min);
-    return Column(
-      children: [
-        Text(label, style: TextStyle(fontSize: 15, color: Colors.black54, fontWeight: FontWeight.w500)),
-        SizedBox(height: 8),
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 70,
-              height: 120,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListWheelScrollView.useDelegate(
-                controller: controller,
-                itemExtent: 44,
-                diameterRatio: 1.2,
-                physics: FixedExtentScrollPhysics(),
-                onSelectedItemChanged: (i) => onChanged(i + min),
-                childDelegate: ListWheelChildBuilderDelegate(
-                  builder: (context, i) {
-                    final v = i + min;
-                    final isSelected = v == value;
-                    return AnimatedContainer(
-                      duration: Duration(milliseconds: 200),
-                      alignment: Alignment.center,
-                      decoration: isSelected
-                          ? BoxDecoration(
-                              color: color.withOpacity(0.18),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: color, width: 2),
-                            )
-                          : null,
-                      child: Text(
-                        '$v',
-                        style: TextStyle(
-                          fontSize: isSelected ? 32 : 20,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? color : Colors.black38,
-                          letterSpacing: 1.1,
-                        ),
-                      ),
-                    );
-                  },
-                  childCount: max - min + 1,
-                ),
-              ),
-            ),
-            // 顶部渐变遮罩
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 28,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.white, Colors.white.withOpacity(0.0)],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // 底部渐变遮罩
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 28,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.white, Colors.white.withOpacity(0.0)],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 
   void _startPreCountdown() {
+    // 取消之前的Timer（如果存在）
+    _preCountdownTimer?.cancel();
+    
+    countdown = roundDuration;
     setState(() {
       showPreCountdown = true;
-      preCountdown = 3;
+      preCountdown = 10;
     });
-    Timer.periodic(const Duration(seconds: 1), (timer) {
+    _preCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (preCountdown > 1) {
         setState(() => preCountdown--);
       } else {
         timer.cancel();
+        _preCountdownTimer = null; // 清空引用
         setState(() {
           showPreCountdown = false;
         });
@@ -475,12 +839,141 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     setState(() {
       isStarted = true;
       isCounting = true;
-      countdown = roundDuration * 60;
+      countdown = roundDuration; // 直接使用秒，不需要乘以60
     });
     _tick();
   }
 
-  void _insertFinalResult() {
+  // 立即显示训练结果（排名为null，等待API返回）
+  void _showImmediateResult() {
+    final now = DateTime.now();
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
+    
+    // 清空所有note
+    for (var e in history) {
+      e["note"] = "";
+    }
+    
+    final totalSeconds = totalRounds * roundDuration; // 直接使用秒
+    
+    // 立即添加结果到history，rank为null表示正在加载
+    final result = {
+      "rank": null, // 暂时为null，等待API返回
+      "date": dateStr,
+      "seconds": totalSeconds,
+      "note": "current",
+      "totalRounds": totalRounds,
+      "roundDuration": roundDuration,
+    };
+    
+    history.insert(0, result);
+    
+    // 排序并赋rank（除了当前结果）
+    history.sort((a, b) => b["seconds"].compareTo(a["seconds"]));
+    for (int i = 0; i < history.length; i++) {
+      if (history[i]["rank"] != null) { // 只更新非当前结果的rank
+        history[i]["rank"] = i + 1;
+      }
+    }
+    
+    // 把当前结果移到首位
+    final idx = history.indexWhere((e) => e["note"] == "current");
+    if (idx > 0) {
+      final current = history.removeAt(idx);
+      history.insert(0, current);
+    }
+    
+    setState(() {
+      showResultOverlay = true;
+      isCounting = false;
+    });
+    
+    // 自动收起榜单
+    Future.delayed(Duration(milliseconds: 50), () {
+      final orientation = MediaQuery.of(context).orientation;
+      final targetSize = orientation == Orientation.landscape ? 1.0 : 0.12;
+      final controller = orientation == Orientation.portrait ? _portraitController : _landscapeController;
+      controller?.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+    });
+  }
+
+  // 提交最终结果到后端
+  Future<void> _submitFinalResult() async {
+    if (_isSubmittingResult) return; // 防止重复提交
+    
+    setState(() {
+      _isSubmittingResult = true;
+    });
+
+    try {
+      final totalSeconds = totalRounds * roundDuration; // 直接使用秒
+      
+      // 更新finalResult
+      finalResult["productId"] = widget.productId;
+      finalResult["trainingId"] = widget.trainingId;
+      finalResult["totalRounds"] = totalRounds;
+      finalResult["roundDuration"] = roundDuration;
+      finalResult["seconds"] = totalSeconds;
+      finalResult["date"] = DateTime.now().toIso8601String();
+
+      
+      print('Submitting final result: $finalResult');
+      
+      // 模拟API请求
+      final apiResult = await _submitTrainingResult(finalResult);
+      
+      if (mounted) {
+        setState(() {
+          // 只更新当前结果的rank
+          final currentIdx = history.indexWhere((e) => e["note"] == "current");
+          if (currentIdx >= 0) {
+            history[currentIdx]["rank"] = apiResult["rank"];
+            history[currentIdx]["daySeconds"] = apiResult["daySeconds"];
+          }
+          
+          _isSubmittingResult = false;
+        });
+      }
+    } catch (e) {
+      print('Error submitting result: $e');
+      if (mounted) {
+        setState(() {
+          _isSubmittingResult = false;
+        });
+      }
+    }
+  }
+
+  // 模拟API请求
+  Future<Map<String, dynamic>> _submitTrainingResult(Map<String, dynamic> result) async {
+    // 模拟网络延迟
+    await Future.delayed(Duration(milliseconds: 1500));
+    
+    // 模拟API返回结果
+    final now = DateTime.now();
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
+    
+    // 模拟返回的排名数据
+    return {
+      "rank": 1, // 这里应该是从后端返回的实际排名
+      "date": dateStr,
+      "seconds": result["seconds"],
+      "note": "current",
+      "totalRounds": result["totalRounds"],
+      "roundDuration": result["roundDuration"],
+      "daySeconds": result["daySeconds"],
+    };
+  }
+
+  void _insertFinalResult( {bool isFinal = false}) {
     final now = DateTime.now();
     final months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -491,15 +984,15 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     for (var e in history) {
       e["note"] = "";
     }
-    final totalMinutes = totalRounds * roundDuration;
+    final totalSeconds = totalRounds * roundDuration; // 直接使用秒
     final result = {
       "date": dateStr,
-      "minutes": totalMinutes,
+      "seconds": totalSeconds,
       "note": "current",
     };
     history.insert(0, result);
     // 排序并赋rank
-    history.sort((a, b) => b["minutes"].compareTo(a["minutes"]));
+    history.sort((a, b) => b["seconds"].compareTo(a["seconds"]));
     for (int i = 0; i < history.length; i++) {
       history[i]["rank"] = i + 1;
     }
@@ -523,20 +1016,18 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
       _tick();
     } else {
       if (!mounted) return;
-      setState(() {
-        _insertFinalResult();
-      });
-      setState(() {
-        isCounting = false;
-        showResultOverlay = true;
-      });
-      // 自动收起榜单
-      Future.delayed(Duration(milliseconds: 50), () {
-        final orientation = MediaQuery.of(context).orientation;
-        final targetSize = orientation == Orientation.landscape ? 1.0 : 0.12;
-        final controller = orientation == Orientation.portrait ? _portraitController : _landscapeController;
-        controller?.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
-      });
+      
+      if (currentRound < totalRounds) {
+        setState(() {
+          currentRound++;
+        });
+        pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+        Future.delayed(const Duration(milliseconds: 600), _startPreCountdown);
+      } else {
+        // 所有round结束，立即显示结果，然后异步提交
+        _showImmediateResult();
+        _submitFinalResult();
+      }
     }
   }
 
@@ -574,18 +1065,129 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
   }
 
   void _onBgSwitchPressed() {
-    setState(() {
-      // 只在video和black之间切换
-      if (bgType == LayoutBgType.video) {
-        bgType = LayoutBgType.black;
-      } else {
-        bgType = LayoutBgType.video;
-      }
-    });
-    if (bgType == LayoutBgType.video && _videoReady) {
-      _videoController.play();
-      _videoFadeController.forward();
-    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white.withOpacity(0.95),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40, height: 4,
+                  margin: EdgeInsets.only(bottom: 18),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Text('Choose Background', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildBgTypeOption(
+                      icon: Icons.format_paint_rounded,
+                      label: 'Color',
+                      type: LayoutBgType.color,
+                    ),
+                    _buildBgTypeOption(
+                      icon: Icons.videocam_rounded,
+                      label: 'Video',
+                      type: LayoutBgType.video,
+                    ),
+                    _buildBgTypeOption(
+                      icon: Icons.camera_front_rounded,
+                      label: 'Selfie',
+                      type: LayoutBgType.selfie,
+                    ),
+                    _buildBgTypeOption(
+                      icon: Icons.dark_mode_rounded,
+                      label: 'Black',
+                      type: LayoutBgType.black,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBgTypeOption({
+    required IconData icon,
+    required String label,
+    required LayoutBgType type,
+  }) {
+    final bool selected = bgType == type;
+    final bool isSelfieType = type == LayoutBgType.selfie;
+    final bool isLoading = isSelfieType && _isInitializingCamera;
+    
+    return GestureDetector(
+      onTap: () async {
+        if (isSelfieType) {
+          // 对于自拍模式，先请求相机权限
+          final success = await _requestCameraPermissionAndInitialize();
+          if (!success) {
+            return; // 权限被拒绝或初始化失败，不切换模式
+          }
+        }
+        
+        Navigator.of(context).pop();
+        setState(() {
+          bgType = type;
+        });
+        if (type == LayoutBgType.video && _videoReady) {
+          _videoController.play();
+          _videoFadeController.forward();
+        }
+      },
+      child: Column(
+        children: [
+          AnimatedContainer(
+            duration: Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.all(selected ? 10 : 8),
+            decoration: BoxDecoration(
+              color: selected ? Colors.black : Colors.grey[200],
+              shape: BoxShape.circle,
+              boxShadow: selected
+                  ? [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))]
+                  : [],
+            ),
+            child: isLoading
+                ? SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        selected ? Colors.white : Colors.black54,
+                      ),
+                    ),
+                  )
+                : Icon(icon, size: 32, color: selected ? Colors.white : Colors.black54),
+          ),
+          SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              color: selected ? Colors.black : Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Color get _bgColor => isCounting
@@ -612,6 +1214,92 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     final bool isPortrait = orientation == Orientation.portrait;
     final DraggableScrollableController controller =
         isPortrait ? _portraitController! : _landscapeController!;
+    final Widget videoWidget = _videoReady
+        ? FadeTransition(
+            opacity: _videoFadeController,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _videoController.value.size.width,
+                height: _videoController.value.size.height,
+                child: VideoPlayer(_videoController),
+              ),
+            ),
+          )
+        : Container(color: Colors.black);
+
+    final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized && _cameraPermissionGranted)
+        ? LayoutBuilder(
+            builder: (context, constraints) {
+              final screenWidth = constraints.maxWidth;
+              final screenHeight = constraints.maxHeight;
+              final cameraWidth = _cameraController!.value.previewSize?.width ?? 1;
+              final cameraHeight = _cameraController!.value.previewSize?.height ?? 1;
+              
+              return Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.black,
+                child: Center(
+                  child: SizedBox(
+                    width: cameraWidth,
+                    height: cameraHeight,
+                    child: CameraPreview(_cameraController!),
+                  ),
+                ),
+              );
+            },
+          )
+        : Container(
+            width: double.infinity,
+            height: double.infinity,
+            color: Colors.black,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_isInitializingCamera) ...[
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Initializing camera...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ] else ...[
+                    Icon(
+                      Icons.camera_front_rounded,
+                      size: 64,
+                      color: Colors.white.withOpacity(0.6),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Camera not available',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Please grant camera permission',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+
     final Widget mainContent = isPortrait
         ? CountdownPortraitLayout(
             totalRounds: totalRounds,
@@ -628,6 +1316,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
             onCountPressed: _onCountPressed,
             diameter: diameter,
             formatTime: _formatTime,
+            roundDuration: roundDuration,
             showResultOverlay: showResultOverlay,
             history: history,
             draggableController: controller,
@@ -653,22 +1342,12 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
               Navigator.pop(context);
             },
             onResultSetup: _showSetupDialog,
-            roundDuration: roundDuration,
-            videoWidget: _videoReady
-                ? FadeTransition(
-                    opacity: _videoFadeController,
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: _videoController.value.size.width,
-                        height: _videoController.value.size.height,
-                        child: VideoPlayer(_videoController),
-                      ),
-                    ),
-                  )
-                : Container(color: Colors.black),
+            videoWidget: videoWidget,
+            selfieWidget: selfieWidget,
             bgType: bgType,
             onBgSwitchPressed: _onBgSwitchPressed,
+            dynamicBgColor: _dynamicBgColor,
+            isSubmittingResult: _isSubmittingResult, // 新增
           )
         : CountdownLandscapeLayout(
             totalRounds: totalRounds,
@@ -685,6 +1364,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
             onCountPressed: _onCountPressed,
             diameter: diameter,
             formatTime: _formatTime,
+            roundDuration: roundDuration,
             showResultOverlay: showResultOverlay,
             history: history,
             draggableController: controller,
@@ -710,21 +1390,11 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
               Navigator.pop(context);
             },
             onResultSetup: _showSetupDialog,
-            roundDuration: roundDuration,
-            videoWidget: _videoReady
-                ? FadeTransition(
-                    opacity: _videoFadeController,
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: _videoController.value.size.width,
-                        height: _videoController.value.size.height,
-                        child: VideoPlayer(_videoController),
-                      ),
-                    ),
-                  )
-                : Container(color: Colors.black),
+            videoWidget: videoWidget,
+            selfieWidget: selfieWidget,
             bgType: bgType,
+            dynamicBgColor: _dynamicBgColor,
+            isSubmittingResult: _isSubmittingResult, // 新增
           );
 
     return Scaffold(
@@ -827,7 +1497,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
                         width: 60,
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: Text('MINUTES', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+                          child: Text('TIME', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
                         ),
                       ),
                     ],
@@ -841,7 +1511,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
               (context, index) {
                 final e = history[index];
                 final isCurrent = e["note"] == "current";
-                final isTopThree = e["rank"] <= 3;
+                final isTopThree = e["rank"] != null && e["rank"] <= 3;
                 return Container(
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   decoration: BoxDecoration(
@@ -865,7 +1535,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
                             height: 28,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              gradient: isTopThree && !isCurrent
+                              gradient: isTopThree && !isCurrent && e["rank"] != null
                                   ? LinearGradient(
                                      colors: e["rank"] == 1
                                          ? [Color(0xFFFFF176), Color(0xFFFFA500)]
@@ -891,7 +1561,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
                                   : null,
                             ),
                             child: Text(
-                              '${e["rank"]}',
+                              e["rank"] != null ? '${e["rank"]}' : '...',
                               style: TextStyle(
                                 color: isCurrent ? Colors.white : (isTopThree ? Colors.black : Colors.white),
                                 fontWeight: FontWeight.bold,
@@ -948,12 +1618,12 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
                               ],
                             ),
                           ),
-                          // minutes展示
+                          // seconds展示 - 转换为MM:SS格式
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '${e["minutes"]}',
+                                _formatTime(e["seconds"]),
                                 style: TextStyle(
                                   color: isCurrent ? Colors.white : Colors.white,
                                   fontWeight: FontWeight.bold,
