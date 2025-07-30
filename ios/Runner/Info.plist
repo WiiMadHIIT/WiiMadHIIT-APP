@@ -46,8 +46,12 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>This app requires camera access to enable selfie video backgrounds during training and challenge sessions. No audio will be recorded.</string>
+	<string>Camera access enables selfie video backgrounds for your training sessions. Your privacy is protected - no photos or videos are saved.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app requires microphone access to enable voice detection for automatic strike counting during your workout sessions. Your voice data is processed locally and never stored or transmitted.</string>
+	<string>Microphone access enables hands-free training with automatic strike counting. Your voice data is processed locally and never shared or stored.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is not used by this app. Your privacy is protected.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Photo library access is not used by this app. Your privacy is protected.</string>
 </dict>
 </plist>
