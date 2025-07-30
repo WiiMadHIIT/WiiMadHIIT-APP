@@ -12,6 +12,7 @@ import '../../widgets/tiktok_wheel_picker.dart';
 import '../../knock_voice/real_audio_detector.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:app_settings/app_settings.dart';
 
 class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -134,6 +135,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _checkMicrophonePermissionOnInit();
     });
+    
+    // 🎯 添加权限状态监听
+    _startPermissionListener();
   }
 
   @override
@@ -153,6 +157,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 🎯 Apple-level Resource Cleanup
     // 立即停止所有动画和定时器
     _stopAllAnimationsAndTimers();
+    
+    // 🎯 停止权限监听器
+    _permissionCheckTimer?.cancel();
     
     // 🎯 Stop audio detection before disposal
     if (_audioDetectionEnabled && _audioDetector != null) {
@@ -216,6 +223,34 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     await _requestMicrophonePermissionDirectly();
   }
 
+  /// 🎯 权限状态监听
+  Timer? _permissionCheckTimer;
+  
+  void _startPermissionListener() {
+    // 每2秒检查一次权限状态
+    _permissionCheckTimer = Timer.periodic(Duration(seconds: 2), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      final status = await Permission.microphone.status;
+      if (status.isGranted) {
+        // 权限已授予，停止监听
+        timer.cancel();
+        print('✅ Permission granted, stopping listener');
+        
+        // 如果还没有初始化音频检测，则初始化
+        if (_audioDetector == null) {
+          await _initializeAudioDetection();
+          if (mounted) {
+            _showSetupDialog();
+          }
+        }
+      }
+    });
+  }
+
   /// 🍎 Apple-level Direct Microphone Permission Request
   Future<void> _requestMicrophonePermissionDirectly() async {
     try {
@@ -253,17 +288,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           _showSetupDialog();
         }
       } else {
-        // 6. 权限被拒绝，显示友好提示
+        // 6. 权限被拒绝，直接显示设置指导对话框
         print('❌ Microphone permission denied');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Voice detection unavailable, but you can still train manually'),
-              duration: Duration(seconds: 3),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          _showSetupDialog();
+          _showMicrophonePermissionRequiredDialog();
         }
       }
       
@@ -290,13 +318,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
 
 
-    /// 🍎 Apple-level Elegant Permission Dialog
+    /// 🍎 Apple-level Direct Settings Dialog
   void _showMicrophonePermissionRequiredDialog() {
     if (!mounted) return;
     
     showDialog(
       context: context,
-      barrierDismissible: true, // 允许用户关闭对话框
+      barrierDismissible: false, // 不允许关闭，强制用户选择
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
@@ -306,15 +334,15 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             Container(
               padding: EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.orange.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.mic, color: Colors.blue, size: 24),
+              child: Icon(Icons.mic_off, color: Colors.orange, size: 24),
             ),
             SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Voice Detection',
+                'Microphone Permission Required',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -329,30 +357,65 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Enable voice detection for hands-free training?',
+              'Voice detection requires microphone access. Please enable it in settings:',
               style: TextStyle(fontSize: 16, color: Colors.black87),
             ),
-            SizedBox(height: 12),
-            Text(
-              'Voice detection automatically counts your strikes by listening for sound patterns, making your training more convenient.',
-              style: TextStyle(fontSize: 14, color: Colors.black54),
-            ),
             SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.settings, color: Colors.blue, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Quick Setup:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '1. Tap "Open Settings" below\n'
+                    '2. Find "Microphone" permission\n'
+                    '3. Enable it\n'
+                    '4. Return to the app',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 12),
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withOpacity(0.2)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.security, color: Colors.green, size: 20),
+                  Icon(Icons.security, color: Colors.green, size: 16),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Your privacy is protected. Audio is processed locally and never shared.',
-                      style: TextStyle(fontSize: 13, color: Colors.green.shade700),
+                      'Audio processed locally only',
+                      style: TextStyle(fontSize: 12, color: Colors.green.shade700),
                     ),
                   ),
                 ],
@@ -364,19 +427,18 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              // 用户选择跳过，直接显示设置对话框
-              _showSetupDialog();
+              Navigator.of(context).pop(); // 返回上一页
             },
             child: Text(
-              'Skip for Now',
+              'Back',
               style: TextStyle(color: Colors.grey.shade600),
             ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              // 重新尝试权限请求
-              await _requestMicrophonePermissionDirectly();
+              // 直接跳转到应用设置页面
+              await AppSettings.openAppSettings();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
@@ -385,7 +447,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: Text('Try Again'),
+            child: Text('Open Settings'),
           ),
         ],
       ),
