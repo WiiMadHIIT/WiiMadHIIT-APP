@@ -13,6 +13,7 @@ import '../../knock_voice/real_audio_detector.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
+import 'dart:io' show Platform;
 
 class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -131,9 +132,21 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     };
     
     // 🎯 Apple-level Permission Management
-    // 在页面初始化时检查麦克风权限
+    // 在页面初始化时检查麦克风和相机权限
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _checkMicrophonePermissionOnInit();
+      if (Platform.isIOS) {
+        // iOS: 同时触发麦克风和相机权限弹窗
+        await _checkMicrophonePermissionOnInit();
+        // 延迟一点时间再触发相机权限，避免同时弹窗
+        Future.delayed(Duration(milliseconds: 500), () async {
+          if (mounted) {
+            await _requestCameraPermissionAndInitialize();
+          }
+        });
+      } else {
+        // Android: 只检查麦克风权限（相机权限在需要时再请求）
+        await _checkMicrophonePermissionOnInit();
+      }
     });
     
     // 🎯 添加权限状态监听
@@ -217,10 +230,15 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     print('All animations and timers stopped, memory cleaned up');
   }
 
-  /// 🍎 Apple-level Direct Permission Flow
+  /// 🍎 Apple-level Platform-Specific Permission Flow
   Future<void> _checkMicrophonePermissionOnInit() async {
-    // 1. 直接检查并请求麦克风权限
-    await _requestMicrophonePermissionDirectly();
+    if (Platform.isAndroid) {
+      // Android: 直接请求权限（当前工作正常）
+      await _requestMicrophonePermissionDirectly();
+    } else if (Platform.isIOS) {
+      // iOS: 通过实际调用音频API触发权限弹窗
+      await _requestMicrophonePermissionForIOS();
+    }
   }
 
   /// 🎯 权限状态监听
@@ -234,11 +252,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         return;
       }
       
-      final status = await Permission.microphone.status;
-      if (status.isGranted) {
-        // 权限已授予，停止监听
+      final micStatus = await Permission.microphone.status;
+      final cameraStatus = await Permission.camera.status;
+      
+      if (micStatus.isGranted && cameraStatus.isGranted) {
+        // 两个权限都已授予，停止监听
         timer.cancel();
-        print('✅ Permission granted, stopping listener');
+        print('✅ Both permissions granted, stopping listener');
         
         // 如果还没有初始化音频检测，则初始化
         if (_audioDetector == null) {
@@ -247,8 +267,77 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             _showSetupDialog();
           }
         }
+      } else if (micStatus.isGranted && _audioDetector == null) {
+        // 只有麦克风权限授予，初始化音频检测
+        print('✅ Microphone permission granted, initializing audio detection');
+        await _initializeAudioDetection();
+        if (mounted) {
+          _showSetupDialog();
+        }
       }
     });
+  }
+
+  /// 🍎 Apple-level iOS-Specific Permission Request
+  Future<void> _requestMicrophonePermissionForIOS() async {
+    try {
+      // 1. 检查当前权限状态
+      PermissionStatus status = await Permission.microphone.status;
+      
+      if (status.isGranted) {
+        // 权限已授予，直接初始化
+        print('✅ iOS: Microphone permission already granted');
+        await _initializeAudioDetection();
+        if (mounted) {
+          _showSetupDialog();
+        }
+        return;
+      }
+      
+      if (status.isPermanentlyDenied) {
+        // 权限被永久拒绝，显示设置指导
+        print('❌ iOS: Microphone permission permanently denied');
+        if (mounted) {
+          _showMicrophonePermissionRequiredDialog();
+        }
+        return;
+      }
+      
+      // 2. 权限未授予，通过实际调用音频API触发权限弹窗
+      print('🎯 iOS: Triggering microphone permission via audio API...');
+      
+      // 创建临时音频检测器来触发权限弹窗
+      final tempDetector = RealAudioDetector();
+      await tempDetector.initialize();
+      
+      // 尝试启动录音（这会触发iOS权限弹窗）
+      final success = await tempDetector.startListening();
+      
+      // 立即停止录音
+      await tempDetector.stopListening();
+      tempDetector.dispose();
+      
+      if (success) {
+        // 权限授予成功
+        print('✅ iOS: Microphone permission granted via audio API');
+        await _initializeAudioDetection();
+        if (mounted) {
+          _showSetupDialog();
+        }
+      } else {
+        // 权限被拒绝
+        print('❌ iOS: Microphone permission denied via audio API');
+        if (mounted) {
+          _showMicrophonePermissionRequiredDialog();
+        }
+      }
+      
+    } catch (e) {
+      print('❌ iOS: Error during microphone permission request: $e');
+      if (mounted) {
+        _showMicrophonePermissionRequiredDialog();
+      }
+    }
   }
 
   /// 🍎 Apple-level Direct Microphone Permission Request
@@ -592,6 +681,82 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
   // 新增：请求相机权限并初始化相机
   Future<bool> _requestCameraPermissionAndInitialize() async {
+    if (Platform.isIOS) {
+      // iOS: 通过实际调用相机API触发权限弹窗
+      return await _requestCameraPermissionForIOS();
+    } else {
+      // Android: 使用原有逻辑
+      return await _requestCameraPermissionForAndroid();
+    }
+  }
+
+  /// 🍎 Apple-level iOS-Specific Camera Permission Request
+  Future<bool> _requestCameraPermissionForIOS() async {
+    if (_cameraPermissionGranted && _cameraController != null) {
+      return true;
+    }
+
+    if (_isInitializingCamera) {
+      return false;
+    }
+
+    setState(() {
+      _isInitializingCamera = true;
+    });
+
+    try {
+      // 检查可用相机
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        _showCameraErrorDialog('No cameras available on this device.');
+        return false;
+      }
+
+      // 查找前置摄像头
+      final frontCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras[0],
+      );
+
+      // 创建相机控制器
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      // 初始化相机（这会触发iOS权限弹窗）
+      await _cameraController!.initialize();
+      
+      // 启动图像流以保持相机活跃
+      await _cameraController!.startImageStream((image) {
+        // 保持摄像头活跃
+      });
+
+      setState(() {
+        _cameraPermissionGranted = true;
+        _isInitializingCamera = false;
+      });
+
+      return true;
+    } catch (e) {
+      print('iOS Camera initialization error: $e');
+      setState(() {
+        _isInitializingCamera = false;
+      });
+      
+      if (e.toString().contains('permission')) {
+        _showCameraPermissionDeniedDialog();
+      } else {
+        _showCameraErrorDialog('Failed to initialize camera. Please try again.');
+      }
+      
+      return false;
+    }
+  }
+
+  /// 🍎 Apple-level Android Camera Permission Request
+  Future<bool> _requestCameraPermissionForAndroid() async {
     if (_cameraPermissionGranted && _cameraController != null) {
       return true;
     }
