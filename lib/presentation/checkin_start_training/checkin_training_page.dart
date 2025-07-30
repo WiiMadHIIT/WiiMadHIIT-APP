@@ -144,7 +144,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 延迟执行权限检查，确保页面完全加载
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         // 再延迟一点时间，确保页面稳定
-        Future.delayed(Duration(milliseconds: 100), () async {
+        Future.delayed(Duration(milliseconds: 200), () async {
           if (!mounted) return;
           
           try {
@@ -152,9 +152,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             await _checkMicrophonePermissionOnInit();
           } catch (e) {
             print('❌ Error during permission initialization: $e');
-            // 即使权限初始化失败，也要显示设置对话框
+            // 即使权限初始化失败，也要显示设置对话框，但不阻塞页面显示
             if (mounted) {
-              _showSetupDialog();
+              // 延迟显示设置对话框，避免与权限弹窗冲突
+              Future.delayed(Duration(milliseconds: 500), () {
+                if (mounted) {
+                  _showSetupDialog();
+                }
+              });
             }
           }
         });
@@ -251,12 +256,25 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
   /// 🍎 Apple-level Platform-Specific Permission Flow
   Future<void> _checkMicrophonePermissionOnInit() async {
-    if (Platform.isAndroid) {
-      // Android: 直接请求权限（当前工作正常）
-      await _requestMicrophonePermissionDirectly();
-    } else if (Platform.isIOS) {
-      // iOS: 通过实际调用音频API触发权限弹窗
-      await _requestMicrophonePermissionForIOS();
+    try {
+      if (Platform.isAndroid) {
+        // Android: 直接请求权限（当前工作正常）
+        await _requestMicrophonePermissionDirectly();
+      } else if (Platform.isIOS) {
+        // iOS: 通过实际调用音频API触发权限弹窗
+        await _requestMicrophonePermissionForIOS();
+      }
+    } catch (e) {
+      print('❌ Error in _checkMicrophonePermissionOnInit: $e');
+      // 权限检查失败时，不阻塞页面显示，让用户可以选择手动设置
+      if (mounted) {
+        // 延迟显示设置对话框，避免与权限弹窗冲突
+        Future.delayed(Duration(milliseconds: 1000), () {
+          if (mounted) {
+            _showSetupDialog();
+          }
+        });
+      }
     }
   }
 
@@ -295,44 +313,91 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   /// 🍎 Apple-level iOS-Specific Permission Request
   Future<void> _requestMicrophonePermissionForIOS() async {
     try {
-      // 1. 检查当前权限状态
+      // 1. 检查麦克风权限状态
       PermissionStatus status = await Permission.microphone.status;
 
       if (status.isGranted) {
-        // 已授权，安全初始化音频检测
+        // 权限已授予，安全初始化音频检测
+        print("✅ iOS: 麦克风权限已授予");
         await _initializeAudioDetection();
         return;
       }
 
-      if (status.isPermanentlyDenied) {
-        // 永久拒绝，弹出去设置的对话框
-        if (mounted) _showMicrophonePermissionRequiredDialog();
-        return;
-      }
-
-      // 2. 权限未授权，尝试通过实际调用音频API触发系统弹窗
-      try {
-        status = await Permission.microphone.request();
-      } catch (e) {
-        // 兜底保护
-        print('❌ Error requesting microphone permission: '
-            '[31m$e[0m');
-        if (mounted) _showMicrophonePermissionRequiredDialog();
-        return;
-      }
-
-      if (status.isGranted) {
-        // 授权后再初始化音频检测
-        await _initializeAudioDetection();
-      } else if (status.isPermanentlyDenied) {
-        if (mounted) _showMicrophonePermissionRequiredDialog();
-      } else {
-        // 拒绝但未永久拒绝，弹出友好提示
-        if (mounted) _showMicrophonePermissionRequiredDialog();
+      // 2. 权限被拒绝或永久拒绝，请求权限
+      if (status.isDenied || status.isPermanentlyDenied) {
+        print("🎯 iOS: 请求麦克风权限...");
+        
+        try {
+          PermissionStatus newStatus = await Permission.microphone.request();
+          
+          if (newStatus.isGranted) {
+            // 权限授予成功
+            print("✅ iOS: 麦克风权限已授予");
+            await _initializeAudioDetection();
+          } else if (newStatus.isPermanentlyDenied) {
+            // 用户永久拒绝权限，提示用户去设置中开启
+            print("❌ iOS: 麦克风权限被永久拒绝");
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("请在设置中启用麦克风权限"),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 4),
+                  action: SnackBarAction(
+                    label: "设置",
+                    textColor: Colors.white,
+                    onPressed: () async {
+                      await AppSettings.openAppSettings();
+                    },
+                  ),
+                ),
+              );
+              // 同时显示详细对话框
+              _showMicrophonePermissionRequiredDialog();
+            }
+          } else {
+            // 权限被拒绝但未永久拒绝
+            print("❌ iOS: 麦克风权限被拒绝");
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("麦克风权限被拒绝，部分功能可能无法使用"),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+              // 显示设置对话框
+              _showMicrophonePermissionRequiredDialog();
+            }
+          }
+        } catch (e) {
+          // 请求权限时出现异常
+          print('❌ iOS: 请求麦克风权限时出错: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("麦克风权限请求失败，请稍后重试"),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+            _showMicrophonePermissionRequiredDialog();
+          }
+        }
       }
     } catch (e) {
-      print('❌ iOS: Error during microphone permission request: $e');
-      if (mounted) _showMicrophonePermissionRequiredDialog();
+      // 整体异常处理
+      print('❌ iOS: 麦克风权限处理过程中出错: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("麦克风权限检查失败，请检查设备设置"),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        _showMicrophonePermissionRequiredDialog();
+      }
     }
   }
 
