@@ -148,15 +148,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           if (!mounted) return;
           
           try {
-            if (Platform.isIOS) {
-              // iOS: 只检查麦克风权限，相机权限在需要时再请求
-              print('🎯 iOS: Starting permission check...');
-              await _checkMicrophonePermissionOnInit();
-            } else {
-              // Android: 只检查麦克风权限（相机权限在需要时再请求）
-              print('🎯 Android: Starting permission check...');
-              await _checkMicrophonePermissionOnInit();
-            }
+            print('🎯 Starting permission check...');
+            await _checkMicrophonePermissionOnInit();
           } catch (e) {
             print('❌ Error during permission initialization: $e');
             // 即使权限初始化失败，也要显示设置对话框
@@ -308,7 +301,30 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       if (status.isGranted) {
         // 权限已授予，直接初始化
         print('✅ iOS: Microphone permission already granted');
-        await _initializeAudioDetection();
+        // 直接初始化音频检测器，不需要重新请求权限
+        _audioDetector ??= RealAudioDetector();
+        
+        // 设置检测回调
+        _audioDetector!.onStrikeDetected = () {
+          print('🎯 Strike detected! Triggering count...');
+          if (isCounting && mounted) {
+            _onCountPressed();
+          }
+        };
+        
+        _audioDetector!.onError = (error) {
+          print('Audio detection error: $error');
+        };
+        
+        _audioDetector!.onStatusUpdate = (status) {
+          print('Audio detection status: $status');
+        };
+        
+        await _audioDetector!.initialize();
+        setState(() {
+          _audioDetectionEnabled = true;
+          _isInitializingAudioDetection = false;
+        });
         if (mounted) {
           _showSetupDialog();
         }
@@ -327,35 +343,41 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 2. 权限未授予，通过实际调用音频API触发权限弹窗
       print('🎯 iOS: Triggering microphone permission via audio API...');
       
-      try {
-        // 创建临时音频检测器来触发权限弹窗
-        final tempDetector = RealAudioDetector();
-        await tempDetector.initialize();
-        
-        // 尝试启动录音（这会触发iOS权限弹窗）
-        final success = await tempDetector.startListening();
-        
-        // 立即停止录音
-        await tempDetector.stopListening();
-        tempDetector.dispose();
-        
-        if (success) {
-          // 权限授予成功
-          print('✅ iOS: Microphone permission granted via audio API');
-          await _initializeAudioDetection();
-          if (mounted) {
-            _showSetupDialog();
-          }
-        } else {
-          // 权限被拒绝
-          print('❌ iOS: Microphone permission denied via audio API');
-          if (mounted) {
-            _showMicrophonePermissionRequiredDialog();
-          }
+      // 参考相机权限的成功实现，直接初始化音频检测器
+      _audioDetector ??= RealAudioDetector();
+      
+      // 设置检测回调
+      _audioDetector!.onStrikeDetected = () {
+        print('🎯 Strike detected! Triggering count...');
+        if (isCounting && mounted) {
+          _onCountPressed();
         }
-      } catch (audioError) {
-        print('❌ iOS: Audio API error: $audioError');
-        // 音频API失败，直接显示设置指导
+      };
+      
+      _audioDetector!.onError = (error) {
+        print('Audio detection error: $error');
+      };
+      
+      _audioDetector!.onStatusUpdate = (status) {
+        print('Audio detection status: $status');
+      };
+      
+      // 初始化音频检测器（这会触发iOS权限弹窗）
+      final initSuccess = await _audioDetector!.initialize();
+      
+      if (initSuccess) {
+        // 权限授予成功
+        print('✅ iOS: Microphone permission granted via audio API');
+        setState(() {
+          _audioDetectionEnabled = true;
+          _isInitializingAudioDetection = false;
+        });
+        if (mounted) {
+          _showSetupDialog();
+        }
+      } else {
+        // 权限被拒绝
+        print('❌ iOS: Microphone permission denied via audio API');
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
         }
@@ -427,14 +449,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       }
     }
   }
-
-
-
-
-
-
-
-
 
     /// 🍎 Apple-level Direct Settings Dialog
   void _showMicrophonePermissionRequiredDialog() {
