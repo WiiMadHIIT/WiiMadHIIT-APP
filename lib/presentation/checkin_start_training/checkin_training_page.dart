@@ -1260,7 +1260,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   // 立即显示训练结果（排名为null，等待API返回）
-  void _showImmediateResult() {
+  Future<void> _showImmediateResult() async {
     // 找出最大counts的round
     int maxCounts = 0;
     for (var round in tmpResult) {
@@ -1458,7 +1458,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         Future.delayed(const Duration(milliseconds: 600), _startPreCountdown);
       } else {
         // 所有round结束，立即显示结果，然后异步提交
-        _showImmediateResult();
+        await _showImmediateResult();
         _submitFinalResult();
       }
     }
