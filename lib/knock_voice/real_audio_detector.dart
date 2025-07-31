@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Real Audio Detector for Voice Strike Detection
-/// Uses flutter_sound for stable audio recording
+/// Uses flutter_sound onProgress for real-time amplitude detection
 class RealAudioDetector {
   // State management
   bool _isInitialized = false;
@@ -21,16 +20,17 @@ class RealAudioDetector {
   Function(String)? onError;
   Function(String)? onStatusUpdate;
   
-  // Audio processing
-  Timer? _processingTimer;
-  List<double> _audioBuffer = [];
-  static const int _bufferSize = 512; // Smaller buffer for faster response
-  static const double _sampleRate = 44100.0;
+  // Real-time amplitude detection
+  StreamSubscription? _amplitudeSubscription;
+  double _currentDb = 0.0; // 当前分贝值
   
   // Strike detection parameters
-  static const double _strikeThreshold = 0.12; // Adjusted for simulated amplitude
-  static const int _minStrikeInterval = 1000; // Longer interval for simulated detection
-  int _lastStrikeTime = 0;
+  static const double _dbThreshold = 70.0; // 分贝阈值（可调整）
+  static const int _minStrikeInterval = 200; // 最小击打间隔（毫秒）
+  DateTime? _lastStrikeTime;
+  
+  // Hit counter
+  int _hitCount = 0;
   
   /// Initialize detector with microphone permission
   Future<bool> initialize() async {
@@ -58,7 +58,7 @@ class RealAudioDetector {
     }
   }
   
-  /// Start listening to microphone input
+  /// Start listening to microphone input with real-time amplitude detection
   Future<bool> startListening() async {
     if (!_isInitialized) {
       _handleError('Real audio detector not initialized');
@@ -86,18 +86,19 @@ class RealAudioDetector {
       // Start recording with flutter_sound
       // This will automatically request microphone permission if needed
       try {
-        // Use more conservative settings for iOS compatibility
+        // Use PCM codec for better amplitude detection
         await _recorder.startRecorder(
           toFile: recordingPath,
-          codec: Codec.aacADTS, // More compatible codec for iOS
-          sampleRate: 22050,    // Lower sample rate for better compatibility
+          codec: Codec.pcm16, // PCM for better amplitude detection
+          sampleRate: 44100,  // Higher sample rate for better quality
           numChannels: 1,
+          bufferSize: 512,    // Smaller buffer for lower latency
         );
-        print('🎯 Recording started successfully with AAC codec');
+        print('🎯 Recording started successfully with PCM codec');
       } catch (e) {
-        print('❌ Failed to start recording with AAC: $e');
+        print('❌ Failed to start recording with PCM: $e');
         try {
-          // Try with default settings if the above fails
+          // Fallback to default settings
           await _recorder.startRecorder(
             toFile: recordingPath,
           );
@@ -109,15 +110,14 @@ class RealAudioDetector {
       }
       
       _isListening = true;
-      _audioBuffer.clear();
       _updateStatus('Started listening to microphone');
       
-      // Start processing audio data
-      _processingTimer = Timer.periodic(const Duration(milliseconds: 10), (timer) {
-        _processAudioData();
+      // 🎯 订阅实时振幅数据
+      _amplitudeSubscription = _recorder.onProgress!.listen((e) {
+        _processAmplitudeData(e);
       });
       
-      print('🎯 Real audio detection started successfully');
+      print('🎯 Real-time amplitude detection started successfully');
       return true;
     } catch (e) {
       print('❌ Failed to start recording: $e');
@@ -131,8 +131,9 @@ class RealAudioDetector {
     if (!_isListening) return;
     
     try {
-      _processingTimer?.cancel();
-      _processingTimer = null;
+      // 取消振幅订阅
+      await _amplitudeSubscription?.cancel();
+      _amplitudeSubscription = null;
       
       // Only stop if actually recording
       if (_recorder.isRecording) {
@@ -154,67 +155,55 @@ class RealAudioDetector {
       }
       
       _isListening = false;
-      _audioBuffer.clear();
       _updateStatus('Stopped listening to microphone');
       
-      print('🎯 Real audio detection stopped');
+      print('🎯 Real-time amplitude detection stopped');
     } catch (e) {
       _handleError('Failed to stop real audio detection: $e');
     }
   }
   
-  /// Process audio data for strike detection
-  void _processAudioData() async {
+  /// 🎯 处理实时振幅数据
+  void _processAmplitudeData(RecordingDisposition e) {
     try {
-      // Simulate amplitude detection for now
-      // flutter_sound doesn't provide direct amplitude access
-      // We'll use a simulated approach that responds to recording state
-      final isRecording = _recorder.isRecording;
-      if (isRecording) {
-        // Simulate amplitude based on time and some randomness
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final baseAmplitude = 0.05 + (sin(now / 1000.0) * 0.1).abs();
-        final randomFactor = Random().nextDouble() * 0.1;
-        final normalizedAmplitude = baseAmplitude + randomFactor;
-        
-        // Add to buffer
-        _audioBuffer.add(normalizedAmplitude);
-        
-        // Process buffer when full
-        if (_audioBuffer.length >= _bufferSize) {
-          _analyzeAudioBuffer();
-          _audioBuffer.clear();
-        }
-        
-        // Debug: Log amplitude occasionally
-        if (_audioBuffer.length % 50 == 0) {
-          print('🎤 Current amplitude: ${normalizedAmplitude.toStringAsFixed(3)}');
-        }
+      // 获取当前分贝值
+      _currentDb = e.decibels ?? 0.0;
+      
+      // 检测击打声音（高振幅脉冲）
+      _checkStrikeFromAmplitude(_currentDb);
+      
+      // 调试：偶尔记录分贝值
+      if (_hitCount % 5 == 0) { // 每5次击打记录一次
+        print('🎤 Current dB: ${_currentDb.toStringAsFixed(1)} dB');
       }
+      
     } catch (e) {
-      // Ignore processing errors to avoid spam
+      print('⚠️ Amplitude processing error: $e');
     }
   }
   
-  /// Analyze audio buffer for strike detection
-  void _analyzeAudioBuffer() {
-    try {
-      // Calculate RMS (Root Mean Square) energy
-      double sum = 0;
-      for (double sample in _audioBuffer) {
-        sum += sample * sample;
-      }
-      final rms = sqrt(sum / _audioBuffer.length);
-      
-      // Check for strike (high energy spike)
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (rms > _strikeThreshold && (now - _lastStrikeTime) > _minStrikeInterval) {
+  /// 🎯 基于分贝值检测击打声音
+  void _checkStrikeFromAmplitude(double db) {
+    final now = DateTime.now();
+    
+    // 检查分贝值是否超过阈值
+    if (db > _dbThreshold) {
+      // 检查时间间隔
+      if (_lastStrikeTime == null || 
+          now.difference(_lastStrikeTime!).inMilliseconds > _minStrikeInterval) {
+        
         _lastStrikeTime = now;
-        print('🎯 Real strike detected! RMS: ${rms.toStringAsFixed(3)}');
+        _hitCount++;
+        
+        print('🎯 STRIKE DETECTED! dB: ${db.toStringAsFixed(1)}, Count: $_hitCount, Time: ${now.toString()}');
+        
+        // 触发击打检测回调
         onStrikeDetected?.call();
+      } else {
+        // 记录被忽略的检测（时间间隔太短）
+        final timeSinceLast = now.difference(_lastStrikeTime!).inMilliseconds;
+        print('⚠️ Strike ignored (too soon): dB ${db.toStringAsFixed(1)}, Time since last: ${timeSinceLast}ms');
       }
-    } catch (e) {
-      // Ignore analysis errors
     }
   }
   
@@ -223,6 +212,19 @@ class RealAudioDetector {
   
   /// Get initialization status
   bool get isInitialized => _isInitialized;
+  
+  /// Get current decibel level
+  double get currentDb => _currentDb;
+  
+  /// Get hit count
+  int get hitCount => _hitCount;
+  
+  /// Reset hit count
+  void resetHitCount() {
+    _hitCount = 0;
+    _lastStrikeTime = null;
+    print('🎯 Hit count reset to 0');
+  }
   
   /// Update status
   void _updateStatus(String status) {
@@ -238,7 +240,9 @@ class RealAudioDetector {
   void dispose() {
     try {
       stopListening();
+      _amplitudeSubscription?.cancel();
       _recorder.closeRecorder();
+      print('🎯 Real audio detector disposed');
     } catch (e) {
       _handleError('Error disposing real audio detector: $e');
     }
