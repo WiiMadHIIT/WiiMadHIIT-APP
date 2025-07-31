@@ -377,13 +377,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       }
 
       // 4. 处理权限被系统限制的情况
-      // if (status.isRestricted) {
-      //   print("❌ iOS: 麦克风权限被系统限制");
-      //   if (mounted) {
-      //     _showRestrictedDialog();
-      //   }
-      //   return;
-      // }
+      if (status.isRestricted) {
+        print("❌ iOS: 麦克风权限被系统限制");
+        if (mounted) {
+          _showRestrictedDialog();
+        }
+        return;
+      }
 
       // 5. 处理其他情况（包括 isDenied）- 直接尝试触发系统权限弹窗
       print("🎯 iOS: 直接尝试触发系统权限弹窗...");
@@ -392,9 +392,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     } catch (e) {
       // 整体异常处理
       print('❌ iOS: 麦克风权限处理过程中出错: $e');
-      // if (mounted) {
-      //   _showPermissionErrorDialog();
-      // }
+      if (mounted) {
+        _showPermissionErrorDialog();
+      }
     }
   }
 
