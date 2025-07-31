@@ -48,7 +48,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access enables selfie video backgrounds for your training sessions. Your privacy is protected - no photos or videos are saved.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Microphone access enables hands-free training with automatic strike counting. Your voice data is processed locally and never shared or stored.</string>
+	<string>We need microphone access to analyze audio in real-time.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Photo library access is not used by this app. Your privacy is protected.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
