@@ -336,6 +336,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   /// 参考 audio_session 最佳实践：https://github.com/ryanheise/audio_session
   Future<void> _requestMicrophonePermissionForIOS() async {
     try {
+      print("🎯 iOS: 开始麦克风权限请求流程...");
+      
       // 1. 首先配置音频会话（audio_session 最佳实践）
       print("🎯 iOS: 配置音频会话...");
       final session = await AudioSession.instance;
@@ -368,50 +370,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
       // 3. 处理权限被拒绝的情况 - 这是首次请求权限
       if (status.isDenied) {
-        print("🎯 iOS: 首次请求麦克风权限，尝试通过实际录音操作触发权限弹窗...");
+        print("🎯 iOS: 检测到首次请求麦克风权限，开始触发系统权限弹窗...");
         
-        try {
-          // 参考 flutter_sound 的做法：通过实际调用录音 API 来触发权限弹窗
-          await _triggerMicrophonePermissionViaRecording();
-          
-          // 等待一小段时间让用户响应权限弹窗
-          await Future.delayed(Duration(milliseconds: 500));
-          
-          // 再次检查权限状态
-          PermissionStatus newStatus = await Permission.microphone.status;
-          print("🎯 iOS: 权限请求后状态: $newStatus");
-          
-          if (newStatus.isGranted) {
-            // 权限授予成功
-            print("✅ iOS: 麦克风权限已授予，开始初始化音频检测");
-            await _initializeAudioDetection();
-          } else if (newStatus.isPermanentlyDenied) {
-            // 用户永久拒绝权限
-            print("❌ iOS: 麦克风权限被永久拒绝");
-            if (mounted) {
-              _showPermanentlyDeniedDialog();
-            }
-          } else if (newStatus.isDenied) {
-            // 用户拒绝权限但未永久拒绝
-            print("❌ iOS: 麦克风权限被拒绝");
-            if (mounted) {
-              _showPermissionDeniedDialog();
-            }
-          } else {
-            // 其他状态
-            print("⚠️ iOS: 权限状态未知: $newStatus");
-            if (mounted) {
-              _showPermissionErrorDialog();
-            }
-          }
-        } catch (e) {
-          // 请求权限时出现异常
-          print('❌ iOS: 请求麦克风权限时出错: $e');
-          if (mounted) {
-            _showPermissionErrorDialog();
-          }
-        }
-        return; // 重要：处理完 isDenied 后直接返回
+        // 直接尝试触发权限弹窗，不预先检查状态
+        await _triggerSystemPermissionDialog();
+        return;
       }
 
       // 4. 处理权限被永久拒绝的情况
@@ -420,7 +383,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         if (mounted) {
           _showPermanentlyDeniedDialog();
         }
-        return; // 重要：处理完 isPermanentlyDenied 后直接返回
+        return;
       }
 
       // 5. 处理其他权限状态
@@ -429,14 +392,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         if (mounted) {
           _showRestrictedDialog();
         }
-        return; // 重要：处理完 isRestricted 后直接返回
+        return;
       }
 
-      // 6. 处理未知状态
-      print("⚠️ iOS: 未知的权限状态: $status");
-      if (mounted) {
-        _showPermissionErrorDialog();
-      }
+      // 6. 处理未知状态 - 尝试触发权限弹窗
+      print("⚠️ iOS: 未知的权限状态: $status，尝试触发权限弹窗...");
+      await _triggerSystemPermissionDialog();
 
     } catch (e) {
       // 整体异常处理
@@ -447,27 +408,99 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     }
   }
 
-  /// 🎯 通过实际录音操作触发麦克风权限弹窗（参考 flutter_sound 最佳实践）
-  Future<void> _triggerMicrophonePermissionViaRecording() async {
+  /// 🎯 触发系统权限弹窗的核心方法
+  Future<void> _triggerSystemPermissionDialog() async {
     try {
-      print("🎯 iOS: 尝试通过录音操作触发权限弹窗...");
+      print("🎯 iOS: 开始触发系统权限弹窗...");
       
-      // 方法1：尝试通过 flutter_sound 触发权限弹窗
-      bool flutterSoundSuccess = await _tryFlutterSoundPermissionTrigger();
+      // 方法1：使用 flutter_sound 触发
+      print("🎯 iOS: 尝试方法1 - flutter_sound 触发...");
+      bool method1Success = await _tryFlutterSoundPermissionTrigger();
       
-      if (!flutterSoundSuccess) {
-        // 方法2：如果 flutter_sound 失败，尝试直接请求权限
-        print("🎯 iOS: flutter_sound 方法失败，尝试直接请求权限...");
-        await _tryDirectPermissionRequest();
+      if (method1Success) {
+        print("✅ iOS: flutter_sound 方法成功，等待用户响应...");
+        await _waitForUserResponse();
+        return;
+      }
+      
+      // 方法2：直接请求权限
+      print("🎯 iOS: 尝试方法2 - 直接请求权限...");
+      bool method2Success = await _tryDirectPermissionRequest();
+      
+      if (method2Success) {
+        print("✅ iOS: 直接请求方法成功，等待用户响应...");
+        await _waitForUserResponse();
+        return;
+      }
+      
+      // 方法3：通过 audio_session 激活触发
+      print("🎯 iOS: 尝试方法3 - audio_session 激活触发...");
+      bool method3Success = await _tryAudioSessionActivationTrigger();
+      
+      if (method3Success) {
+        print("✅ iOS: audio_session 激活方法成功，等待用户响应...");
+        await _waitForUserResponse();
+        return;
+      }
+      
+      // 所有方法都失败
+      print("❌ iOS: 所有权限触发方法都失败");
+      if (mounted) {
+        _showPermissionErrorDialog();
       }
       
     } catch (e) {
-      print("❌ iOS: 触发录音权限弹窗时出错: $e");
-      // 最后的回退方案
-      print("🎯 iOS: 使用最后的回退方案...");
-      await _tryDirectPermissionRequest();
+      print("❌ iOS: 触发系统权限弹窗时出错: $e");
+      if (mounted) {
+        _showPermissionErrorDialog();
+      }
     }
   }
+
+  /// 🎯 等待用户响应权限弹窗
+  Future<void> _waitForUserResponse() async {
+    try {
+      print("🎯 iOS: 等待用户响应权限弹窗...");
+      
+      // 等待用户响应权限弹窗
+      await Future.delayed(Duration(milliseconds: 1000));
+      
+      // 检查权限状态
+      PermissionStatus newStatus = await Permission.microphone.status;
+      print("🎯 iOS: 用户响应后权限状态: $newStatus");
+      
+      if (newStatus.isGranted) {
+        // 权限授予成功
+        print("✅ iOS: 用户授予了麦克风权限，开始初始化音频检测");
+        await _initializeAudioDetection();
+      } else if (newStatus.isPermanentlyDenied) {
+        // 用户永久拒绝权限
+        print("❌ iOS: 用户永久拒绝了麦克风权限");
+        if (mounted) {
+          _showPermanentlyDeniedDialog();
+        }
+      } else if (newStatus.isDenied) {
+        // 用户拒绝权限但未永久拒绝
+        print("❌ iOS: 用户拒绝了麦克风权限");
+        if (mounted) {
+          _showPermissionDeniedDialog();
+        }
+      } else {
+        // 其他状态
+        print("⚠️ iOS: 用户响应后权限状态未知: $newStatus");
+        if (mounted) {
+          _showPermissionErrorDialog();
+        }
+      }
+    } catch (e) {
+      print("❌ iOS: 等待用户响应时出错: $e");
+      if (mounted) {
+        _showPermissionErrorDialog();
+      }
+    }
+  }
+
+
 
   /// 🎯 尝试通过 flutter_sound 触发权限弹窗
   Future<bool> _tryFlutterSoundPermissionTrigger() async {
@@ -482,13 +515,18 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       print("✅ iOS: 录音器打开成功，权限弹窗应该已触发");
       
       // 等待一小段时间让权限弹窗显示
-      await Future.delayed(Duration(milliseconds: 200));
+      await Future.delayed(Duration(milliseconds: 300));
       
       print("🎯 iOS: 关闭临时录音器...");
       await tempRecorder!.closeRecorder();
       print("✅ iOS: 临时录音器已关闭");
       
-      return true;
+      // 检查权限状态是否发生变化
+      PermissionStatus status = await Permission.microphone.status;
+      print("🎯 iOS: flutter_sound 操作后权限状态: $status");
+      
+      // 如果状态不是 denied，说明权限弹窗被触发了
+      return status != PermissionStatus.denied;
       
     } catch (e) {
       print("⚠️ iOS: FlutterSoundRecorder 操作异常: $e");
@@ -506,13 +544,42 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   /// 🎯 尝试直接请求权限
-  Future<void> _tryDirectPermissionRequest() async {
+  Future<bool> _tryDirectPermissionRequest() async {
     try {
       print("🎯 iOS: 直接请求麦克风权限...");
       PermissionStatus status = await Permission.microphone.request();
       print("🎯 iOS: 直接权限请求结果: $status");
+      
+      // 如果状态发生变化，说明权限弹窗被触发了
+      return status != PermissionStatus.denied;
     } catch (e) {
       print("❌ iOS: 直接权限请求失败: $e");
+      return false;
+    }
+  }
+
+  /// 🎯 尝试通过 audio_session 激活触发权限弹窗
+  Future<bool> _tryAudioSessionActivationTrigger() async {
+    try {
+      print("🎯 iOS: 尝试通过 audio_session 激活触发权限弹窗...");
+      
+      final session = await AudioSession.instance;
+      
+      // 尝试激活音频会话，这可能会触发权限弹窗
+      bool activated = await session.setActive(true);
+      print("🎯 iOS: audio_session 激活结果: $activated");
+      
+      // 等待一小段时间
+      await Future.delayed(Duration(milliseconds: 300));
+      
+      // 检查权限状态是否发生变化
+      PermissionStatus status = await Permission.microphone.status;
+      print("🎯 iOS: audio_session 激活后权限状态: $status");
+      
+      return activated || status != PermissionStatus.denied;
+    } catch (e) {
+      print("❌ iOS: audio_session 激活触发失败: $e");
+      return false;
     }
   }
 
