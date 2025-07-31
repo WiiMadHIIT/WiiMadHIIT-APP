@@ -158,8 +158,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             if (mounted) {
               // 延迟显示设置对话框，避免与权限弹窗冲突
               Future.delayed(Duration(milliseconds: 1000), () {
-                if (mounted) {
-                  _showSetupDialog();
+            if (mounted) {
+              _showSetupDialog();
                 }
               });
             }
@@ -270,14 +270,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     try {
       print('🎯 Platform-specific permission check starting...');
       
-      if (Platform.isAndroid) {
-        // Android: 直接请求权限（当前工作正常）
+    if (Platform.isAndroid) {
+      // Android: 直接请求权限（当前工作正常）
         print('🎯 Android platform detected');
-        await _requestMicrophonePermissionDirectly();
-      } else if (Platform.isIOS) {
-        // iOS: 通过实际调用音频API触发权限弹窗
+      await _requestMicrophonePermissionDirectly();
+    } else if (Platform.isIOS) {
+      // iOS: 通过实际调用音频API触发权限弹窗
         print('🎯 iOS platform detected');
-        await _requestMicrophonePermissionForIOS();
+      await _requestMicrophonePermissionForIOS();
       } else {
         // 其他平台
         print('🎯 Other platform detected, using default permission request');
@@ -359,7 +359,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 2. 检查麦克风权限状态
       PermissionStatus status = await Permission.microphone.status;
       print("🎯 iOS: 当前麦克风权限状态: $status");
-
+      
       if (status.isGranted) {
         // 权限已授予，安全初始化音频检测
         print("✅ iOS: 麦克风权限已授予，开始初始化音频检测");
@@ -384,15 +384,15 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         }
         return;
       }
-
+      
       // 5. 处理其他情况（包括 isDenied）- 直接尝试触发系统权限弹窗
       print("🎯 iOS: 直接尝试触发系统权限弹窗...");
-      // await _triggerSystemPermissionDialogDirectly();
+      await _triggerSystemPermissionDialogDirectly();
 
     } catch (e) {
       // 整体异常处理
       print('❌ iOS: 麦克风权限处理过程中出错: $e');
-      if (mounted) {
+        if (mounted) {
         _showPermissionErrorDialog();
       }
     }
@@ -589,23 +589,56 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         title: Row(
           children: [
             Container(
-              padding: EdgeInsets.all(6),
+              padding: EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(Icons.mic_off, color: Colors.orange, size: 18),
+              child: Icon(Icons.mic_off, color: Colors.orange, size: 20),
             ),
-            SizedBox(width: 10),
-            Text(
-              'Microphone Required',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Microphone Access',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
             ),
           ],
         ),
-        content: Text(
-          'This training activity requires microphone access for voice detection. Please enable it in Settings to continue.',
-          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Voice detection requires microphone permission. Please enable it in Settings.',
+              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.15)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.security, color: Colors.blue, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Audio processed locally only',
+                      style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -615,7 +648,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             },
             child: Text(
               'Cancel',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
             ),
           ),
           ElevatedButton(
@@ -663,13 +696,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             ),
             SizedBox(width: 10),
             Text(
-              'Microphone Required',
+              'Permission Denied',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
           ],
         ),
         content: Text(
-          'This training activity requires microphone access for voice detection. Please enable it in Settings to continue.',
+          'Voice detection requires microphone access. Please enable it in Settings to use this feature.',
           style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
         ),
         actions: [
@@ -711,7 +744,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   void _showRestrictedDialog() {
     showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -734,17 +766,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           ],
         ),
         content: Text(
-          'This training activity requires microphone access, but it\'s restricted by system settings. Please check your device settings or contact your administrator.',
+          'Microphone access is restricted by system settings. Please check your device settings or contact your administrator.',
           style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 返回上一页
-            },
+            onPressed: () => Navigator.of(context).pop(),
             child: Text(
-              'Cancel',
+              'OK',
               style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
             ),
           ),
@@ -774,14 +803,41 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             ),
             SizedBox(width: 10),
             Text(
-              'Microphone Required',
+              'Voice Detection',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-        content: Text(
-          'This training activity requires microphone access for voice detection. Please enable it in Settings to continue.',
-          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Voice detection requires microphone access. Please enable it in Settings to use this feature.',
+              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
+            ),
+            SizedBox(height: 10),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.blue.withOpacity(0.15)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.security, color: Colors.blue, size: 14),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Audio processed locally only',
+                      style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -822,7 +878,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   void _showPermissionErrorDialog() {
     showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -839,23 +894,20 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             ),
             SizedBox(width: 10),
             Text(
-              'Permission Error',
+              'Check Failed',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
           ],
         ),
         content: Text(
-          'This training activity requires microphone access, but we couldn\'t check the permission. Please restart the app or check your device settings.',
+          'Unable to check microphone permission. You can still train manually or restart the app.',
           style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 返回上一页
-            },
+            onPressed: () => Navigator.of(context).pop(),
             child: Text(
-              'Cancel',
+              'OK',
               style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
             ),
           ),
