@@ -332,13 +332,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   /// 🍎 Apple-level iOS-Specific Permission Request
-  /// 参考 flutter_sound 最佳实践：https://www.jianshu.com/p/94f406f49215
-  /// 参考 audio_session 最佳实践：https://github.com/ryanheise/audio_session
+  /// 重新设计的优雅权限处理方案
   Future<void> _requestMicrophonePermissionForIOS() async {
     try {
-      print("🎯 iOS: 开始麦克风权限请求流程...");
+      print("🎯 iOS: 开始优雅的麦克风权限请求流程...");
       
-      // 1. 首先配置音频会话（audio_session 最佳实践）
+      // 1. 首先配置音频会话
       print("🎯 iOS: 配置音频会话...");
       final session = await AudioSession.instance;
       await session.configure(AudioSessionConfiguration(
@@ -368,16 +367,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         return;
       }
 
-      // 3. 处理权限被拒绝的情况 - 这是首次请求权限
-      if (status.isDenied) {
-        print("🎯 iOS: 检测到首次请求麦克风权限，开始触发系统权限弹窗...");
-        
-        // 直接尝试触发权限弹窗，不预先检查状态
-        await _triggerSystemPermissionDialog();
-        return;
-      }
-
-      // 4. 处理权限被永久拒绝的情况
+      // 3. 处理权限被永久拒绝的情况
       if (status.isPermanentlyDenied) {
         print("❌ iOS: 麦克风权限被永久拒绝");
         if (mounted) {
@@ -386,7 +376,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         return;
       }
 
-      // 5. 处理其他权限状态
+      // 4. 处理权限被系统限制的情况
       if (status.isRestricted) {
         print("❌ iOS: 麦克风权限被系统限制");
         if (mounted) {
@@ -395,9 +385,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         return;
       }
 
-      // 6. 处理未知状态 - 尝试触发权限弹窗
-      print("⚠️ iOS: 未知的权限状态: $status，尝试触发权限弹窗...");
-      await _triggerSystemPermissionDialog();
+      // 5. 处理其他情况（包括 isDenied）- 直接尝试触发系统权限弹窗
+      print("🎯 iOS: 直接尝试触发系统权限弹窗...");
+      await _triggerSystemPermissionDialogDirectly();
 
     } catch (e) {
       // 整体异常处理
@@ -408,62 +398,64 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     }
   }
 
-  /// 🎯 触发系统权限弹窗的核心方法
-  Future<void> _triggerSystemPermissionDialog() async {
+  /// 🎯 直接触发系统权限弹窗的方法
+  Future<void> _triggerSystemPermissionDialogDirectly() async {
     try {
-      print("🎯 iOS: 开始触发系统权限弹窗...");
+      print("🎯 iOS: 开始直接触发系统权限弹窗...");
       
-      // 方法1：使用 flutter_sound 触发
+      // 方法1：使用 flutter_sound 触发权限弹窗（最可靠的方法）
       print("🎯 iOS: 尝试方法1 - flutter_sound 触发...");
-      bool method1Success = await _tryFlutterSoundPermissionTrigger();
+      bool success = await _tryFlutterSoundPermissionTrigger();
       
-      if (method1Success) {
-        print("✅ iOS: flutter_sound 方法成功，等待用户响应...");
+      if (success) {
+        print("✅ iOS: flutter_sound 方法成功触发权限弹窗");
         await _waitForUserResponse();
         return;
       }
       
       // 方法2：直接请求权限
       print("🎯 iOS: 尝试方法2 - 直接请求权限...");
-      bool method2Success = await _tryDirectPermissionRequest();
+      success = await _tryDirectPermissionRequest();
       
-      if (method2Success) {
-        print("✅ iOS: 直接请求方法成功，等待用户响应...");
+      if (success) {
+        print("✅ iOS: 直接请求方法成功触发权限弹窗");
         await _waitForUserResponse();
         return;
       }
       
       // 方法3：通过 audio_session 激活触发
       print("🎯 iOS: 尝试方法3 - audio_session 激活触发...");
-      bool method3Success = await _tryAudioSessionActivationTrigger();
+      success = await _tryAudioSessionActivationTrigger();
       
-      if (method3Success) {
-        print("✅ iOS: audio_session 激活方法成功，等待用户响应...");
+      if (success) {
+        print("✅ iOS: audio_session 激活方法成功触发权限弹窗");
         await _waitForUserResponse();
         return;
       }
       
-      // 所有方法都失败
+      // 所有方法都失败，显示友好的提示
       print("❌ iOS: 所有权限触发方法都失败");
       if (mounted) {
-        _showPermissionErrorDialog();
+        _showPermissionRequestFailedDialog();
       }
       
     } catch (e) {
-      print("❌ iOS: 触发系统权限弹窗时出错: $e");
+      print("❌ iOS: 直接触发权限弹窗时出错: $e");
       if (mounted) {
         _showPermissionErrorDialog();
       }
     }
   }
 
+
+
   /// 🎯 等待用户响应权限弹窗
   Future<void> _waitForUserResponse() async {
     try {
       print("🎯 iOS: 等待用户响应权限弹窗...");
       
-      // 等待用户响应权限弹窗
-      await Future.delayed(Duration(milliseconds: 1000));
+      // 等待用户响应权限弹窗（增加等待时间）
+      await Future.delayed(Duration(milliseconds: 2000));
       
       // 检查权限状态
       PermissionStatus newStatus = await Permission.microphone.status;
@@ -515,7 +507,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       print("✅ iOS: 录音器打开成功，权限弹窗应该已触发");
       
       // 等待一小段时间让权限弹窗显示
-      await Future.delayed(Duration(milliseconds: 300));
+      await Future.delayed(Duration(milliseconds: 800));
       
       print("🎯 iOS: 关闭临时录音器...");
       await tempRecorder!.closeRecorder();
@@ -530,7 +522,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       
     } catch (e) {
       print("⚠️ iOS: FlutterSoundRecorder 操作异常: $e");
-      return false;
+      // 即使出现异常，也可能触发了权限弹窗，所以返回 true
+      return true;
     } finally {
       // 确保录音器被正确释放
       if (tempRecorder != null) {
@@ -554,7 +547,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       return status != PermissionStatus.denied;
     } catch (e) {
       print("❌ iOS: 直接权限请求失败: $e");
-      return false;
+      // 即使出现异常，也可能触发了权限弹窗，所以返回 true
+      return true;
     }
   }
 
@@ -749,6 +743,66 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示权限请求失败的对话框
+  void _showPermissionRequestFailedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.mic_off, color: Colors.orange, size: 20),
+            SizedBox(width: 8),
+            Text('Microphone Access Required'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'To enable voice detection during training, we need microphone access.',
+              style: TextStyle(fontSize: 16, color: Colors.black87),
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'You can:',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blue.shade700),
+                  ),
+                  SizedBox(height: 4),
+                  Text('• Continue training without voice detection'),
+                  Text('• Enable microphone permission in Settings'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Continue Without Voice'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await AppSettings.openAppSettings();
+            },
+            child: Text('Open Settings'),
           ),
         ],
       ),
