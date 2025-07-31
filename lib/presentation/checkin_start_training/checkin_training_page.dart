@@ -332,10 +332,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   /// 🍎 Apple-level iOS-Specific Permission Request
-  /// 简化的优雅权限处理方案
+  /// 极简优雅权限处理方案
   Future<void> _requestMicrophonePermissionForIOS() async {
     try {
-      print("🎯 iOS: 开始简化的麦克风权限请求流程...");
+      print("🎯 iOS: 开始极简麦克风权限请求流程...");
       
       // 1. 首先配置音频会话
       print("🎯 iOS: 配置音频会话...");
@@ -385,9 +385,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         return;
       }
       
-      // 5. 处理其他情况（包括 isDenied）- 直接使用 flutter_sound 触发权限弹窗
-      print("🎯 iOS: 使用 flutter_sound 触发权限弹窗...");
-      await _simpleFlutterSoundPermissionTrigger();
+      // 5. 处理其他情况（包括 isDenied）- 直接请求权限
+      print("🎯 iOS: 直接请求麦克风权限...");
+      await _directPermissionRequest();
 
     } catch (e) {
       // 整体异常处理
@@ -398,28 +398,28 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     }
   }
 
-  /// 🎯 简化的 flutter_sound 权限触发方法
-  Future<void> _simpleFlutterSoundPermissionTrigger() async {
+  /// 🎯 直接权限请求方法
+  Future<void> _directPermissionRequest() async {
     try {
-      print("🎯 iOS: 开始简化的 flutter_sound 权限触发...");
+      print("🎯 iOS: 开始直接权限请求...");
       
-      // 直接使用 flutter_sound 触发权限弹窗
-      bool success = await _tryFlutterSoundPermissionTrigger();
+      // 直接请求麦克风权限
+      bool success = await _tryDirectPermissionRequest();
       
       if (success) {
-        print("✅ iOS: flutter_sound 方法成功触发权限弹窗");
+        print("✅ iOS: 直接请求方法成功触发权限弹窗");
         await _waitForUserResponse();
       } else {
-        // 如果 flutter_sound 失败，尝试直接请求权限
-        print("🎯 iOS: flutter_sound 失败，尝试直接请求权限...");
-        success = await _tryDirectPermissionRequest();
+        // 如果直接请求失败，尝试 flutter_sound 作为备选
+        print("🎯 iOS: 直接请求失败，尝试 flutter_sound 备选方案...");
+        success = await _tryFlutterSoundPermissionTrigger();
         
         if (success) {
-          print("✅ iOS: 直接请求方法成功触发权限弹窗");
+          print("✅ iOS: flutter_sound 备选方案成功触发权限弹窗");
           await _waitForUserResponse();
         } else {
           // 所有方法都失败，显示友好的提示
-          print("❌ iOS: 权限触发方法都失败");
+          print("❌ iOS: 所有权限触发方法都失败");
           if (mounted) {
             _showPermissionRequestFailedDialog();
           }
@@ -427,7 +427,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       }
       
     } catch (e) {
-      print("❌ iOS: 简化权限触发时出错: $e");
+      print("❌ iOS: 直接权限请求时出错: $e");
       if (mounted) {
         _showPermissionErrorDialog();
       }
@@ -442,7 +442,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       print("🎯 iOS: 等待用户响应权限弹窗...");
       
       // 等待用户响应权限弹窗
-      await Future.delayed(Duration(milliseconds: 1500));
+      await Future.delayed(Duration(milliseconds: 1000));
       
       // 检查权限状态
       PermissionStatus newStatus = await Permission.microphone.status;
@@ -494,7 +494,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       print("✅ iOS: 录音器打开成功，权限弹窗应该已触发");
       
       // 等待权限弹窗显示
-      await Future.delayed(Duration(milliseconds: 500));
+      await Future.delayed(Duration(milliseconds: 300));
       
       print("🎯 iOS: 关闭临时录音器...");
       await tempRecorder!.closeRecorder();
@@ -529,6 +529,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       print("🎯 iOS: 直接请求麦克风权限...");
       PermissionStatus status = await Permission.microphone.request();
       print("🎯 iOS: 直接权限请求结果: $status");
+      
+      // 等待权限弹窗显示
+      await Future.delayed(Duration(milliseconds: 200));
+      
+      // 再次检查权限状态
+      status = await Permission.microphone.status;
+      print("🎯 iOS: 直接权限请求后状态: $status");
       
       // 如果状态发生变化，说明权限弹窗被触发了
       return status != PermissionStatus.denied;
