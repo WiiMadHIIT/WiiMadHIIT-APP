@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Real Audio Detector for Voice Strike Detection
 /// Uses flutter_sound for stable audio recording
@@ -41,13 +43,16 @@ class RealAudioDetector {
       }
       
       // Initialize flutter_sound recorder
+      print('🎯 Opening flutter_sound recorder...');
       await _recorder.openRecorder();
+      print('🎯 Flutter_sound recorder opened successfully');
       
       _isInitialized = true;
       _updateStatus('Real audio detector initialized');
       print('🎯 Real audio detector initialized successfully');
       return true;
     } catch (e) {
+      print('❌ Failed to initialize real audio detector: $e');
       _handleError('Failed to initialize real audio detector: $e');
       return false;
     }
@@ -72,13 +77,36 @@ class RealAudioDetector {
         await _recorder.stopRecorder();
       }
       
+      // Get temporary directory for recording file
+      final tempDir = await getTemporaryDirectory();
+      final recordingPath = '${tempDir.path}/audio_detection_${DateTime.now().millisecondsSinceEpoch}.wav';
+      
+      print('🎯 Recording to file: $recordingPath');
+      
       // Start recording with flutter_sound
       // This will automatically request microphone permission if needed
-      await _recorder.startRecorder(
-        codec: Codec.pcm16WAV,
-        sampleRate: 44100,
-        numChannels: 1,
-      );
+      try {
+        // Use more conservative settings for iOS compatibility
+        await _recorder.startRecorder(
+          toFile: recordingPath,
+          codec: Codec.aacADTS, // More compatible codec for iOS
+          sampleRate: 22050,    // Lower sample rate for better compatibility
+          numChannels: 1,
+        );
+        print('🎯 Recording started successfully with AAC codec');
+      } catch (e) {
+        print('❌ Failed to start recording with AAC: $e');
+        try {
+          // Try with default settings if the above fails
+          await _recorder.startRecorder(
+            toFile: recordingPath,
+          );
+          print('🎯 Recording started with default settings');
+        } catch (e2) {
+          print('❌ Failed to start recording with default settings: $e2');
+          rethrow;
+        }
+      }
       
       _isListening = true;
       _audioBuffer.clear();
@@ -108,7 +136,21 @@ class RealAudioDetector {
       
       // Only stop if actually recording
       if (_recorder.isRecording) {
-        await _recorder.stopRecorder();
+        final recordingPath = await _recorder.stopRecorder();
+        print('🎯 Recording stopped, file: $recordingPath');
+        
+        // Clean up the temporary file
+        if (recordingPath != null) {
+          try {
+            final file = File(recordingPath);
+            if (await file.exists()) {
+              await file.delete();
+              print('🎯 Temporary recording file cleaned up');
+            }
+          } catch (e) {
+            print('⚠️ Failed to clean up recording file: $e');
+          }
+        }
       }
       
       _isListening = false;
