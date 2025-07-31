@@ -363,7 +363,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       if (status.isGranted) {
         // 权限已授予，安全初始化音频检测
         print("✅ iOS: 麦克风权限已授予，开始初始化音频检测");
-        await _initializeAudioDetection();
+        await _requestMicrophonePermissionForIOS();
         return;
       }
 
@@ -584,7 +584,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
         ),
         title: Row(
           children: [
@@ -592,17 +592,17 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
               padding: EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(Icons.settings, color: Colors.orange, size: 24),
+              child: Icon(Icons.mic_off, color: Colors.orange, size: 20),
             ),
             SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Microphone Permission Required',
+                'Microphone Access',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                   color: Colors.black87,
                 ),
               ),
@@ -614,44 +614,29 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'To provide a better training experience, we need access to your microphone to detect strike sounds.',
-              style: TextStyle(fontSize: 16, color: Colors.black87),
+              'Voice detection requires microphone permission. Please enable it in Settings.',
+              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 12),
             Container(
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.blue.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.15)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Setup Steps:',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue.shade700,
-                        ),
+                  Icon(Icons.info_outline, color: Colors.blue, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Tap "Open Settings" to enable microphone access',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    '1. Tap "Open Settings"\n'
-                    '2. Find "Microphone" permission\n'
-                    '3. Enable it\n'
-                    '4. Return to the app',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.black54,
-                      height: 1.4,
                     ),
                   ),
                 ],
@@ -663,12 +648,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              // 返回上一页
-              Navigator.of(context).pop();
+              Navigator.of(context).pop(); // 返回上一页
             },
             child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
             ),
           ),
           ElevatedButton(
@@ -679,11 +663,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
+              elevation: 2,
             ),
-            child: Text('Open Settings'),
+            child: Text(
+              'Open Settings',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -695,28 +684,62 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: Row(
           children: [
-            Icon(Icons.mic_off, color: Colors.orange, size: 20),
-            SizedBox(width: 8),
-            Text('Microphone Permission Denied'),
+            Container(
+              padding: EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.mic_off, color: Colors.orange, size: 18),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Permission Denied',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
-        content: Text(
-          'Microphone permission was denied. You won\'t be able to use voice detection features.\n\n'
-          'You can re-enable microphone permission in Settings.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Voice detection is disabled. You can enable it in Settings.',
+              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Got it'),
+            child: Text(
+              'Got it',
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+            ),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
               await AppSettings.openAppSettings();
             },
-            child: Text('Open Settings'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 1,
+            ),
+            child: Text(
+              'Settings',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -728,21 +751,37 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: Row(
           children: [
-            Icon(Icons.block, color: Colors.red, size: 20),
-            SizedBox(width: 8),
-            Text('Permission Restricted'),
+            Container(
+              padding: EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.block, color: Colors.red, size: 18),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Permission Restricted',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
         content: Text(
-          'Microphone permission is restricted by the system, possibly due to parental controls or other system settings.\n\n'
-          'Please check your device settings or contact your device administrator.',
+          'Microphone access is restricted by system settings. Please check your device settings.',
+          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Got it'),
+            child: Text(
+              'Got it',
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+            ),
           ),
         ],
       ),
@@ -754,11 +793,24 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: Row(
           children: [
-            Icon(Icons.mic_off, color: Colors.orange, size: 20),
-            SizedBox(width: 8),
-            Text('Microphone Access Required'),
+            Container(
+              padding: EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.mic_off, color: Colors.orange, size: 18),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Voice Detection',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
         content: Column(
@@ -766,27 +818,31 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'To enable voice detection during training, we need microphone access.',
-              style: TextStyle(fontSize: 16, color: Colors.black87),
+              'Voice detection requires microphone access.',
+              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 10),
             Container(
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.blue.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                border: Border.all(color: Colors.blue.withOpacity(0.15)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    'You can:',
-                    style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blue.shade700),
+                  Icon(Icons.info_outline, color: Colors.blue, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Continue without voice detection or enable microphone',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                  SizedBox(height: 4),
-                  Text('• Continue training without voice detection'),
-                  Text('• Enable microphone permission in Settings'),
                 ],
               ),
             ),
@@ -795,14 +851,29 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Continue Without Voice'),
+            child: Text(
+              'Continue',
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
               await AppSettings.openAppSettings();
             },
-            child: Text('Open Settings'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 1,
+            ),
+            child: Text(
+              'Settings',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -814,21 +885,37 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: Row(
           children: [
-            Icon(Icons.error_outline, color: Colors.red, size: 20),
-            SizedBox(width: 8),
-            Text('Permission Check Failed'),
+            Container(
+              padding: EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.error_outline, color: Colors.red, size: 18),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Permission Error',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
         content: Text(
-          'Failed to check microphone permission. Please check your device settings or restart the app.\n\n'
-          'You can still train manually by tapping the button.',
+          'Unable to check microphone permission. You can still train manually.',
+          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Got it'),
+            child: Text(
+              'Got it',
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+            ),
           ),
         ],
       ),
