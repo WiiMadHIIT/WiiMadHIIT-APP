@@ -151,30 +151,28 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           
           try {
             print('🎯 Starting permission check...');
-            await _requestMicrophonePermissionDirectly();
+            bool permissionGranted = await _requestMicrophonePermissionDirectly();
+            
+            // 🎯 只有在权限未授予时才启动权限状态监听
+            // 如果权限已授予，不需要监听器
+            if (!permissionGranted && mounted) {
+              _startPermissionListener();
+            }
           } catch (e) {
             print('❌ Error during permission initialization: $e');
-            // 即使权限初始化失败，也要显示设置对话框，但不阻塞页面显示
+            // 权限初始化失败时，显示权限要求对话框
             if (mounted) {
-              // 延迟显示设置对话框，避免与权限弹窗冲突
-              Future.delayed(Duration(milliseconds: 1000), () {
-            if (mounted) {
-              _showSetupDialog();
-                }
-              });
+              _showMicrophonePermissionRequiredDialog();
             }
           }
         });
       });
       
-      // 🎯 添加权限状态监听
-      _startPermissionListener();
-      
     } catch (e) {
       print('❌ Error in initState: $e');
-      // 即使初始化失败，也要确保页面可以正常显示
+      // 初始化失败时，显示权限要求对话框
       if (mounted) {
-        _showSetupDialog();
+        _showMicrophonePermissionRequiredDialog();
       }
     }
   }
@@ -316,7 +314,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   /// 🍎 Apple-level Direct Microphone Permission Request
-  Future<void> _requestMicrophonePermissionDirectly() async {
+  Future<bool> _requestMicrophonePermissionDirectly() async {
     try {
       // 1. 检查当前权限状态
       PermissionStatus status = await Permission.microphone.status;
@@ -329,7 +327,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         if (mounted) {
           _showSetupDialog();
         }
-        return;
+        return true;
       }
       
       if (status.isPermanentlyDenied) {
@@ -338,7 +336,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
         }
-        return;
+        return false;
       }
       
       // 4. 权限未授予，直接请求权限（会显示系统弹窗）
@@ -360,22 +358,26 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         if (mounted) {
           _showSetupDialog();
         }
+        return true;
       } else if (status.isDenied) {
         // 8. 用户拒绝了权限，显示设置指导（不显示设置对话框）
         print('❌ User denied microphone permission');
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
         }
+        return false;
       } else if (status.isPermanentlyDenied) {
         // 9. 用户永久拒绝了权限，显示设置指导（不显示设置对话框）
         print('❌ User permanently denied microphone permission');
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
         }
+        return false;
       } else {
         // 10. 其他状态，可能是用户还没有响应，不显示任何对话框
         print('⚠️ Permission status unclear, user may still be deciding');
         // 不显示任何对话框，让用户继续使用系统权限弹窗
+        return false;
       }
       
     } catch (e) {
@@ -384,6 +386,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         // 11. 发生错误时，显示设置指导（不显示设置对话框）
         _showMicrophonePermissionRequiredDialog();
       }
+      return false;
     }
   }
 
