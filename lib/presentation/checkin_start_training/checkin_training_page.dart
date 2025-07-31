@@ -146,7 +146,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 延迟执行权限检查，确保页面完全加载
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         // 再延迟一点时间，确保页面稳定
-        Future.delayed(Duration(milliseconds: 300), () async {
+        Future.delayed(Duration(milliseconds: 500), () async {
           if (!mounted) return;
           
           try {
@@ -157,7 +157,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             // 即使权限初始化失败，也要显示设置对话框，但不阻塞页面显示
             if (mounted) {
               // 延迟显示设置对话框，避免与权限弹窗冲突
-              Future.delayed(Duration(milliseconds: 800), () {
+              Future.delayed(Duration(milliseconds: 1000), () {
                 if (mounted) {
                   _showSetupDialog();
                 }
@@ -366,14 +366,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         return;
       }
 
-      // 3. 处理权限被拒绝的情况 - 参考 flutter_sound 最佳实践
+      // 3. 处理权限被拒绝的情况 - 这是首次请求权限
       if (status.isDenied) {
-        print("🎯 iOS: 麦克风权限被拒绝，尝试通过实际录音操作触发权限弹窗...");
+        print("🎯 iOS: 首次请求麦克风权限，尝试通过实际录音操作触发权限弹窗...");
         
         try {
           // 参考 flutter_sound 的做法：通过实际调用录音 API 来触发权限弹窗
-          // 这里我们创建一个临时的 FlutterSoundRecorder 来触发权限请求
           await _triggerMicrophonePermissionViaRecording();
+          
+          // 等待一小段时间让用户响应权限弹窗
+          await Future.delayed(Duration(milliseconds: 500));
           
           // 再次检查权限状态
           PermissionStatus newStatus = await Permission.microphone.status;
@@ -389,11 +391,17 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             if (mounted) {
               _showPermanentlyDeniedDialog();
             }
-          } else {
-            // 权限被拒绝但未永久拒绝
+          } else if (newStatus.isDenied) {
+            // 用户拒绝权限但未永久拒绝
             print("❌ iOS: 麦克风权限被拒绝");
             if (mounted) {
               _showPermissionDeniedDialog();
+            }
+          } else {
+            // 其他状态
+            print("⚠️ iOS: 权限状态未知: $newStatus");
+            if (mounted) {
+              _showPermissionErrorDialog();
             }
           }
         } catch (e) {
@@ -403,6 +411,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             _showPermissionErrorDialog();
           }
         }
+        return; // 重要：处理完 isDenied 后直接返回
       }
 
       // 4. 处理权限被永久拒绝的情况
@@ -411,6 +420,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         if (mounted) {
           _showPermanentlyDeniedDialog();
         }
+        return; // 重要：处理完 isPermanentlyDenied 后直接返回
       }
 
       // 5. 处理其他权限状态
@@ -419,6 +429,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         if (mounted) {
           _showRestrictedDialog();
         }
+        return; // 重要：处理完 isRestricted 后直接返回
+      }
+
+      // 6. 处理未知状态
+      print("⚠️ iOS: 未知的权限状态: $status");
+      if (mounted) {
+        _showPermissionErrorDialog();
       }
 
     } catch (e) {
@@ -435,39 +452,67 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     try {
       print("🎯 iOS: 尝试通过录音操作触发权限弹窗...");
       
-      // 创建临时录音器
-      FlutterSoundRecorder? tempRecorder;
+      // 方法1：尝试通过 flutter_sound 触发权限弹窗
+      bool flutterSoundSuccess = await _tryFlutterSoundPermissionTrigger();
       
-      try {
-        tempRecorder = FlutterSoundRecorder();
-        
-        // 尝试打开录音器 - 这会触发 iOS 权限弹窗
-        await tempRecorder!.openRecorder();
-        print("✅ iOS: 录音器打开成功，权限弹窗应该已触发");
-        
-        // 立即关闭录音器，我们只是用它来触发权限弹窗
-        await tempRecorder!.closeRecorder();
-        print("✅ iOS: 临时录音器已关闭");
-        
-      } catch (e) {
-        print("⚠️ iOS: 录音器操作异常（可能是权限被拒绝）: $e");
-        // 这是预期的，因为用户可能拒绝权限
-      } finally {
-        // 确保录音器被正确释放
-        if (tempRecorder != null) {
-          try {
-            await tempRecorder!.closeRecorder();
-          } catch (e) {
-            print("⚠️ iOS: 关闭录音器时出错: $e");
-          }
-        }
+      if (!flutterSoundSuccess) {
+        // 方法2：如果 flutter_sound 失败，尝试直接请求权限
+        print("🎯 iOS: flutter_sound 方法失败，尝试直接请求权限...");
+        await _tryDirectPermissionRequest();
       }
       
     } catch (e) {
       print("❌ iOS: 触发录音权限弹窗时出错: $e");
-      // 如果通过录音触发失败，回退到直接请求权限
-      print("🎯 iOS: 回退到直接请求权限...");
-      await Permission.microphone.request();
+      // 最后的回退方案
+      print("🎯 iOS: 使用最后的回退方案...");
+      await _tryDirectPermissionRequest();
+    }
+  }
+
+  /// 🎯 尝试通过 flutter_sound 触发权限弹窗
+  Future<bool> _tryFlutterSoundPermissionTrigger() async {
+    FlutterSoundRecorder? tempRecorder;
+    
+    try {
+      print("🎯 iOS: 创建 FlutterSoundRecorder...");
+      tempRecorder = FlutterSoundRecorder();
+      
+      print("🎯 iOS: 尝试打开录音器...");
+      await tempRecorder!.openRecorder();
+      print("✅ iOS: 录音器打开成功，权限弹窗应该已触发");
+      
+      // 等待一小段时间让权限弹窗显示
+      await Future.delayed(Duration(milliseconds: 200));
+      
+      print("🎯 iOS: 关闭临时录音器...");
+      await tempRecorder!.closeRecorder();
+      print("✅ iOS: 临时录音器已关闭");
+      
+      return true;
+      
+    } catch (e) {
+      print("⚠️ iOS: FlutterSoundRecorder 操作异常: $e");
+      return false;
+    } finally {
+      // 确保录音器被正确释放
+      if (tempRecorder != null) {
+        try {
+          await tempRecorder!.closeRecorder();
+        } catch (e) {
+          print("⚠️ iOS: 关闭录音器时出错: $e");
+        }
+      }
+    }
+  }
+
+  /// 🎯 尝试直接请求权限
+  Future<void> _tryDirectPermissionRequest() async {
+    try {
+      print("🎯 iOS: 直接请求麦克风权限...");
+      PermissionStatus status = await Permission.microphone.request();
+      print("🎯 iOS: 直接权限请求结果: $status");
+    } catch (e) {
+      print("❌ iOS: 直接权限请求失败: $e");
     }
   }
 
