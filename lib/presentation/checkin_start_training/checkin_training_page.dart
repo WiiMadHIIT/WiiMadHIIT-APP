@@ -151,7 +151,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           
           try {
             print('🎯 Starting permission check...');
-            await _checkMicrophonePermissionOnInit();
+            await _requestMicrophonePermissionDirectly();
           } catch (e) {
             print('❌ Error during permission initialization: $e');
             // 即使权限初始化失败，也要显示设置对话框，但不阻塞页面显示
@@ -265,41 +265,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     print('All animations and timers stopped, memory cleaned up');
   }
 
-  /// 🍎 Apple-level Platform-Specific Permission Flow
-  Future<void> _checkMicrophonePermissionOnInit() async {
-    try {
-      print('🎯 Platform-specific permission check starting...');
-      
-    if (Platform.isAndroid) {
-      // Android: 直接请求权限（当前工作正常）
-        print('🎯 Android platform detected');
-      await _requestMicrophonePermissionDirectly();
-    } else if (Platform.isIOS) {
-      // iOS: 通过实际调用音频API触发权限弹窗
-        print('🎯 iOS platform detected');
-        await _requestMicrophonePermissionDirectly();
-        // await _requestMicrophonePermissionForIOS();
-      } else {
-        // 其他平台
-        print('🎯 Other platform detected, using default permission request');
-        await _requestMicrophonePermissionDirectly();
-      }
-      
-      print('✅ Platform-specific permission check completed');
-    } catch (e) {
-      print('❌ Error in _checkMicrophonePermissionOnInit: $e');
-      // 权限检查失败时，不阻塞页面显示，让用户可以选择手动设置
-      if (mounted) {
-        // 延迟显示设置对话框，避免与权限弹窗冲突
-        Future.delayed(Duration(milliseconds: 1000), () {
-          if (mounted) {
-            _showSetupDialog();
-          }
-        });
-      }
-    }
-  }
-
   /// 🎯 权限状态监听
   Timer? _permissionCheckTimer;
   
@@ -313,13 +278,22 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       
       try {
         final micStatus = await Permission.microphone.status;
+        print('🎯 Permission listener check: $micStatus');
         
         if (micStatus.isGranted && _audioDetector == null) {
-          // 麦克风权限授予，初始化音频检测
-          print('✅ Microphone permission granted, initializing audio detection');
+          // 麦克风权限授予，初始化音频检测并显示设置对话框
+          print('✅ Microphone permission granted via listener, initializing audio detection');
           await _initializeAudioDetection();
           if (mounted) {
             _showSetupDialog();
+          }
+          // 停止监听
+          timer.cancel();
+        } else if (micStatus.isPermanentlyDenied || micStatus.isDenied) {
+          // 权限被拒绝，显示设置指导（不显示设置对话框）
+          print('❌ Microphone permission denied via listener');
+          if (mounted) {
+            _showMicrophonePermissionRequiredDialog();
           }
           // 停止监听
           timer.cancel();
@@ -332,446 +306,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     });
   }
 
-  /// 🍎 Apple-level iOS-Specific Permission Request
-  /// 超简洁权限处理方案
-  Future<void> _requestMicrophonePermissionForIOS() async {
-    try {
-      print("🎯 iOS: 开始超简洁麦克风权限请求流程...");
-      
-      // 1. 检查麦克风权限状态
-      PermissionStatus status = await Permission.microphone.status;
-      print("🎯 iOS: 当前麦克风权限状态: $status");
-      
-      if (status.isGranted) {
-        // 权限已授予，直接初始化音频检测
-        print("✅ iOS: 麦克风权限已授予，开始初始化音频检测");
-        await _initializeAudioDetection();
-        return;
-      }
-
-      // 2. 处理权限被永久拒绝的情况
-      if (status.isPermanentlyDenied) {
-        print("❌ iOS: 麦克风权限被永久拒绝");
-        if (mounted) {
-          _showPermanentlyDeniedDialog();
-        }
-        return;
-      }
-
-      // 3. 处理权限被系统限制的情况
-      if (status.isRestricted) {
-        print("❌ iOS: 麦克风权限被系统限制");
-        if (mounted) {
-          _showRestrictedDialog();
-        }
-        return;
-      }
-      
-      // 4. 处理其他情况（包括 isDenied）- 直接请求权限
-      print("🎯 iOS: 直接请求麦克风权限...");
-      await _simpleDirectPermissionRequest();
-
-    } catch (e) {
-      // 整体异常处理
-      print('❌ iOS: 麦克风权限处理过程中出错: $e');
-      if (mounted) {
-        _showPermissionErrorDialog();
-      }
-    }
-  }
-
-  /// 🎯 超简洁直接权限请求方法
-  Future<void> _simpleDirectPermissionRequest() async {
-    try {
-      print("🎯 iOS: 开始超简洁权限请求...");
-      
-      // 直接请求麦克风权限
-      PermissionStatus status = await Permission.microphone.request();
-      print("🎯 iOS: 权限请求结果: $status");
-      
-      // 等待用户响应
-      await Future.delayed(Duration(milliseconds: 500));
-      
-      // 检查最终权限状态
-      status = await Permission.microphone.status;
-      print("🎯 iOS: 最终权限状态: $status");
-      
-      if (status.isGranted) {
-        print("✅ iOS: 用户授予了麦克风权限，开始初始化音频检测");
-        await _initializeAudioDetection();
-      } else if (status.isDenied) {
-        print("❌ iOS: 用户拒绝了麦克风权限");
-        if (mounted) {
-          _showPermissionDeniedDialog();
-        }
-      } else if (status.isPermanentlyDenied) {
-        print("❌ iOS: 用户永久拒绝了麦克风权限");
-        if (mounted) {
-          _showPermanentlyDeniedDialog();
-        }
-      } else {
-        print("❌ iOS: 权限请求失败");
-        if (mounted) {
-          _showPermissionRequestFailedDialog();
-        }
-      }
-      
-    } catch (e) {
-      print("❌ iOS: 超简洁权限请求时出错: $e");
-      if (mounted) {
-        _showPermissionErrorDialog();
-      }
-    }
-  }
-
-  /// 显示权限被永久拒绝的对话框
-  void _showPermanentlyDeniedDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.mic_off, color: Colors.orange, size: 20),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Microphone Access',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Voice detection requires microphone permission. Please enable it in Settings.',
-              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
-            ),
-            SizedBox(height: 12),
-            Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.15)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.security, color: Colors.blue, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Audio processed locally only',
-                      style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 返回上一页
-            },
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await AppSettings.openAppSettings();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              'Open Settings',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 显示权限被拒绝的对话框
-  void _showPermissionDeniedDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.mic_off, color: Colors.orange, size: 18),
-            ),
-            SizedBox(width: 10),
-            Text(
-              'Permission Denied',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: Text(
-          'Voice detection requires microphone access. Please enable it in Settings to use this feature.',
-          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 返回上一页
-            },
-            child: Text(
-              'Cancel',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await AppSettings.openAppSettings();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              'Open Settings',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 显示权限被系统限制的对话框
-  void _showRestrictedDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.block, color: Colors.red, size: 18),
-            ),
-            SizedBox(width: 10),
-            Text(
-              'Access Restricted',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: Text(
-          'Microphone access is restricted by system settings. Please check your device settings or contact your administrator.',
-          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'OK',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 显示权限请求失败的对话框
-  void _showPermissionRequestFailedDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.mic_off, color: Colors.orange, size: 18),
-            ),
-            SizedBox(width: 10),
-            Text(
-              'Voice Detection',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Voice detection requires microphone access. Please enable it in Settings to use this feature.',
-              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
-            ),
-            SizedBox(height: 10),
-            Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.blue.withOpacity(0.15)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.security, color: Colors.blue, size: 14),
-                  SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Audio processed locally only',
-                      style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 返回上一页
-            },
-            child: Text(
-              'Cancel',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await AppSettings.openAppSettings();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              'Open Settings',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 显示权限错误的对话框
-  void _showPermissionErrorDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.error_outline, color: Colors.red, size: 18),
-            ),
-            SizedBox(width: 10),
-            Text(
-              'Check Failed',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: Text(
-          'Unable to check microphone permission. You can still train manually or restart the app.',
-          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'OK',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// 🍎 Apple-level Direct Microphone Permission Request
   Future<void> _requestMicrophonePermissionDirectly() async {
     try {
       // 1. 检查当前权限状态
       PermissionStatus status = await Permission.microphone.status;
+      print('🎯 Current microphone permission status: $status');
       
       if (status.isGranted) {
-        // 2. 权限已授予，直接初始化音频检测
-        print('🎯 Microphone permission already granted');
+        // 2. 权限已授予，直接初始化音频检测并显示设置对话框
+        print('✅ Microphone permission already granted');
         await _initializeAudioDetection();
         if (mounted) {
           _showSetupDialog();
@@ -780,7 +324,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       }
       
       if (status.isPermanentlyDenied) {
-        // 3. 权限被永久拒绝，显示设置指导
+        // 3. 权限被永久拒绝，显示设置指导（不显示设置对话框）
         print('❌ Microphone permission permanently denied');
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
@@ -791,16 +335,17 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 4. 权限未授予，直接请求权限（会显示系统弹窗）
       print('🎯 Requesting microphone permission...');
       status = await Permission.microphone.request();
+      print('🎯 Permission request result: $status');
       
       if (status.isGranted) {
-        // 5. 权限授予成功，初始化音频检测
+        // 5. 权限授予成功，初始化音频检测并显示设置对话框
         print('✅ Microphone permission granted');
         await _initializeAudioDetection();
         if (mounted) {
           _showSetupDialog();
         }
       } else {
-        // 6. 权限被拒绝，直接显示设置指导对话框
+        // 6. 权限被拒绝，显示设置指导（不显示设置对话框）
         print('❌ Microphone permission denied');
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
@@ -810,14 +355,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     } catch (e) {
       print('❌ Error requesting microphone permission: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Voice detection unavailable, but you can still train manually'),
-            duration: Duration(seconds: 3),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        _showSetupDialog();
+        // 7. 发生错误时，显示设置指导（不显示设置对话框）
+        _showMicrophonePermissionRequiredDialog();
       }
     }
   }
@@ -828,30 +367,28 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     
     showDialog(
       context: context,
-      barrierDismissible: false, // 不允许关闭，强制用户选择
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
         ),
         title: Row(
           children: [
             Container(
-              padding: EdgeInsets.all(8),
+              padding: EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.mic_off, color: Colors.orange, size: 24),
+              child: Icon(Icons.mic_off, color: Colors.orange, size: 18),
             ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Microphone Permission Required',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
+            SizedBox(width: 10),
+            Text(
+              'Training Requires Microphone',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
               ),
             ),
           ],
@@ -861,65 +398,25 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Voice detection requires microphone access. Please enable it in settings:',
-              style: TextStyle(fontSize: 16, color: Colors.black87),
+              'Voice detection requires microphone access. Please enable it in Settings to continue training.',
+              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 8),
             Container(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: Colors.blue.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.settings, color: Colors.blue, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Quick Setup:',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    '1. Tap "Open Settings" below\n'
-                    '2. Find "Microphone" permission\n'
-                    '3. Enable it\n'
-                    '4. Return to the app',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.black54,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 12),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.withOpacity(0.2)),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.blue.withOpacity(0.1)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.security, color: Colors.green, size: 16),
-                  SizedBox(width: 8),
+                  Icon(Icons.security, color: Colors.blue, size: 12),
+                  SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       'Audio processed locally only',
-                      style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+                      style: TextStyle(fontSize: 10, color: Colors.blue.shade700),
                     ),
                   ),
                 ],
@@ -934,24 +431,28 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
               Navigator.of(context).pop(); // 返回上一页
             },
             child: Text(
-              'Back',
-              style: TextStyle(color: Colors.grey.shade600),
+              'Cancel',
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
             ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              // 直接跳转到应用设置页面
               await AppSettings.openAppSettings();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
+              elevation: 0,
             ),
-            child: Text('Open Settings'),
+            child: Text(
+              'Open Settings',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),
