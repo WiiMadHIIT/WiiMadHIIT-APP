@@ -367,94 +367,107 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+      barrierDismissible: false, // 确保遮罩不可点击
+      barrierColor: Colors.black54, // 优雅的遮罩颜色
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false, // 防止返回键关闭对话框
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 8, // 增加阴影效果
+          backgroundColor: Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.mic_off, color: Colors.orange, size: 20),
               ),
-              child: Icon(Icons.mic_off, color: Colors.orange, size: 18),
-            ),
-            SizedBox(width: 10),
-            Text(
-              'Training Requires Microphone',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Voice detection requires microphone access. Please enable it in Settings to continue training.',
-              style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
-            ),
-            SizedBox(height: 8),
-            Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.blue.withOpacity(0.1)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.security, color: Colors.blue, size: 12),
-                  SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Audio processed locally only',
-                      style: TextStyle(fontSize: 10, color: Colors.blue.shade700),
-                    ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Training Requires Microphone',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
                   ),
-                ],
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Voice detection requires microphone access. Please enable it in Settings to continue training.',
+                style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.5),
+              ),
+              SizedBox(height: 12),
+              Container(
+                padding: EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.15)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.security, color: Colors.blue, size: 14),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Audio processed locally only',
+                        style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // 返回上一页
+              },
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              child: Text(
+                'Cancel',
+                style: TextStyle(fontSize: 15, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await AppSettings.openAppSettings();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+                shadowColor: Colors.blue.withOpacity(0.3),
+              ),
+              child: Text(
+                'Open Settings',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
             ),
           ],
+          actionsPadding: EdgeInsets.fromLTRB(24, 0, 24, 20),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 返回上一页
-            },
-            child: Text(
-              'Cancel',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await AppSettings.openAppSettings();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              'Open Settings',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
       ),
     );
   }
