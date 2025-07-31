@@ -289,7 +289,15 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           }
           // 停止监听
           timer.cancel();
-        } else if (micStatus.isPermanentlyDenied || micStatus.isDenied) {
+        } else if (micStatus.isPermanentlyDenied) {
+          // 权限被永久拒绝，显示设置指导（不显示设置对话框）
+          print('❌ Microphone permission permanently denied via listener');
+          if (mounted) {
+            _showMicrophonePermissionRequiredDialog();
+          }
+          // 停止监听
+          timer.cancel();
+        } else if (micStatus.isDenied) {
           // 权限被拒绝，显示设置指导（不显示设置对话框）
           print('❌ Microphone permission denied via listener');
           if (mounted) {
@@ -298,6 +306,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           // 停止监听
           timer.cancel();
         }
+        // 如果是其他状态（如 isRestricted），继续监听，不显示任何对话框
       } catch (e) {
         print('❌ Error in permission listener: $e');
         // 出错时停止监听
@@ -337,25 +346,42 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       status = await Permission.microphone.request();
       print('🎯 Permission request result: $status');
       
+      // 5. 等待用户响应系统权限弹窗
+      await Future.delayed(Duration(milliseconds: 1000));
+      
+      // 6. 再次检查权限状态
+      status = await Permission.microphone.status;
+      print('🎯 Final permission status after user response: $status');
+      
       if (status.isGranted) {
-        // 5. 权限授予成功，初始化音频检测并显示设置对话框
+        // 7. 权限授予成功，初始化音频检测并显示设置对话框
         print('✅ Microphone permission granted');
         await _initializeAudioDetection();
         if (mounted) {
           _showSetupDialog();
         }
-      } else {
-        // 6. 权限被拒绝，显示设置指导（不显示设置对话框）
-        print('❌ Microphone permission denied');
+      } else if (status.isDenied) {
+        // 8. 用户拒绝了权限，显示设置指导（不显示设置对话框）
+        print('❌ User denied microphone permission');
         if (mounted) {
           _showMicrophonePermissionRequiredDialog();
         }
+      } else if (status.isPermanentlyDenied) {
+        // 9. 用户永久拒绝了权限，显示设置指导（不显示设置对话框）
+        print('❌ User permanently denied microphone permission');
+        if (mounted) {
+          _showMicrophonePermissionRequiredDialog();
+        }
+      } else {
+        // 10. 其他状态，可能是用户还没有响应，不显示任何对话框
+        print('⚠️ Permission status unclear, user may still be deciding');
+        // 不显示任何对话框，让用户继续使用系统权限弹窗
       }
       
     } catch (e) {
       print('❌ Error requesting microphone permission: $e');
       if (mounted) {
-        // 7. 发生错误时，显示设置指导（不显示设置对话框）
+        // 11. 发生错误时，显示设置指导（不显示设置对话框）
         _showMicrophonePermissionRequiredDialog();
       }
     }
