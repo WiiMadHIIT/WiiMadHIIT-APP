@@ -277,7 +277,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     } else if (Platform.isIOS) {
       // iOS: 通过实际调用音频API触发权限弹窗
         print('🎯 iOS platform detected');
-      await _requestMicrophonePermissionForIOS();
+        await _requestMicrophonePermissionDirectly();
+        // await _requestMicrophonePermissionForIOS();
       } else {
         // 其他平台
         print('🎯 Other platform detected, using default permission request');
@@ -422,18 +423,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       }
     }
   }
-
-
-
-
-
-
-
-
-
-
-
-
 
   /// 显示权限被永久拒绝的对话框
   void _showPermanentlyDeniedDialog() {
