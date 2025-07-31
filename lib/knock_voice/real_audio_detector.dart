@@ -25,7 +25,7 @@ class RealAudioDetector {
   double _currentDb = 0.0; // 当前分贝值
   
   // Strike detection parameters
-  static const double _dbThreshold = 70.0; // 分贝阈值（可调整）
+  static const double _dbThreshold = 50.0; // 降低分贝阈值，适应iOS环境
   static const int _minStrikeInterval = 200; // 最小击打间隔（毫秒）
   DateTime? _lastStrikeTime;
   
@@ -86,17 +86,17 @@ class RealAudioDetector {
       // Start recording with flutter_sound
       // This will automatically request microphone permission if needed
       try {
-        // Use PCM codec for better amplitude detection
+        // Use iOS-compatible codec for amplitude detection
         await _recorder.startRecorder(
           toFile: recordingPath,
-          codec: Codec.pcm16, // PCM for better amplitude detection
-          sampleRate: 44100,  // Higher sample rate for better quality
+          codec: Codec.aacADTS, // iOS-compatible codec
+          sampleRate: 22050,    // Lower sample rate for iOS compatibility
           numChannels: 1,
-          bufferSize: 512,    // Smaller buffer for lower latency
+          bufferSize: 512,      // Smaller buffer for lower latency
         );
-        print('🎯 Recording started successfully with PCM codec');
+        print('🎯 Recording started successfully with AAC codec');
       } catch (e) {
-        print('❌ Failed to start recording with PCM: $e');
+        print('❌ Failed to start recording with AAC: $e');
         try {
           // Fallback to default settings
           await _recorder.startRecorder(
@@ -172,9 +172,9 @@ class RealAudioDetector {
       // 检测击打声音（高振幅脉冲）
       _checkStrikeFromAmplitude(_currentDb);
       
-      // 调试：偶尔记录分贝值
-      if (_hitCount % 5 == 0) { // 每5次击打记录一次
-        print('🎤 Current dB: ${_currentDb.toStringAsFixed(1)} dB');
+      // 调试：更频繁地记录分贝值，帮助调试
+      if (_hitCount % 3 == 0 || _currentDb > _dbThreshold * 0.8) { // 每3次击打或接近阈值时记录
+        print('🎤 Current dB: ${_currentDb.toStringAsFixed(1)} dB (threshold: $_dbThreshold)');
       }
       
     } catch (e) {
@@ -195,14 +195,14 @@ class RealAudioDetector {
         _lastStrikeTime = now;
         _hitCount++;
         
-        print('🎯 STRIKE DETECTED! dB: ${db.toStringAsFixed(1)}, Count: $_hitCount, Time: ${now.toString()}');
+        print('🎯 STRIKE DETECTED! dB: ${db.toStringAsFixed(1)} (threshold: $_dbThreshold), Count: $_hitCount');
         
         // 触发击打检测回调
         onStrikeDetected?.call();
       } else {
         // 记录被忽略的检测（时间间隔太短）
         final timeSinceLast = now.difference(_lastStrikeTime!).inMilliseconds;
-        print('⚠️ Strike ignored (too soon): dB ${db.toStringAsFixed(1)}, Time since last: ${timeSinceLast}ms');
+        print('⚠️ Strike ignored (too soon): dB ${db.toStringAsFixed(1)}, Time since last: ${timeSinceLast}ms (min: $_minStrikeInterval)');
       }
     }
   }
