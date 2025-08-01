@@ -25,7 +25,7 @@ class RealAudioDetector {
   double _currentDb = 0.0; // 当前分贝值
   
   // Strike detection parameters
-  static const double _dbThreshold = 50.0; // 降低分贝阈值，适应iOS环境
+  static const double _dbThreshold = 30.0; // 降低分贝阈值，适应iOS环境
   static const int _minStrikeInterval = 200; // 最小击打间隔（毫秒）
   DateTime? _lastStrikeTime;
   
@@ -173,7 +173,7 @@ class RealAudioDetector {
       _checkStrikeFromAmplitude(_currentDb);
       
       // 调试：更频繁地记录分贝值，帮助调试
-      if (_hitCount % 3 == 0 || _currentDb > _dbThreshold * 0.8) { // 每3次击打或接近阈值时记录
+      if (_hitCount % 3 == 0 || _currentDb > _dbThreshold * 0.8 || _currentDb > 10.0) { // 每3次击打、接近阈值或超过10dB时记录
         print('🎤 Current dB: ${_currentDb.toStringAsFixed(1)} dB (threshold: $_dbThreshold)');
       }
       

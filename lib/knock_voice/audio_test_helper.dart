@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'real_audio_detector.dart';
 
 /// 音频测试辅助类
@@ -30,6 +31,25 @@ class AudioTestHelper {
       _dbHistory.clear();
       
       onLog?.call('🎯 Starting audio detection test...');
+      
+      // 检查麦克风权限
+      onLog?.call('🎯 Checking microphone permission...');
+      final permissionStatus = await Permission.microphone.status;
+      onLog?.call('📊 Microphone permission status: $permissionStatus');
+      
+      if (permissionStatus != PermissionStatus.granted) {
+        onLog?.call('🎯 Requesting microphone permission...');
+        final requestResult = await Permission.microphone.request();
+        onLog?.call('📊 Permission request result: $requestResult');
+        
+        if (requestResult != PermissionStatus.granted) {
+          onLog?.call('❌ Microphone permission denied');
+          _isTestRunning = false;
+          return false;
+        }
+      }
+      
+      onLog?.call('✅ Microphone permission granted');
       
       // 创建测试检测器
       _testDetector = RealAudioDetector();
@@ -68,6 +88,7 @@ class AudioTestHelper {
       onLog?.call('✅ Audio test started successfully');
       onLog?.call('🎯 Test will run for $durationSeconds seconds');
       onLog?.call('🎯 Make some noise to test strike detection!');
+      onLog?.call('🎯 Current dB threshold: 50.0 (try making louder sounds)');
       
       // 启动定时器监控分贝值
       _testTimer = Timer.periodic(Duration(milliseconds: 500), (timer) {
@@ -85,6 +106,11 @@ class AudioTestHelper {
           // 每5秒输出一次统计信息
           if (timer.tick % 10 == 0) {
             _printTestStats(onLog);
+          }
+          
+          // 如果分贝值一直为0，给出提示
+          if (timer.tick % 20 == 0 && currentDb == 0.0) {
+            onLog?.call('⚠️ No audio detected (dB: 0.0). Try speaking louder or check microphone.');
           }
         }
       });
@@ -143,6 +169,15 @@ class AudioTestHelper {
     onLog?.call('  - Max dB: ${maxDb.toStringAsFixed(1)}');
     onLog?.call('  - Min dB: ${minDb.toStringAsFixed(1)}');
     onLog?.call('  - Samples: ${_dbHistory.length}');
+    
+    // 如果所有分贝值都是0，给出特殊提示
+    if (maxDb == 0.0) {
+      onLog?.call('⚠️ WARNING: No audio detected! Possible issues:');
+      onLog?.call('  - Microphone not working');
+      onLog?.call('  - Permission not granted');
+      onLog?.call('  - Audio session not configured');
+      onLog?.call('  - Try speaking louder or clapping hands');
+    }
   }
   
   /// 获取当前测试状态

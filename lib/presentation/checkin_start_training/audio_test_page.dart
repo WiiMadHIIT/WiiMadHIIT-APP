@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:io';
 import '../../knock_voice/audio_test_helper.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -85,6 +87,104 @@ class _AudioTestPageState extends State<AudioTestPage> {
     });
   }
 
+  /// 复制所有日志信息到剪贴板
+  Future<void> _copyAllLogs() async {
+    try {
+      final StringBuffer buffer = StringBuffer();
+      
+      // 添加系统信息
+      buffer.writeln('=== 音频检测测试报告 ===');
+      buffer.writeln('生成时间: ${DateTime.now().toString()}');
+      buffer.writeln('平台: ${Platform.isIOS ? 'iOS' : 'Android'}');
+      buffer.writeln('测试状态: ${_isTestRunning ? '运行中' : '已停止'}');
+      buffer.writeln('当前击打次数: $_hitCount');
+      buffer.writeln('当前分贝值: ${_currentDb.toStringAsFixed(1)} dB');
+      buffer.writeln('分贝阈值: 30.0 dB');
+      buffer.writeln('日志条数: ${_logs.length}');
+      buffer.writeln('');
+      
+      // 添加统计信息
+      if (_logs.isNotEmpty) {
+        buffer.writeln('=== 测试统计 ===');
+        final dbValues = AudioTestHelper.dbHistory;
+        if (dbValues.isNotEmpty) {
+          final avgDb = dbValues.reduce((a, b) => a + b) / dbValues.length;
+          final maxDb = dbValues.reduce((a, b) => a > b ? a : b);
+          final minDb = dbValues.reduce((a, b) => a < b ? a : b);
+          
+          buffer.writeln('平均分贝: ${avgDb.toStringAsFixed(1)} dB');
+          buffer.writeln('最大分贝: ${maxDb.toStringAsFixed(1)} dB');
+          buffer.writeln('最小分贝: ${minDb.toStringAsFixed(1)} dB');
+          buffer.writeln('样本数量: ${dbValues.length}');
+        }
+        buffer.writeln('');
+      }
+      
+      // 添加详细日志
+      buffer.writeln('=== 详细日志 ===');
+      for (String log in _logs) {
+        buffer.writeln(log);
+      }
+      
+      // 添加问题诊断
+      buffer.writeln('');
+      buffer.writeln('=== 问题诊断 ===');
+      if (_currentDb == 0.0 && _hitCount == 0) {
+        buffer.writeln('⚠️ 检测到问题:');
+        buffer.writeln('  - 分贝值始终为 0.0');
+        buffer.writeln('  - 没有检测到任何击打');
+        buffer.writeln('可能原因:');
+        buffer.writeln('  1. 麦克风权限未授予');
+        buffer.writeln('  2. 麦克风硬件问题');
+        buffer.writeln('  3. iOS 音频会话配置问题');
+        buffer.writeln('  4. 编解码器兼容性问题');
+        buffer.writeln('  5. 环境声音太小');
+        buffer.writeln('建议:');
+        buffer.writeln('  - 检查麦克风权限');
+        buffer.writeln('  - 尝试制造更大声音（拍手、说话）');
+        buffer.writeln('  - 检查设备麦克风是否正常工作');
+      } else if (_hitCount == 0) {
+        buffer.writeln('⚠️ 部分问题:');
+        buffer.writeln('  - 检测到声音（分贝值: ${_currentDb.toStringAsFixed(1)}）');
+        buffer.writeln('  - 但没有检测到击打（阈值: 30.0 dB）');
+        buffer.writeln('建议:');
+        buffer.writeln('  - 制造更大声音');
+        buffer.writeln('  - 或降低检测阈值');
+      } else {
+        buffer.writeln('✅ 检测正常:');
+        buffer.writeln('  - 成功检测到 $_hitCount 次击打');
+        buffer.writeln('  - 当前分贝值: ${_currentDb.toStringAsFixed(1)} dB');
+      }
+      
+      final String allLogs = buffer.toString();
+      
+      // 复制到剪贴板
+      await Clipboard.setData(ClipboardData(text: allLogs));
+      
+      // 显示成功提示
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ 所有日志信息已复制到剪贴板'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 复制失败: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,6 +192,14 @@ class _AudioTestPageState extends State<AudioTestPage> {
         title: Text('Audio Detection Test'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        actions: [
+          // 添加复制按钮到AppBar
+          IconButton(
+            icon: Icon(Icons.copy),
+            onPressed: _copyAllLogs,
+            tooltip: '复制所有日志',
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -154,6 +262,17 @@ class _AudioTestPageState extends State<AudioTestPage> {
                       ),
                       child: Text('Clear Logs'),
                     ),
+                    // 添加复制按钮
+                    ElevatedButton.icon(
+                      onPressed: _copyAllLogs,
+                      icon: Icon(Icons.copy, size: 16),
+                      label: Text('Copy'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -188,6 +307,13 @@ class _AudioTestPageState extends State<AudioTestPage> {
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
+                        ),
+                        Spacer(),
+                        // 在日志标题栏也添加复制按钮
+                        IconButton(
+                          icon: Icon(Icons.copy, size: 16),
+                          onPressed: _copyAllLogs,
+                          tooltip: '复制所有日志',
                         ),
                       ],
                     ),
