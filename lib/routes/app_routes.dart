@@ -86,7 +86,7 @@ class AppRoutes {
         productId: args?['productId'] ?? '',
       );
     },
-          streamAudioDetectorExample: (_) => const StreamAudioDetectorExample(),
+      streamAudioDetectorExample: (_) => const StreamAudioDetectorExample(),
       toneSpecificAudioDetectorExample: (_) => const ToneSpecificAudioDetectorExample(),
   };
 }

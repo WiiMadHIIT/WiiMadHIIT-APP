@@ -1,9 +1,7 @@
-import 'dart:async';
+ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'tone_specific_audio_detector.dart';
 
-/// Example usage of ToneSpecificAudioDetector
-/// 展示如何在 Flutter 应用中使用 ToneSpecificAudioDetector 进行特定音色检测
 class ToneSpecificAudioDetectorExample extends StatefulWidget {
   const ToneSpecificAudioDetectorExample({super.key});
 
@@ -197,7 +195,7 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
         backgroundColor: Colors.purple,
         foregroundColor: Colors.white,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -404,9 +402,11 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
                 ),
               ),
             ),
+            
+            SizedBox(height: 32), // Extra space at bottom
           ],
         ),
       ),
     );
   }
-} 
+}
