@@ -326,7 +326,7 @@ class RealAudioDetector {
     
     // 检查分贝值变化趋势
     if (_dbHistory.length >= 5) {
-      final recentValues = _dbHistory.takeLast(5).toList();
+      final recentValues = _dbHistory.skip(_dbHistory.length - 5).toList();
       final isRising = recentValues[recentValues.length - 1] > recentValues[0];
       
       if (!isRising) {
