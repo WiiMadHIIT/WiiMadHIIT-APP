@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
+import '../../routes/app_routes.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -124,12 +125,17 @@ class HomePage extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: _StatCard(
-                      icon: Icons.local_fire_department,
-                      value: '7',
-                      label: 'Day Streak',
-                      color: Colors.orange,
-                      gradient: [Colors.orange, Colors.red],
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(context, AppRoutes.streamAudioDetectorExample);
+                      },
+                      child: _StatCard(
+                        icon: Icons.local_fire_department,
+                        value: '7',
+                        label: 'Day Streak',
+                        color: Colors.orange,
+                        gradient: [Colors.orange, Colors.red],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
