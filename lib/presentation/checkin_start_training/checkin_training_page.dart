@@ -13,7 +13,7 @@ import '../../knock_voice/simple_audio_detector.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
-import 'package:audio_session/audio_session.dart';
+
 import 'package:flutter_sound/flutter_sound.dart';
 import 'dart:io' show Platform;
 
@@ -208,14 +208,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 停止声音检测
     _audioDetector?.dispose();
     
-    // 🎯 清理 audio_session（audio_session 最佳实践）
-    AudioSession.instance.then((session) {
-      session.setActive(false).catchError((e) {
-        print('🎯 Audio session deactivation error during disposal: $e');
-      });
-    }).catchError((e) {
-      print('🎯 Audio session cleanup error during disposal: $e');
-    });
+
     
     // 释放所有控制器资源
     bounceController.dispose();
@@ -501,90 +494,42 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     );
   }
 
-  /// 🎯 Apple-level Audio Detection Initialization
-  /// 参考 audio_session 最佳实践：https://github.com/ryanheise/audio_session
+  /// 🎯 Apple-level Simple Audio Detection Initialization
+  /// 针对 SimpleAudioDetector (mock mode) 的优化初始化
   Future<void> _initializeAudioDetection() async {
     try {
       setState(() {
         _isInitializingAudioDetection = true;
       });
 
-      // 1. 激活音频会话（audio_session 最佳实践）
-      print("🎯 iOS: 激活音频会话...");
-      final session = await AudioSession.instance;
-      final activated = await session.setActive(true);
-      if (!activated) {
-        print("⚠️ iOS: 音频会话激活失败，但继续初始化...");
-      } else {
-        print("✅ iOS: 音频会话激活成功");
-      }
-
-      // 2. 创建简单声音检测器实例（如果还没有创建）
+      // 1. 创建简单声音检测器实例（如果还没有创建）
       _audioDetector ??= SimpleAudioDetector();
 
-      // 3. 设置检测回调
+      // 2. 设置检测回调
       _audioDetector!.onStrikeDetected = () {
-        print('🎯 Strike detected! Triggering count...');
+        print('🎯 Mock strike detected! Triggering count...');
         if (isCounting && mounted) {
           _onCountPressed(); // 自动触发计数
         }
       };
 
-      // 4. 设置错误回调
+      // 3. 设置错误回调
       _audioDetector!.onError = (error) {
-        print('Audio detection error: $error');
+        print('Simple audio detection error: $error');
         // 不在这里显示错误对话框，让用户有机会尝试
       };
 
-      // 5. 设置状态回调
+      // 4. 设置状态回调
       _audioDetector!.onStatusUpdate = (status) {
-        print('Audio detection status: $status');
+        print('Simple audio detection status: $status');
       };
 
-      // 6. 初始化简单音频检测器
+      // 5. 初始化简单音频检测器
       final initSuccess = await _audioDetector!.initialize();
       if (!initSuccess) {
-        print('⚠️ Audio detector initialization failed, but continuing...');
+        print('⚠️ Simple audio detector initialization failed, but continuing...');
         // 不抛出异常，让用户有机会尝试
       }
-
-      // 7. 监听音频中断事件（audio_session 最佳实践）
-      session.interruptionEventStream.listen((event) {
-        print('🎯 Audio interruption: ${event.type} - ${event.begin ? "begin" : "end"}');
-        if (event.begin) {
-          switch (event.type) {
-            case AudioInterruptionType.duck:
-              // 其他应用开始播放音频，我们应该降低音量
-              print('🎯 Ducking audio due to interruption');
-              break;
-            case AudioInterruptionType.pause:
-            case AudioInterruptionType.unknown:
-              // 其他应用开始播放音频，我们应该暂停
-              print('🎯 Pausing audio due to interruption');
-              break;
-          }
-        } else {
-          switch (event.type) {
-            case AudioInterruptionType.duck:
-              // 中断结束，我们应该恢复音量
-              print('🎯 Unducking audio after interruption');
-              break;
-            case AudioInterruptionType.pause:
-              // 中断结束，我们应该恢复播放
-              print('🎯 Resuming audio after interruption');
-              break;
-            case AudioInterruptionType.unknown:
-              // 中断结束但不应该恢复
-              print('🎯 Interruption ended but not resuming');
-              break;
-          }
-        }
-      });
-
-      // 8. 监听设备变化事件
-      session.devicesChangedEventStream.listen((event) {
-        print('🎯 Audio devices changed: added=${event.devicesAdded}, removed=${event.devicesRemoved}');
-      });
 
       setState(() {
         _audioDetectionEnabled = true; // 默认开启
@@ -593,7 +538,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
       print('🎯 Simple audio detection initialization completed (mock mode)');
     } catch (e) {
-      print('❌ Error during audio detection initialization: $e');
+      print('❌ Error during simple audio detection initialization: $e');
       setState(() {
         _isInitializingAudioDetection = false;
         _audioDetectionEnabled = true; // 默认开启
