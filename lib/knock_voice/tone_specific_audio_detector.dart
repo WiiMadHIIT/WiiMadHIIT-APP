@@ -30,9 +30,12 @@ class ToneSpecificAudioDetector {
   // Audio data buffers
   List<List<Float32List>> _audioBuffer = [];
   List<List<Float32List>> _sampleBuffer = [];
+  List<Uint8List> _audioBufferUint8 = [];
+  List<Uint8List> _sampleBufferUint8 = [];
   
   // Stream controllers
   StreamController<List<Float32List>>? _audioDataController;
+  StreamController<Uint8List>? _audioDataControllerUint8;
   
   // Audio configuration
   static const int _sampleRate = 48000;
@@ -44,8 +47,10 @@ class ToneSpecificAudioDetector {
   double _currentDb = 0.0;
   int _hitCount = 0;
   DateTime? _lastStrikeTime;
-  static const double _dbThreshold = 50.0;
-  static const int _minStrikeInterval = 200;
+  static const double _dbThreshold = 50.0; // 振幅检测阈值
+  static const double _audioDataThreshold = 60.0; // 音频数据检测阈值 (50.0 * 1.2)
+  static const int _minStrikeInterval = 200; // 振幅检测时间间隔
+  static const int _audioDataStrikeInterval = 300; // 音频数据检测时间间隔 (200 * 1.5)
   
   // Tone matching parameters
   List<double> _sampleFeatures = [];
@@ -54,6 +59,7 @@ class ToneSpecificAudioDetector {
   List<double> _frequencyBands = []; // 频率带特征
   
   // Audio processing mode
+  bool _interleaved = false;
   Codec _codecSelected = Codec.pcmFloat32;
   
   /// Initialize detector
@@ -310,22 +316,50 @@ class ToneSpecificAudioDetector {
       _lastStrikeTime = null;
       _currentDb = 0.0;
       
-      // Create stream controller for real-time detection
-      _audioDataController = StreamController<List<Float32List>>();
-      _audioDataController!.stream.listen((audioData) {
-        _audioBuffer.add(audioData);
-        _processAudioDataWithToneMatching(audioData);
-      });
+      // Create stream controllers for real-time detection
+      if (_interleaved) {
+        _audioDataControllerUint8 = StreamController<Uint8List>();
+        _audioDataControllerUint8!.stream.listen((Uint8List buf) {
+          _audioBufferUint8.add(buf);
+          _processAudioDataUint8WithToneMatching(buf);
+        });
+      } else {
+        _audioDataController = StreamController<List<Float32List>>();
+        _audioDataController!.stream.listen((audioData) {
+          _audioBuffer.add(audioData);
+          _processAudioDataWithToneMatching(audioData);
+        });
+      }
       
       // Start recording
-      await _recorder.startRecorder(
-        codec: _codecSelected,
-        sampleRate: _sampleRate,
-        numChannels: _numChannels,
-        audioSource: AudioSource.defaultSource,
-        toStreamFloat32: _audioDataController!.sink,
-        bufferSize: _bufferSize,
-      );
+      if (_interleaved) {
+        await _recorder.startRecorder(
+          codec: _codecSelected,
+          sampleRate: _sampleRate,
+          numChannels: _numChannels,
+          audioSource: AudioSource.defaultSource,
+          toStream: _audioDataControllerUint8!.sink,
+          bufferSize: _bufferSize,
+        );
+      } else if (_codecSelected == Codec.pcmFloat32) {
+        await _recorder.startRecorder(
+          codec: _codecSelected,
+          sampleRate: _sampleRate,
+          numChannels: _numChannels,
+          audioSource: AudioSource.defaultSource,
+          toStreamFloat32: _audioDataController!.sink,
+          bufferSize: _bufferSize,
+        );
+      } else if (_codecSelected == Codec.pcm16) {
+        // For PCM16, we'll use a different approach
+        await _recorder.startRecorder(
+          codec: _codecSelected,
+          sampleRate: _sampleRate,
+          numChannels: _numChannels,
+          audioSource: AudioSource.defaultSource,
+          bufferSize: _bufferSize,
+        );
+      }
       
       _isListening = true;
       _updateStatus('Started listening with tone matching');
@@ -362,6 +396,9 @@ class ToneSpecificAudioDetector {
       await _audioDataController?.close();
       _audioDataController = null;
       
+      await _audioDataControllerUint8?.close();
+      _audioDataControllerUint8 = null;
+      
       // Stop recording
       if (_recorder.isRecording) {
         await _recorder.stopRecorder();
@@ -377,14 +414,34 @@ class ToneSpecificAudioDetector {
     }
   }
   
-  /// Process amplitude data
+  /// Process amplitude data - Two-step detection
   void _processAmplitudeData(RecordingDisposition e) {
     try {
       _currentDb = e.decibels ?? 0.0;
       
-      // Only check amplitude if we have sample features
-      if (_sampleFeatures.isNotEmpty) {
-        _checkStrikeFromAmplitude(_currentDb);
+      // First step: Check if amplitude is high enough (lower threshold for amplitude)
+      if (_currentDb > _dbThreshold) {
+        print('🎤 Amplitude threshold passed: ${_currentDb.toStringAsFixed(1)} dB (threshold: $_dbThreshold)');
+        
+        // Second step: Check if we have sample features for tone matching
+        if (_sampleFeatures.isNotEmpty) {
+          // For amplitude detection, we need to get current audio data for tone matching
+          // Since amplitude doesn't provide audio data directly, we'll use the latest audio buffer
+          if (_audioBuffer.isNotEmpty) {
+            // Use the latest audio data for tone matching
+            List<Float32List> latestAudioData = _audioBuffer.last;
+            _processAmplitudeWithToneMatching(_currentDb, latestAudioData);
+          } else if (_audioBufferUint8.isNotEmpty) {
+            // Use the latest Uint8 audio data for tone matching
+            Uint8List latestAudioData = _audioBufferUint8.last;
+            _processAmplitudeWithToneMatchingUint8(_currentDb, latestAudioData);
+          } else {
+            // No audio data available, cannot perform tone matching
+            print('🎤 Amplitude detected but no audio data available for tone matching - skipping detection');
+          }
+        } else {
+          print('⚠️ Amplitude detected but no sample recorded: Cannot perform tone matching');
+        }
       }
       
       // Debug logging
@@ -396,26 +453,41 @@ class ToneSpecificAudioDetector {
     }
   }
   
-  /// Process audio data with tone matching
+  /// Process audio data with tone matching - Two-step detection
   void _processAudioDataWithToneMatching(List<Float32List> audioData) {
     try {
       // Calculate RMS energy
       double rmsEnergy = _calculateRMSEnergy(audioData);
       double dbFromAudio = _rmsToDecibels(rmsEnergy);
       
-      // Check if audio level is high enough
-      if (dbFromAudio > _dbThreshold * 1.2) {
-        // Extract features from current audio
-        List<double> currentFeatures = _extractCurrentFeatures(audioData);
+      // First step: Check if audio level is high enough (higher threshold for audio data)
+      if (dbFromAudio > _audioDataThreshold) {
+        print('🎵 First step passed: Audio level ${dbFromAudio.toStringAsFixed(1)} dB > threshold $_audioDataThreshold');
         
-        // Calculate similarity with sample
-        double similarity = _calculateSimilarity(currentFeatures);
-        
-        print('🎵 Audio detected: ${dbFromAudio.toStringAsFixed(1)} dB, Similarity: ${similarity.toStringAsFixed(3)}');
-        
-        // Check if similarity is high enough
-        if (similarity > _similarityThreshold) {
-          _checkStrikeFromToneMatching(dbFromAudio, similarity);
+        // Second step: Check if we have sample features for tone matching
+        if (_sampleFeatures.isNotEmpty) {
+          // Extract features from current audio
+          List<double> currentFeatures = _extractCurrentFeatures(audioData);
+          
+          // Calculate similarity with sample
+          double similarity = _calculateSimilarity(currentFeatures);
+          
+          _lastDetectedSimilarity = similarity; // Update for UI display
+          print('🎵 Second step: Tone similarity ${similarity.toStringAsFixed(3)} (threshold: $_similarityThreshold)');
+          
+          // Final check: Both amplitude and tone matching passed
+          if (similarity > _similarityThreshold) {
+            _checkStrikeFromToneMatching(dbFromAudio, similarity);
+          } else {
+            print('⚠️ Tone mismatch: similarity ${similarity.toStringAsFixed(3)} < threshold $_similarityThreshold');
+          }
+        } else {
+          print('⚠️ No sample recorded: Cannot perform tone matching');
+        }
+      } else {
+        // Debug: Show when audio level is too low
+        if (dbFromAudio > _audioDataThreshold * 0.7) {
+          print('🎵 Audio level too low: ${dbFromAudio.toStringAsFixed(1)} dB < threshold $_audioDataThreshold');
         }
       }
     } catch (e) {
@@ -432,6 +504,20 @@ class ToneSpecificAudioDetector {
     }
     
     // Calculate same features as sample
+    return _calculateFrequencyFeatures(combinedAudio);
+  }
+  
+  /// Extract features from Uint8 audio data
+  List<double> _extractCurrentFeaturesFromUint8(Uint8List audioData) {
+    // Convert Uint8 to Float32 for processing
+    Float32List floatData = Float32List(audioData.length ~/ 4);
+    for (int i = 0; i < floatData.length; i++) {
+      int offset = i * 4;
+      floatData[i] = _bytesToFloat32(audioData, offset);
+    }
+    
+    // Convert to List<double> and calculate features
+    List<double> combinedAudio = floatData.toList();
     return _calculateFrequencyFeatures(combinedAudio);
   }
   
@@ -457,7 +543,42 @@ class ToneSpecificAudioDetector {
     
     if (normA == 0.0 || normB == 0.0) return 0.0;
     
-    return dotProduct / (normA * normB);
+    double cosineSimilarity = dotProduct / (normA * normB);
+    
+    // Normalize to 0-1 range and apply some bias for better detection
+    double normalizedSimilarity = (cosineSimilarity + 1.0) / 2.0;
+    
+    // Apply frequency band comparison if available
+    if (_frequencyBands.isNotEmpty && currentFeatures.length >= 4) {
+      double frequencySimilarity = _compareFrequencyBands(currentFeatures);
+      // Combine cosine similarity with frequency similarity
+      normalizedSimilarity = (normalizedSimilarity * 0.7 + frequencySimilarity * 0.3);
+    }
+    
+    return normalizedSimilarity.clamp(0.0, 1.0);
+  }
+  
+  /// Compare frequency bands between sample and current audio
+  double _compareFrequencyBands(List<double> currentFeatures) {
+    if (_frequencyBands.isEmpty) return 0.0;
+    
+    // Extract frequency-related features (assuming they're in the features list)
+    double currentFreqEnergy = 0.0;
+    double sampleFreqEnergy = 0.0;
+    
+    // Simple frequency energy comparison
+    for (int i = 0; i < min(_frequencyBands.length, 4); i++) {
+      sampleFreqEnergy += _frequencyBands[i];
+      if (i < currentFeatures.length) {
+        currentFreqEnergy += currentFeatures[i].abs();
+      }
+    }
+    
+    if (sampleFreqEnergy == 0.0) return 0.0;
+    
+    double ratio = currentFreqEnergy / sampleFreqEnergy;
+    // Convert ratio to similarity (closer to 1.0 = more similar)
+    return (2.0 / (1.0 + ratio)).clamp(0.0, 1.0);
   }
   
   /// Calculate RMS energy from Float32List
@@ -484,42 +605,159 @@ class ToneSpecificAudioDetector {
     return 20.0 * log(rms) / ln10;
   }
   
-  /// Check strike from amplitude (basic detection)
+  /// Convert bytes to Float32
+  double _bytesToFloat32(Uint8List bytes, int offset) {
+    ByteData byteData = ByteData.view(bytes.buffer, offset, 4);
+    return byteData.getFloat32(0, Endian.little);
+  }
+  
+  /// Process Uint8 audio data with tone matching - Two-step detection
+  void _processAudioDataUint8WithToneMatching(Uint8List audioData) {
+    try {
+      // Calculate RMS energy from Uint8 data
+      Float32List floatData = Float32List(audioData.length ~/ 4);
+      for (int i = 0; i < floatData.length; i++) {
+        int offset = i * 4;
+        floatData[i] = _bytesToFloat32(audioData, offset);
+      }
+      
+      double rmsEnergy = _calculateRMSEnergyFromList(floatData);
+      double dbFromAudio = _rmsToDecibels(rmsEnergy);
+      
+      // First step: Check if audio level is high enough (higher threshold for audio data)
+      if (dbFromAudio > _audioDataThreshold) {
+        print('🎵 Uint8 First step passed: Audio level ${dbFromAudio.toStringAsFixed(1)} dB > threshold $_audioDataThreshold');
+        
+        // Second step: Check if we have sample features for tone matching
+        if (_sampleFeatures.isNotEmpty) {
+          // Extract features from current audio
+          List<double> currentFeatures = _extractCurrentFeaturesFromUint8(audioData);
+          
+          // Calculate similarity with sample
+          double similarity = _calculateSimilarity(currentFeatures);
+          
+          _lastDetectedSimilarity = similarity; // Update for UI display
+          print('🎵 Uint8 Second step: Tone similarity ${similarity.toStringAsFixed(3)} (threshold: $_similarityThreshold)');
+          
+          // Final check: Both amplitude and tone matching passed
+          if (similarity > _similarityThreshold) {
+            _checkStrikeFromToneMatching(dbFromAudio, similarity);
+          } else {
+            print('⚠️ Uint8 Tone mismatch: similarity ${similarity.toStringAsFixed(3)} < threshold $_similarityThreshold');
+          }
+        } else {
+          print('⚠️ Uint8 No sample recorded: Cannot perform tone matching');
+        }
+      }
+    } catch (e) {
+      print('⚠️ Uint8 audio data processing error: $e');
+    }
+  }
+  
+  /// Calculate RMS energy from single Float32List
+  double _calculateRMSEnergyFromList(Float32List audioData) {
+    if (audioData.isEmpty) return 0.0;
+    
+    double sum = 0.0;
+    for (var sample in audioData) {
+      sum += sample * sample;
+    }
+    
+    return sqrt(sum / audioData.length);
+  }
+  
+  /// Process amplitude with tone matching - Two-step detection
+  void _processAmplitudeWithToneMatching(double amplitudeDb, List<Float32List> audioData) {
+    try {
+      // First step: Amplitude already passed (amplitudeDb > _dbThreshold)
+      print('🎤 Amplitude step passed: ${amplitudeDb.toStringAsFixed(1)} dB > threshold $_dbThreshold');
+      
+      // Second step: Extract features and calculate similarity
+      List<double> currentFeatures = _extractCurrentFeatures(audioData);
+      double similarity = _calculateSimilarity(currentFeatures);
+      
+      _lastDetectedSimilarity = similarity; // Update for UI display
+      print('🎤 Amplitude + Tone step: Similarity ${similarity.toStringAsFixed(3)} (threshold: $_similarityThreshold)');
+      
+      // Final check: Both amplitude and tone matching passed
+      if (similarity > _similarityThreshold) {
+        _checkStrikeFromToneMatching(amplitudeDb, similarity);
+      } else {
+        print('⚠️ Amplitude + Tone mismatch: similarity ${similarity.toStringAsFixed(3)} < threshold $_similarityThreshold');
+      }
+    } catch (e) {
+      print('⚠️ Amplitude with tone matching error: $e');
+    }
+  }
+  
+  /// Process amplitude with tone matching for Uint8 data - Two-step detection
+  void _processAmplitudeWithToneMatchingUint8(double amplitudeDb, Uint8List audioData) {
+    try {
+      // First step: Amplitude already passed (amplitudeDb > _dbThreshold)
+      print('🎤 Uint8 Amplitude step passed: ${amplitudeDb.toStringAsFixed(1)} dB > threshold $_dbThreshold');
+      
+      // Second step: Extract features and calculate similarity
+      List<double> currentFeatures = _extractCurrentFeaturesFromUint8(audioData);
+      double similarity = _calculateSimilarity(currentFeatures);
+      
+      _lastDetectedSimilarity = similarity; // Update for UI display
+      print('🎤 Uint8 Amplitude + Tone step: Similarity ${similarity.toStringAsFixed(3)} (threshold: $_similarityThreshold)');
+      
+      // Final check: Both amplitude and tone matching passed
+      if (similarity > _similarityThreshold) {
+        _checkStrikeFromToneMatching(amplitudeDb, similarity);
+      } else {
+        print('⚠️ Uint8 Amplitude + Tone mismatch: similarity ${similarity.toStringAsFixed(3)} < threshold $_similarityThreshold');
+      }
+    } catch (e) {
+      print('⚠️ Uint8 Amplitude with tone matching error: $e');
+    }
+  }
+  
+
+  
+  /// Check strike from amplitude (basic detection) - REMOVED
+  /// Now all strikes must pass tone matching
   void _checkStrikeFromAmplitude(double db) {
+    // This method is no longer used - all detection goes through tone matching
+    print('⚠️ Amplitude-only detection disabled - tone matching required');
+  }
+  
+  /// Check strike from tone matching - Final step
+  void _checkStrikeFromToneMatching(double db, double similarity) {
     final now = DateTime.now();
     
-    if (db > _dbThreshold) {
+    // Final validation: Both amplitude and tone matching must pass
+    // Note: db can come from either amplitude (50.0 threshold) or audio data (60.0 threshold)
+    if (db > _dbThreshold && similarity > _similarityThreshold) {
+      // Determine detection source and use appropriate time interval
+      bool isFromAmplitude = (db == _currentDb);
+      int requiredInterval = isFromAmplitude ? _minStrikeInterval : _audioDataStrikeInterval;
+      
       if (_lastStrikeTime == null || 
-          now.difference(_lastStrikeTime!).inMilliseconds > _minStrikeInterval) {
+          now.difference(_lastStrikeTime!).inMilliseconds > requiredInterval) {
         
         _lastStrikeTime = now;
         _hitCount++;
         
-        print('🎯 AMPLITUDE STRIKE DETECTED! dB: ${db.toStringAsFixed(1)} (threshold: $_dbThreshold), Count: $_hitCount');
+        // Determine detection source for better logging
+        String detectionSource = isFromAmplitude ? "Amplitude + Audio Data" : "Audio Data";
+        String intervalInfo = isFromAmplitude ? "200ms" : "300ms";
+        
+        print('🎵 ✅ TWO-STEP STRIKE DETECTED!');
+        print('   Source: $detectionSource (Interval: $intervalInfo)');
+        print('   Step 1: Amplitude ✓ (${db.toStringAsFixed(1)} dB > ${isFromAmplitude ? _dbThreshold : _audioDataThreshold})');
+        print('   Step 2: Tone Match ✓ (${similarity.toStringAsFixed(3)} > $_similarityThreshold)');
+        print('   Count: $_hitCount');
         
         onStrikeDetected?.call();
       } else {
         final timeSinceLast = now.difference(_lastStrikeTime!).inMilliseconds;
-        print('⚠️ Amplitude strike ignored (too soon): dB ${db.toStringAsFixed(1)}, Time since last: ${timeSinceLast}ms');
+        String intervalInfo = isFromAmplitude ? "200ms" : "300ms";
+        print('⚠️ Two-step strike ignored (too soon): Time since last: ${timeSinceLast}ms (required: $intervalInfo)');
       }
-    }
-  }
-  
-  /// Check strike from tone matching
-  void _checkStrikeFromToneMatching(double db, double similarity) {
-    final now = DateTime.now();
-    
-    if (db > _dbThreshold * 1.2 && similarity > _similarityThreshold) {
-      if (_lastStrikeTime == null || 
-          now.difference(_lastStrikeTime!).inMilliseconds > _minStrikeInterval * 1.5) {
-        
-        _lastStrikeTime = now;
-        _hitCount++;
-        
-        print('🎵 TONE MATCHED STRIKE DETECTED! dB: ${db.toStringAsFixed(1)}, Similarity: ${similarity.toStringAsFixed(3)}, Count: $_hitCount');
-        
-        onStrikeDetected?.call();
-      }
+    } else {
+      print('⚠️ Two-step validation failed: dB=${db.toStringAsFixed(1)}, similarity=${similarity.toStringAsFixed(3)}');
     }
   }
   
@@ -527,6 +765,13 @@ class ToneSpecificAudioDetector {
   void setSimilarityThreshold(double threshold) {
     _similarityThreshold = threshold.clamp(0.0, 1.0);
     print('🎵 Similarity threshold set to: $_similarityThreshold');
+  }
+  
+  /// Set audio processing mode
+  void setAudioMode({bool interleaved = false, Codec codec = Codec.pcmFloat32}) {
+    _interleaved = interleaved;
+    _codecSelected = codec;
+    print('🎵 Tone specific audio mode set: interleaved=$interleaved, codec=$codec');
   }
   
   /// Get listening status
@@ -545,13 +790,17 @@ class ToneSpecificAudioDetector {
   int get hitCount => _hitCount;
   
   /// Get audio buffer size
-  int get audioBufferSize => _audioBuffer.length;
+  int get audioBufferSize => _interleaved ? _audioBufferUint8.length : _audioBuffer.length;
   
   /// Get sample features count
   int get sampleFeaturesCount => _sampleFeatures.length;
   
   /// Get similarity threshold
   double get similarityThreshold => _similarityThreshold;
+  
+  /// Get last detected similarity (for UI display)
+  double _lastDetectedSimilarity = 0.0;
+  double get lastDetectedSimilarity => _lastDetectedSimilarity;
   
   /// Reset hit count
   void resetHitCount() {
@@ -584,6 +833,7 @@ class ToneSpecificAudioDetector {
       _amplitudeSubscription?.cancel();
       _audioDataSubscription?.cancel();
       _audioDataController?.close();
+      _audioDataControllerUint8?.close();
       _recorder.closeRecorder();
       _player.closePlayer();
       print('🎯 Tone specific audio detector disposed');

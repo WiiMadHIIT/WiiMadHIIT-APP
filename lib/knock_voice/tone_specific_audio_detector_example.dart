@@ -19,6 +19,7 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
   int _hitCount = 0;
   double _currentDb = 0.0;
   double _currentSimilarity = 0.8;
+  double _lastDetectedSimilarity = 0.0;
   int _audioBufferSize = 0;
   String _status = 'Not initialized';
   double _recordingProgress = 0.0;
@@ -34,6 +35,8 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
     _detector.onStrikeDetected = () {
       setState(() {
         _hitCount = _detector.hitCount;
+        // Update last detected similarity (this will be updated in the detector logs)
+        _lastDetectedSimilarity = _currentSimilarity;
       });
       print('🎯 Tone specific strike detected! Count: $_hitCount');
     };
@@ -71,6 +74,12 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
       _isInitialized = success;
       _status = success ? 'Initialized' : 'Initialization failed';
     });
+    
+    if (success) {
+      print('✅ Detector initialized successfully');
+    } else {
+      print('❌ Detector initialization failed');
+    }
   }
   
   Future<void> _recordToneSample() async {
@@ -145,6 +154,9 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
         setState(() {
           _currentDb = _detector.currentDb;
           _audioBufferSize = _detector.audioBufferSize;
+          // Update similarity from detector if available
+          _currentSimilarity = _detector.similarityThreshold;
+          _lastDetectedSimilarity = _detector.lastDetectedSimilarity;
         });
       });
     }
@@ -237,6 +249,7 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
                     ),
                     SizedBox(height: 8),
                     Text('Sample Features: ${_detector.sampleFeaturesCount}'),
+                    Text('Sample Status: ${_hasSample ? 'Recorded ✓' : 'Not Recorded'}'),
                     if (_isRecordingSample) ...[
                       SizedBox(height: 8),
                       LinearProgressIndicator(value: _recordingProgress),
@@ -289,9 +302,15 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
                     ),
                     SizedBox(height: 8),
                     Text('Current dB: ${_currentDb.toStringAsFixed(1)}'),
+                    Text('Amplitude Threshold: 50.0 dB'),
+                    Text('Audio Data Threshold: 60.0 dB'),
+                    Text('Amplitude Interval: 200ms'),
+                    Text('Audio Data Interval: 300ms'),
                     Text('Hit Count: $_hitCount'),
                     Text('Audio Buffer Size: $_audioBufferSize'),
                     Text('Similarity Threshold: ${_currentSimilarity.toStringAsFixed(2)}'),
+                    Text('Detection Mode: ${_hasSample ? 'Two-Step Detection (Dual Threshold + Tone)' : 'No Sample'}'),
+                    Text('Last Similarity: ${_lastDetectedSimilarity.toStringAsFixed(3)}'),
                   ],
                 ),
               ),
@@ -344,7 +363,11 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
                     
                     ElevatedButton(
                       onPressed: _isInitialized ? null : _initializeDetector,
-                      child: Text('Initialize Detector'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isInitialized ? Colors.grey : Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(_isInitialized ? 'Initialized ✓' : 'Initialize Detector'),
                     ),
                     
                     SizedBox(height: 8),
@@ -363,6 +386,25 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
                     ElevatedButton(
                       onPressed: _hitCount > 0 ? _resetCount : null,
                       child: Text('Reset Count'),
+                    ),
+                    
+                    SizedBox(height: 8),
+                    
+                    ElevatedButton(
+                      onPressed: _hasSample ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Test: Make the SAME sound as your sample to see hits!'),
+                            backgroundColor: Colors.orange,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      } : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text('Test Instructions'),
                     ),
                   ],
                 ),
@@ -386,10 +428,18 @@ class _ToneSpecificAudioDetectorExampleState extends State<ToneSpecificAudioDete
                     Text('1. Initialize the detector'),
                     Text('2. Record a tone sample (3 seconds)'),
                     Text('3. Adjust similarity threshold if needed'),
-                    Text('4. Start tone detection'),
+                    Text('4. Start two-step detection'),
                     Text('5. Make the same sound as the sample'),
-                    Text('6. Watch for tone-matched strikes'),
+                    Text('6. Watch for two-step strikes'),
                     Text('7. Stop detection when done'),
+                    SizedBox(height: 8),
+                    Text(
+                      '🎯 Important: Two-step detection - Dual threshold (50dB/60dB) + Dual interval (200ms/300ms) + Tone matching!',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
                     SizedBox(height: 8),
                     Text(
                       '💡 Tip: Record a clear, consistent sound as your sample for best results!',
