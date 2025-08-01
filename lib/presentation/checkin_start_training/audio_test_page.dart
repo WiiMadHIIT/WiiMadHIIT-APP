@@ -1,188 +1,155 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:async';
-import 'dart:io';
-import '../../knock_voice/audio_test_helper.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../../knock_voice/real_audio_detector.dart';
+import 'dart:async'; // Added for Timer
 
 class AudioTestPage extends StatefulWidget {
-  const AudioTestPage({Key? key}) : super(key: key);
-
   @override
-  State<AudioTestPage> createState() => _AudioTestPageState();
+  _AudioTestPageState createState() => _AudioTestPageState();
 }
 
 class _AudioTestPageState extends State<AudioTestPage> {
-  final List<String> _logs = [];
+  RealAudioDetector? _audioDetector;
+  bool _isInitialized = false;
+  bool _isListening = false;
+  bool _isReceivingAudio = false;
+  int _audioDataCount = 0;
   int _hitCount = 0;
   double _currentDb = 0.0;
-  bool _isTestRunning = false;
-  final ScrollController _scrollController = ScrollController();
+  String _status = 'Initializing...';
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAudioDetection();
+  }
 
   @override
   void dispose() {
-    AudioTestHelper.stopAudioTest(onLog: _addLog);
+    _audioDetector?.dispose();
     super.dispose();
   }
 
-  void _addLog(String message) {
-    setState(() {
-      _logs.add('${DateTime.now().toString().substring(11, 19)} $message');
-      if (_logs.length > 100) {
-        _logs.removeAt(0);
-      }
-    });
-    
-    // 自动滚动到底部
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  Future<void> _startTest() async {
-    setState(() {
-      _isTestRunning = true;
-      _hitCount = 0;
-      _logs.clear();
-    });
-
-    final success = await AudioTestHelper.startAudioTest(
-      durationSeconds: 30,
-      onLog: _addLog,
-      onHitCount: (count) {
-        setState(() {
-          _hitCount = count;
-        });
-      },
-      onDbLevel: (db) {
-        setState(() {
-          _currentDb = db;
-        });
-      },
-    );
-
-    if (!success) {
-      setState(() {
-        _isTestRunning = false;
-      });
-    }
-  }
-
-  Future<void> _stopTest() async {
-    await AudioTestHelper.stopAudioTest(onLog: _addLog);
-    setState(() {
-      _isTestRunning = false;
-    });
-  }
-
-  void _clearLogs() {
-    setState(() {
-      _logs.clear();
-    });
-  }
-
-  /// 复制所有日志信息到剪贴板
-  Future<void> _copyAllLogs() async {
+  Future<void> _initializeAudioDetection() async {
     try {
-      final StringBuffer buffer = StringBuffer();
-      
-      // 添加系统信息
-      buffer.writeln('=== 音频检测测试报告 ===');
-      buffer.writeln('生成时间: ${DateTime.now().toString()}');
-      buffer.writeln('平台: ${Platform.isIOS ? 'iOS' : 'Android'}');
-      buffer.writeln('测试状态: ${_isTestRunning ? '运行中' : '已停止'}');
-      buffer.writeln('当前击打次数: $_hitCount');
-      buffer.writeln('当前分贝值: ${_currentDb.toStringAsFixed(1)} dB');
-      buffer.writeln('分贝阈值: 30.0 dB');
-      buffer.writeln('日志条数: ${_logs.length}');
-      buffer.writeln('');
-      
-      // 添加统计信息
-      if (_logs.isNotEmpty) {
-        buffer.writeln('=== 测试统计 ===');
-        final dbValues = AudioTestHelper.dbHistory;
-        if (dbValues.isNotEmpty) {
-          final avgDb = dbValues.reduce((a, b) => a + b) / dbValues.length;
-          final maxDb = dbValues.reduce((a, b) => a > b ? a : b);
-          final minDb = dbValues.reduce((a, b) => a < b ? a : b);
-          
-          buffer.writeln('平均分贝: ${avgDb.toStringAsFixed(1)} dB');
-          buffer.writeln('最大分贝: ${maxDb.toStringAsFixed(1)} dB');
-          buffer.writeln('最小分贝: ${minDb.toStringAsFixed(1)} dB');
-          buffer.writeln('样本数量: ${dbValues.length}');
-        }
-        buffer.writeln('');
+      setState(() {
+        _status = 'Requesting microphone permission...';
+      });
+
+      // Request microphone permission
+      final status = await Permission.microphone.request();
+      if (status != PermissionStatus.granted) {
+        setState(() {
+          _status = 'Microphone permission denied';
+        });
+        return;
       }
+
+      setState(() {
+        _status = 'Initializing audio detector...';
+      });
+
+      // Initialize audio detector
+      _audioDetector = RealAudioDetector();
       
-      // 添加详细日志
-      buffer.writeln('=== 详细日志 ===');
-      for (String log in _logs) {
-        buffer.writeln(log);
-      }
-      
-      // 添加问题诊断
-      buffer.writeln('');
-      buffer.writeln('=== 问题诊断 ===');
-      if (_currentDb == 0.0 && _hitCount == 0) {
-        buffer.writeln('⚠️ 检测到问题:');
-        buffer.writeln('  - 分贝值始终为 0.0');
-        buffer.writeln('  - 没有检测到任何击打');
-        buffer.writeln('可能原因:');
-        buffer.writeln('  1. 麦克风权限未授予');
-        buffer.writeln('  2. 麦克风硬件问题');
-        buffer.writeln('  3. iOS 音频会话配置问题');
-        buffer.writeln('  4. 编解码器兼容性问题');
-        buffer.writeln('  5. 环境声音太小');
-        buffer.writeln('建议:');
-        buffer.writeln('  - 检查麦克风权限');
-        buffer.writeln('  - 尝试制造更大声音（拍手、说话）');
-        buffer.writeln('  - 检查设备麦克风是否正常工作');
-      } else if (_hitCount == 0) {
-        buffer.writeln('⚠️ 部分问题:');
-        buffer.writeln('  - 检测到声音（分贝值: ${_currentDb.toStringAsFixed(1)}）');
-        buffer.writeln('  - 但没有检测到击打（阈值: 30.0 dB）');
-        buffer.writeln('建议:');
-        buffer.writeln('  - 制造更大声音');
-        buffer.writeln('  - 或降低检测阈值');
+      _audioDetector!.onStrikeDetected = () {
+        setState(() {
+          _hitCount++;
+        });
+        print('🎯 Strike detected! Total hits: $_hitCount');
+      };
+
+      _audioDetector!.onError = (error) {
+        setState(() {
+          _status = 'Error: $error';
+        });
+        print('❌ Audio detection error: $error');
+      };
+
+      _audioDetector!.onStatusUpdate = (status) {
+        setState(() {
+          _status = status;
+        });
+        print('📊 Status: $status');
+      };
+
+      final success = await _audioDetector!.initialize();
+      if (success) {
+        setState(() {
+          _isInitialized = true;
+          _status = 'Ready to start listening';
+        });
+        print('✅ Audio detector initialized successfully');
       } else {
-        buffer.writeln('✅ 检测正常:');
-        buffer.writeln('  - 成功检测到 $_hitCount 次击打');
-        buffer.writeln('  - 当前分贝值: ${_currentDb.toStringAsFixed(1)} dB');
+        setState(() {
+          _status = 'Failed to initialize audio detector';
+        });
+        print('❌ Failed to initialize audio detector');
       }
-      
-      final String allLogs = buffer.toString();
-      
-      // 复制到剪贴板
-      await Clipboard.setData(ClipboardData(text: allLogs));
-      
-      // 显示成功提示
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ 所有日志信息已复制到剪贴板'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 复制失败: $e'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      setState(() {
+        _status = 'Error: $e';
+      });
+      print('❌ Error during initialization: $e');
     }
+  }
+
+  Future<void> _toggleListening() async {
+    if (!_isInitialized) return;
+
+    try {
+      if (_isListening) {
+        await _audioDetector!.stopListening();
+        setState(() {
+          _isListening = false;
+          _status = 'Stopped listening';
+        });
+      } else {
+        final success = await _audioDetector!.startListening();
+        if (success) {
+          setState(() {
+            _isListening = true;
+            _status = 'Listening...';
+          });
+          
+          // Start monitoring audio data
+          _startAudioMonitoring();
+        } else {
+          setState(() {
+            _status = 'Failed to start listening';
+          });
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _status = 'Error: $e';
+      });
+      print('❌ Error toggling listening: $e');
+    }
+  }
+
+  void _startAudioMonitoring() {
+    Timer.periodic(Duration(milliseconds: 500), (timer) {
+      if (!_isListening) {
+        timer.cancel();
+        return;
+      }
+      
+      if (_audioDetector != null) {
+        setState(() {
+          _isReceivingAudio = _audioDetector!.isReceivingAudio;
+          _audioDataCount = _audioDetector!.audioDataCount;
+          _currentDb = _audioDetector!.currentDb;
+        });
+      }
+    });
+  }
+
+  void _resetCount() {
+    _audioDetector?.resetHitCount();
+    setState(() {
+      _hitCount = 0;
+    });
   }
 
   @override
@@ -190,203 +157,207 @@ class _AudioTestPageState extends State<AudioTestPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Audio Detection Test'),
-        backgroundColor: AppColors.primary,
+        backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        actions: [
-          // 添加复制按钮到AppBar
-          IconButton(
-            icon: Icon(Icons.copy),
-            onPressed: _copyAllLogs,
-            tooltip: '复制所有日志',
-          ),
-        ],
       ),
-      body: Column(
-        children: [
-          // 控制面板
-          Container(
-            padding: EdgeInsets.all(16),
-            color: Colors.grey[100],
-            child: Column(
-              children: [
-                // 状态显示
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+      backgroundColor: Colors.grey[100],
+      body: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Status Card
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildStatusCard(
-                      'Test Status',
-                      _isTestRunning ? 'Running' : 'Stopped',
-                      _isTestRunning ? Colors.green : Colors.red,
-                    ),
-                    _buildStatusCard(
-                      'Hit Count',
-                      '$_hitCount',
-                      Colors.blue,
-                    ),
-                    _buildStatusCard(
-                      'Current dB',
-                      '${_currentDb.toStringAsFixed(1)}',
-                      Colors.orange,
-                    ),
-                  ],
-                ),
-                SizedBox(height: 16),
-                // 控制按钮
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                      onPressed: _isTestRunning ? null : _startTest,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    Text(
+                      'Status',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: Text('Start Test'),
                     ),
-                    ElevatedButton(
-                      onPressed: _isTestRunning ? _stopTest : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      ),
-                      child: Text('Stop Test'),
-                    ),
-                    ElevatedButton(
-                      onPressed: _clearLogs,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      ),
-                      child: Text('Clear Logs'),
-                    ),
-                    // 添加复制按钮
-                    ElevatedButton.icon(
-                      onPressed: _copyAllLogs,
-                      icon: Icon(Icons.copy, size: 16),
-                      label: Text('Copy'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    SizedBox(height: 8),
+                    Text(
+                      _status,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          // 日志显示
-          Expanded(
-            child: Container(
-              margin: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
               ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(8),
-                        topRight: Radius.circular(8),
+            ),
+            
+            SizedBox(height: 16),
+            
+            // Audio Data Card
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Audio Data',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    child: Row(
+                    SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(Icons.list_alt, size: 20),
-                        SizedBox(width: 8),
+                        Text('Receiving Audio:'),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _isReceivingAudio ? Colors.green : Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _isReceivingAudio ? 'YES' : 'NO',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Data Packets:'),
                         Text(
-                          'Test Logs (${_logs.length})',
+                          '$_audioDataCount',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
                         ),
-                        Spacer(),
-                        // 在日志标题栏也添加复制按钮
-                        IconButton(
-                          icon: Icon(Icons.copy, size: 16),
-                          onPressed: _copyAllLogs,
-                          tooltip: '复制所有日志',
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Current dB:'),
+                        Text(
+                          '${_currentDb.toStringAsFixed(1)} dB',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: EdgeInsets.all(8),
-                      itemCount: _logs.length,
-                      itemBuilder: (context, index) {
-                        final log = _logs[index];
-                        Color textColor = Colors.black87;
-                        
-                        if (log.contains('❌')) {
-                          textColor = Colors.red;
-                        } else if (log.contains('✅')) {
-                          textColor = Colors.green;
-                        } else if (log.contains('🎯')) {
-                          textColor = Colors.blue;
-                        } else if (log.contains('⚠️')) {
-                          textColor = Colors.orange;
-                        }
-                        
-                        return Padding(
-                          padding: EdgeInsets.symmetric(vertical: 2),
-                          child: Text(
-                            log,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontFamily: 'monospace',
-                              color: textColor,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusCard(String title, String value, Color color) {
-    return Container(
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
+            
+            SizedBox(height: 16),
+            
+            // Hit Counter Card
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Hit Counter',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.refresh),
+                          onPressed: _resetCount,
+                          tooltip: 'Reset Count',
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Center(
+                      child: Text(
+                        '$_hitCount',
+                        style: TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
+            
+            Spacer(),
+            
+            // Control Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isInitialized ? _toggleListening : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isListening ? Colors.red : Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text(
+                      _isListening ? 'Stop Listening' : 'Start Listening',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+            
+            SizedBox(height: 16),
+            
+            // Instructions
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Instructions',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '1. Grant microphone permission\n'
+                      '2. Press "Start Listening"\n'
+                      '3. Make loud sounds (clap, speak loudly)\n'
+                      '4. Watch the hit counter increase\n'
+                      '5. Check if "Receiving Audio" shows YES',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

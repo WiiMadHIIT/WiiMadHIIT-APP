@@ -198,6 +198,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 🎯 停止权限监听器
     _permissionCheckTimer?.cancel();
     
+    // 🎯 停止音频验证监控
+    _audioValidationTimer?.cancel();
+    
     // 🎯 Stop audio detection before disposal
     if (_audioDetectionEnabled && _audioDetector != null) {
       _audioDetector!.stopListening().catchError((e) {
@@ -208,14 +211,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 停止声音检测
     _audioDetector?.dispose();
     
-    // 🎯 清理 audio_session（audio_session 最佳实践）
-    AudioSession.instance.then((session) {
-      session.setActive(false).catchError((e) {
-        print('🎯 Audio session deactivation error during disposal: $e');
-      });
-    }).catchError((e) {
-      print('🎯 Audio session cleanup error during disposal: $e');
-    });
+    // 🎯 清理音频检测器（flutter_sound 会自动处理音频会话）
+    if (_audioDetector != null) {
+      _audioDetector!.dispose();
+    }
     
     // 释放所有控制器资源
     bounceController.dispose();
@@ -502,27 +501,17 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   /// 🎯 Apple-level Audio Detection Initialization
-  /// 参考 audio_session 最佳实践：https://github.com/ryanheise/audio_session
+  /// 使用 flutter_sound 的音频会话管理，参考 Google 建议
   Future<void> _initializeAudioDetection() async {
     try {
       setState(() {
         _isInitializingAudioDetection = true;
       });
 
-      // 1. 激活音频会话（audio_session 最佳实践）
-      print("🎯 iOS: 激活音频会话...");
-      final session = await AudioSession.instance;
-      final activated = await session.setActive(true);
-      if (!activated) {
-        print("⚠️ iOS: 音频会话激活失败，但继续初始化...");
-      } else {
-        print("✅ iOS: 音频会话激活成功");
-      }
-
-      // 2. 创建真实声音检测器实例（如果还没有创建）
+      // 1. 创建真实声音检测器实例（如果还没有创建）
       _audioDetector ??= RealAudioDetector();
 
-      // 3. 设置检测回调
+      // 2. 设置检测回调
       _audioDetector!.onStrikeDetected = () {
         print('🎯 Strike detected! Triggering count...');
         if (isCounting && mounted) {
@@ -530,68 +519,30 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         }
       };
 
-      // 4. 设置错误回调
+      // 3. 设置错误回调
       _audioDetector!.onError = (error) {
         print('Audio detection error: $error');
         // 不在这里显示错误对话框，让用户有机会尝试
       };
 
-      // 5. 设置状态回调
+      // 4. 设置状态回调
       _audioDetector!.onStatusUpdate = (status) {
         print('Audio detection status: $status');
       };
 
-      // 6. 初始化真实音频检测器
+      // 5. 初始化真实音频检测器（使用 flutter_sound 的音频会话管理）
       final initSuccess = await _audioDetector!.initialize();
       if (!initSuccess) {
         print('⚠️ Audio detector initialization failed, but continuing...');
         // 不抛出异常，让用户有机会尝试
       }
 
-      // 7. 监听音频中断事件（audio_session 最佳实践）
-      session.interruptionEventStream.listen((event) {
-        print('🎯 Audio interruption: ${event.type} - ${event.begin ? "begin" : "end"}');
-        if (event.begin) {
-          switch (event.type) {
-            case AudioInterruptionType.duck:
-              // 其他应用开始播放音频，我们应该降低音量
-              print('🎯 Ducking audio due to interruption');
-              break;
-            case AudioInterruptionType.pause:
-            case AudioInterruptionType.unknown:
-              // 其他应用开始播放音频，我们应该暂停
-              print('🎯 Pausing audio due to interruption');
-              break;
-          }
-        } else {
-          switch (event.type) {
-            case AudioInterruptionType.duck:
-              // 中断结束，我们应该恢复音量
-              print('🎯 Unducking audio after interruption');
-              break;
-            case AudioInterruptionType.pause:
-              // 中断结束，我们应该恢复播放
-              print('🎯 Resuming audio after interruption');
-              break;
-            case AudioInterruptionType.unknown:
-              // 中断结束但不应该恢复
-              print('🎯 Interruption ended but not resuming');
-              break;
-          }
-        }
-      });
-
-      // 8. 监听设备变化事件
-      session.devicesChangedEventStream.listen((event) {
-        print('🎯 Audio devices changed: added=${event.devicesAdded}, removed=${event.devicesRemoved}');
-      });
-
       setState(() {
         _audioDetectionEnabled = true; // 默认开启
         _isInitializingAudioDetection = false;
       });
 
-      print('🎯 Audio detection initialization completed with audio_session integration');
+      print('🎯 Audio detection initialization completed with flutter_sound integration');
     } catch (e) {
       print('❌ Error during audio detection initialization: $e');
       setState(() {
@@ -1481,6 +1432,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       if (success) {
         print('🎯 Audio detection started for round $currentRound');
         
+        // 启动音频验证监控
+        _startAudioValidationMonitoring();
+        
         // 提供用户反馈（可选）
         if (mounted) {
           // 可以在这里添加轻微的视觉反馈，比如按钮闪烁
@@ -1497,11 +1451,34 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 不显示错误对话框，让训练继续进行
     }
   }
+  
+  /// 🎯 Audio validation monitoring
+  Timer? _audioValidationTimer;
+  
+  void _startAudioValidationMonitoring() {
+    _audioValidationTimer?.cancel();
+    _audioValidationTimer = Timer.periodic(Duration(seconds: 3), (timer) {
+      if (_audioDetector != null && mounted) {
+        final isReceiving = _audioDetector!.isReceivingAudio;
+        final dataCount = _audioDetector!.audioDataCount;
+        
+        if (!isReceiving) {
+          print('⚠️ WARNING: Audio detector not receiving data');
+        } else {
+          print('✅ Audio detector receiving data: $dataCount packets');
+        }
+      }
+    });
+  }
 
   /// 🎯 Apple-level Audio Detection Stop
   /// 停止当前round的声音检测
   Future<void> _stopAudioDetectionForRound() async {
     try {
+      // 停止音频验证监控
+      _audioValidationTimer?.cancel();
+      _audioValidationTimer = null;
+      
       // 添加状态检查，避免重复停止
       if (_audioDetector != null && _audioDetector!.isListening) {
         await _audioDetector!.stopListening();

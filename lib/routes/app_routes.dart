@@ -84,6 +84,6 @@ class AppRoutes {
         productId: args?['productId'] ?? '',
       );
     },
-    audioTest: (_) => const AudioTestPage(),
+    audioTest: (_) => AudioTestPage(),
   };
 }
