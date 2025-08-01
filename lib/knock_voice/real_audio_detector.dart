@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
+import 'audio_session_config.dart';
 
 /// Real Audio Detector for Voice Strike Detection
 /// Uses flutter_sound onProgress for real-time amplitude detection
@@ -42,6 +43,15 @@ class RealAudioDetector {
         return true;
       }
       
+      // iOS 音频会话配置
+      if (Platform.isIOS) {
+        print('🎯 iOS: 配置音频会话...');
+        final sessionConfigured = await AudioSessionConfig.configureAudioSession();
+        if (!sessionConfigured) {
+          print('⚠️ iOS: 音频会话配置失败，但继续尝试初始化');
+        }
+      }
+      
       // Initialize flutter_sound recorder
       print('🎯 Opening flutter_sound recorder...');
       await _recorder.openRecorder();
@@ -71,6 +81,12 @@ class RealAudioDetector {
     }
     
     try {
+      // iOS 重新激活音频会话
+      if (Platform.isIOS) {
+        print('🎯 iOS: 重新激活音频会话...');
+        await AudioSessionConfig.reactivate();
+      }
+      
       // Check if recorder is already recording
       if (_recorder.isRecording) {
         print('🎯 Recorder already recording, stopping first');
@@ -83,29 +99,58 @@ class RealAudioDetector {
       
       print('🎯 Recording to file: $recordingPath');
       
-      // Start recording with flutter_sound
-      // This will automatically request microphone permission if needed
-      try {
-        // Use iOS-compatible codec for amplitude detection
-        await _recorder.startRecorder(
-          toFile: recordingPath,
-          codec: Codec.aacADTS, // iOS-compatible codec
-          sampleRate: 22050,    // Lower sample rate for iOS compatibility
-          numChannels: 1,
-          bufferSize: 512,      // Smaller buffer for lower latency
-        );
-        print('🎯 Recording started successfully with AAC codec');
-      } catch (e) {
-        print('❌ Failed to start recording with AAC: $e');
+      // iOS 优化的编解码器降级策略
+      bool recordingStarted = false;
+      
+      // 尝试多种编解码器，按优先级排序
+      final codecOptions = [
+        {'codec': Codec.pcm16WAV, 'name': 'PCM16 WAV'},
+        {'codec': Codec.pcm16, 'name': 'PCM16'},
+        {'codec': Codec.aacADTS, 'name': 'AAC ADTS'},
+        {'codec': Codec.aacMP4, 'name': 'AAC MP4'},
+        {'codec': Codec.opusOGG, 'name': 'Opus OGG'},
+        {'codec': Codec.opusCAF, 'name': 'Opus CAF'},
+        {'codec': Codec.flac, 'name': 'FLAC'},
+        {'codec': Codec.opusWebM, 'name': 'Opus WebM'},
+        {'codec': Codec.vorbisOGG, 'name': 'Vorbis OGG'},
+      ];
+      
+      for (final option in codecOptions) {
         try {
-          // Fallback to default settings
+          print('🎯 Trying codec: ${option['name']}');
+          
+          await _recorder.startRecorder(
+            toFile: recordingPath,
+            codec: option['codec'] as Codec,
+            sampleRate: 22050,    // iOS 兼容的采样率
+            numChannels: 1,       // 单声道，减少处理负担
+            bitRate: 128000,      // 适中的比特率
+            bufferSize: 512,      // 较小的缓冲区，降低延迟
+          );
+          
+          print('✅ Recording started successfully with ${option['name']} codec');
+          recordingStarted = true;
+          break;
+          
+        } catch (e) {
+          print('❌ Failed with ${option['name']}: $e');
+          // 继续尝试下一个编解码器
+          continue;
+        }
+      }
+      
+      // 如果所有编解码器都失败，使用默认设置
+      if (!recordingStarted) {
+        print('⚠️ All codecs failed, trying default settings');
+        try {
           await _recorder.startRecorder(
             toFile: recordingPath,
           );
-          print('🎯 Recording started with default settings');
-        } catch (e2) {
-          print('❌ Failed to start recording with default settings: $e2');
-          rethrow;
+          print('✅ Recording started with default settings');
+          recordingStarted = true;
+        } catch (e) {
+          print('❌ Failed to start recording with default settings: $e');
+          throw Exception('All recording methods failed: $e');
         }
       }
       
@@ -242,6 +287,12 @@ class RealAudioDetector {
       stopListening();
       _amplitudeSubscription?.cancel();
       _recorder.closeRecorder();
+      
+      // iOS 停用音频会话
+      if (Platform.isIOS) {
+        AudioSessionConfig.deactivate();
+      }
+      
       print('🎯 Real audio detector disposed');
     } catch (e) {
       _handleError('Error disposing real audio detector: $e');

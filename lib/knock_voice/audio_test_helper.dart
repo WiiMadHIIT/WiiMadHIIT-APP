@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'real_audio_detector.dart';
+import 'audio_session_config.dart';
 
 /// 音频测试辅助类
 /// 用于调试和验证音频检测功能
@@ -51,6 +52,17 @@ class AudioTestHelper {
       
       onLog?.call('✅ Microphone permission granted');
       
+      // iOS 音频会话配置
+      if (Platform.isIOS) {
+        onLog?.call('🎯 iOS: Configuring audio session...');
+        final sessionConfigured = await AudioSessionConfig.configureAudioSession();
+        if (sessionConfigured) {
+          onLog?.call('✅ iOS: Audio session configured');
+        } else {
+          onLog?.call('⚠️ iOS: Audio session configuration failed');
+        }
+      }
+      
       // 创建测试检测器
       _testDetector = RealAudioDetector();
       
@@ -88,7 +100,7 @@ class AudioTestHelper {
       onLog?.call('✅ Audio test started successfully');
       onLog?.call('🎯 Test will run for $durationSeconds seconds');
       onLog?.call('🎯 Make some noise to test strike detection!');
-      onLog?.call('🎯 Current dB threshold: 50.0 (try making louder sounds)');
+      onLog?.call('🎯 Current dB threshold: 30.0 (try making louder sounds)');
       
       // 启动定时器监控分贝值
       _testTimer = Timer.periodic(Duration(milliseconds: 500), (timer) {
@@ -145,6 +157,11 @@ class AudioTestHelper {
         _testDetector = null;
       }
       
+      // 停用音频会话
+      if (Platform.isIOS) {
+        await AudioSessionConfig.deactivate();
+      }
+      
       // 输出最终统计信息
       _printTestStats(onLog);
       
@@ -193,5 +210,15 @@ class AudioTestHelper {
   static void resetTestData() {
     _testHitCount = 0;
     _dbHistory.clear();
+  }
+  
+  /// 获取音频会话信息
+  static void printAudioSessionInfo(Function(String)? onLog) {
+    if (Platform.isIOS) {
+      AudioSessionConfig.printSessionInfo();
+      onLog?.call('🎯 Audio session info printed to console');
+    } else {
+      onLog?.call('ℹ️ Audio session info only available on iOS');
+    }
   }
 } 
