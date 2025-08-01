@@ -28,7 +28,6 @@ class RealAudioDetector {
   
   // Real-time amplitude detection
   StreamSubscription? _amplitudeSubscription;
-  StreamSubscription? _recordingDataSubscription;
   double _currentDb = 0.0; // 当前分贝值
   
   // Enhanced strike detection parameters
@@ -46,14 +45,13 @@ class RealAudioDetector {
   // Hit counter
   int _hitCount = 0;
   
-  // Audio processing parameters
-  static const int _sampleRate = 22050;
-  static const int _numChannels = 1;
-  static const int _bufferSize = 1024;
+  // Audio processing parameters (iOS optimized)
+  static const int _sampleRate = 44100; // Standard iOS sample rate
+  static const int _numChannels = 1; // Mono for better performance
+  static const int _bufferSize = 2048; // Larger buffer for iOS stability
   
-  // Stream processing
+  // Stream processing (simplified)
   StreamController<Uint8List>? _recordingDataController;
-  IOSink? _fileSink;
   
   /// Initialize detector (assumes permission is already granted by the calling page)
   Future<bool> initialize() async {
@@ -114,46 +112,45 @@ class RealAudioDetector {
       
       print('🎯 Recording to file: $recordingPath');
       
-      // Create file sink for recording
+      // Simplified file handling (no stream processing for now)
       final outputFile = File(recordingPath);
       if (await outputFile.exists()) {
         await outputFile.delete();
       }
-      _fileSink = outputFile.openWrite();
       
-      // Create stream controller for recording data
-      _recordingDataController = StreamController<Uint8List>();
-      _recordingDataSubscription = _recordingDataController!.stream.listen((buffer) {
-        _fileSink?.add(buffer);
-      });
-      
-      // Start recording with optimized settings
+      // Start recording with simplified settings (like flutter_sound examples)
       try {
+        // Try PCM16 with minimal parameters first (like official examples)
         await _recorder.startRecorder(
-          toStream: _recordingDataController!.sink,
           toFile: recordingPath,
-          codec: Codec.pcm16, // Use PCM16 for better compatibility
-          sampleRate: _sampleRate,
-          numChannels: _numChannels,
-          bufferSize: _bufferSize,
-          audioSource: AudioSource.defaultSource,
+          codec: Codec.pcm16,
+          sampleRate: 44100,
+          numChannels: 1,
         );
         print('🎯 Recording started successfully with PCM16 codec');
       } catch (e) {
         print('❌ Failed to start recording with PCM16: $e');
         try {
-          // Fallback to AAC codec
+          // Fallback to AAC with minimal parameters
           await _recorder.startRecorder(
             toFile: recordingPath,
-            codec: Codec.aacADTS,
-            sampleRate: _sampleRate,
-            numChannels: _numChannels,
-            bufferSize: _bufferSize,
+            codec: Codec.aac,
+            sampleRate: 44100,
+            numChannels: 1,
           );
           print('🎯 Recording started with AAC codec fallback');
         } catch (e2) {
-          print('❌ Failed to start recording with fallback: $e2');
-          rethrow;
+          print('❌ Failed to start recording with AAC: $e2');
+          try {
+            // Final fallback to default settings (no parameters)
+            await _recorder.startRecorder(
+              toFile: recordingPath,
+            );
+            print('🎯 Recording started with default codec');
+          } catch (e3) {
+            print('❌ Failed to start recording with default: $e3');
+            rethrow;
+          }
         }
       }
       
@@ -180,18 +177,6 @@ class RealAudioDetector {
       // Cancel subscriptions
       await _amplitudeSubscription?.cancel();
       _amplitudeSubscription = null;
-      
-      await _recordingDataSubscription?.cancel();
-      _recordingDataSubscription = null;
-      
-      // Close stream controller
-      await _recordingDataController?.close();
-      _recordingDataController = null;
-      
-      // Close file sink
-      await _fileSink?.flush();
-      await _fileSink?.close();
-      _fileSink = null;
       
       // Only stop if actually recording
       if (_recorder.isRecording) {
@@ -377,9 +362,6 @@ class RealAudioDetector {
     try {
       stopListening();
       _amplitudeSubscription?.cancel();
-      _recordingDataSubscription?.cancel();
-      _recordingDataController?.close();
-      _fileSink?.close();
       _recorder.closeRecorder();
       print('🎯 Real audio detector disposed');
     } catch (e) {
