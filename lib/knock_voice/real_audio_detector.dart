@@ -7,12 +7,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Real Audio Detector for Voice Strike Detection
-/// Uses flutter_sound onProgress for real-time amplitude detection
-/// Enhanced with stream processing for better accuracy
-/// 
-/// Note: This class assumes microphone permission is already granted by the calling page.
-/// Permission management is handled by the UI layer (e.g., checkin_training_page.dart).
-/// This class focuses purely on audio processing and strike detection.
+/// Uses flutter_sound with stream processing for real-time amplitude detection
 class RealAudioDetector {
   // State management
   bool _isInitialized = false;
@@ -28,32 +23,33 @@ class RealAudioDetector {
   
   // Real-time amplitude detection
   StreamSubscription? _amplitudeSubscription;
+  StreamSubscription? _audioDataSubscription;
   double _currentDb = 0.0; // 当前分贝值
   
-  // Enhanced strike detection parameters
-  static const double _dbThreshold = 45.0; // 降低分贝阈值，适应iOS环境
-  static const int _minStrikeInterval = 150; // 最小击打间隔（毫秒）
-  static const int _maxStrikeInterval = 2000; // 最大击打间隔（毫秒）
+  // Strike detection parameters
+  static const double _dbThreshold = 50.0; // 降低分贝阈值，适应iOS环境
+  static const int _minStrikeInterval = 200; // 最小击打间隔（毫秒）
   DateTime? _lastStrikeTime;
-  
-  // Advanced detection parameters
-  final List<double> _dbHistory = []; // 分贝值历史记录
-  final int _historySize = 10; // 历史记录大小
-  double _ambientNoiseLevel = 0.0; // 环境噪声水平
-  bool _isCalibrated = false; // 是否已校准
   
   // Hit counter
   int _hitCount = 0;
   
-  // Audio processing parameters (iOS optimized)
-  static const int _sampleRate = 44100; // Standard iOS sample rate
-  static const int _numChannels = 1; // Mono for better performance
-  static const int _bufferSize = 2048; // Larger buffer for iOS stability
+  // Audio processing configuration
+  static const int _sampleRate = 48000; // 采样率
+  static const int _numChannels = 1; // 单声道
+  static const int _bufferSize = 1024; // 缓冲区大小
+  static const Duration _subscriptionDuration = Duration(milliseconds: 100); // 订阅间隔
   
-  // Stream processing (simplified)
-  StreamController<Uint8List>? _recordingDataController;
+  // Audio data buffers for processing
+  List<Float32List> _audioBuffer = [];
+  final List<double> _amplitudeHistory = [];
+  static const int _historySize = 10; // 历史数据大小
   
-  /// Initialize detector (assumes permission is already granted by the calling page)
+  // Stream controllers for audio data
+  StreamController<List<Float32List>>? _audioDataController;
+  StreamController<double>? _amplitudeController;
+  
+  /// Initialize detector with microphone permission
   Future<bool> initialize() async {
     try {
       // Check if already initialized
@@ -68,13 +64,9 @@ class RealAudioDetector {
       await _recorder.openRecorder();
       print('🎯 Flutter_sound recorder opened successfully');
       
-      // Set up amplitude subscription with proper duration
-      _amplitudeSubscription = _recorder.onProgress!.listen((e) {
-        _processAmplitudeData(e);
-      });
-      
-      // Set subscription duration for real-time updates
-      await _recorder.setSubscriptionDuration(const Duration(milliseconds: 50));
+      // Set subscription duration for real-time processing
+      await _recorder.setSubscriptionDuration(_subscriptionDuration);
+      print('🎯 Subscription duration set to ${_subscriptionDuration.inMilliseconds}ms');
       
       _isInitialized = true;
       _updateStatus('Real audio detector initialized');
@@ -106,59 +98,67 @@ class RealAudioDetector {
         await _recorder.stopRecorder();
       }
       
+      // Clear previous data
+      _audioBuffer.clear();
+      _amplitudeHistory.clear();
+      _hitCount = 0;
+      _lastStrikeTime = null;
+      
       // Get temporary directory for recording file
       final tempDir = await getTemporaryDirectory();
       final recordingPath = '${tempDir.path}/audio_detection_${DateTime.now().millisecondsSinceEpoch}.wav';
       
       print('🎯 Recording to file: $recordingPath');
       
-      // Simplified file handling (no stream processing for now)
-      final outputFile = File(recordingPath);
-      if (await outputFile.exists()) {
-        await outputFile.delete();
-      }
+      // Create stream controllers for audio data processing
+      _audioDataController = StreamController<List<Float32List>>();
+      _amplitudeController = StreamController<double>();
       
-      // Start recording with simplified settings (like flutter_sound examples)
+      // Start recording with flutter_sound using stream processing
       try {
-        // Try PCM16 with minimal parameters first (like official examples)
+        // Use PCM Float32 for better audio processing
         await _recorder.startRecorder(
           toFile: recordingPath,
-          codec: Codec.pcm16,
-          sampleRate: 44100,
-          numChannels: 1,
+          codec: Codec.pcmFloat32, // 使用 Float32 格式获得更好的精度
+          sampleRate: _sampleRate,
+          numChannels: _numChannels,
+          audioSource: AudioSource.defaultSource,
+          toStreamFloat32: _audioDataController!.sink, // 直接处理音频数据流
+          bufferSize: _bufferSize,
         );
-        print('🎯 Recording started successfully with PCM16 codec');
+        print('🎯 Recording started successfully with PCM Float32 stream');
       } catch (e) {
-        print('❌ Failed to start recording with PCM16: $e');
+        print('❌ Failed to start recording with PCM Float32: $e');
         try {
-          // Fallback to AAC with minimal parameters
+          // Fallback to AAC with amplitude monitoring
           await _recorder.startRecorder(
             toFile: recordingPath,
-            codec: Codec.aac,
-            sampleRate: 44100,
-            numChannels: 1,
+            codec: Codec.aacADTS,
+            sampleRate: 22050,
+            numChannels: _numChannels,
+            bufferSize: _bufferSize,
           );
-          print('🎯 Recording started with AAC codec fallback');
+          print('🎯 Recording started with AAC fallback');
         } catch (e2) {
-          print('❌ Failed to start recording with AAC: $e2');
-          try {
-            // Final fallback to default settings (no parameters)
-            await _recorder.startRecorder(
-              toFile: recordingPath,
-            );
-            print('🎯 Recording started with default codec');
-          } catch (e3) {
-            print('❌ Failed to start recording with default: $e3');
-            rethrow;
-          }
+          print('❌ Failed to start recording with fallback: $e2');
+          rethrow;
         }
       }
       
       _isListening = true;
       _updateStatus('Started listening to microphone');
       
-      // Start calibration
-      _startCalibration();
+      // 🎯 订阅实时振幅数据
+      _amplitudeSubscription = _recorder.onProgress!.listen((e) {
+        _processAmplitudeData(e);
+      });
+      
+      // 🎯 订阅音频数据流（如果使用 PCM Float32）
+      if (_audioDataController != null) {
+        _audioDataSubscription = _audioDataController!.stream.listen((audioData) {
+          _processAudioData(audioData);
+        });
+      }
       
       print('🎯 Real-time amplitude detection started successfully');
       return true;
@@ -174,9 +174,19 @@ class RealAudioDetector {
     if (!_isListening) return;
     
     try {
-      // Cancel subscriptions
+      // 取消所有订阅
       await _amplitudeSubscription?.cancel();
       _amplitudeSubscription = null;
+      
+      await _audioDataSubscription?.cancel();
+      _audioDataSubscription = null;
+      
+      // 关闭流控制器
+      await _audioDataController?.close();
+      _audioDataController = null;
+      
+      await _amplitudeController?.close();
+      _amplitudeController = null;
       
       // Only stop if actually recording
       if (_recorder.isRecording) {
@@ -212,15 +222,18 @@ class RealAudioDetector {
       // 获取当前分贝值
       _currentDb = e.decibels ?? 0.0;
       
-      // 更新分贝值历史
-      _updateDbHistory(_currentDb);
+      // 添加到历史记录
+      _amplitudeHistory.add(_currentDb);
+      if (_amplitudeHistory.length > _historySize) {
+        _amplitudeHistory.removeAt(0);
+      }
       
       // 检测击打声音（高振幅脉冲）
       _checkStrikeFromAmplitude(_currentDb);
       
       // 调试：更频繁地记录分贝值，帮助调试
       if (_hitCount % 3 == 0 || _currentDb > _dbThreshold * 0.8) {
-        print('🎤 Current dB: ${_currentDb.toStringAsFixed(1)} dB (threshold: ${_getAdaptiveThreshold().toStringAsFixed(1)})');
+        print('🎤 Current dB: ${_currentDb.toStringAsFixed(1)} dB (threshold: $_dbThreshold)');
       }
       
     } catch (e) {
@@ -228,64 +241,67 @@ class RealAudioDetector {
     }
   }
   
-  /// 更新分贝值历史记录
-  void _updateDbHistory(double db) {
-    _dbHistory.add(db);
-    if (_dbHistory.length > _historySize) {
-      _dbHistory.removeAt(0);
-    }
-  }
-  
-  /// 开始校准环境噪声水平
-  void _startCalibration() {
-    _isCalibrated = false;
-    _ambientNoiseLevel = 0.0;
-    _dbHistory.clear();
-    
-    // 3秒后完成校准
-    Timer(const Duration(seconds: 3), () {
-      if (_dbHistory.isNotEmpty) {
-        _ambientNoiseLevel = _dbHistory.reduce((a, b) => a + b) / _dbHistory.length;
-        _isCalibrated = true;
-        print('🎯 Calibration completed. Ambient noise level: ${_ambientNoiseLevel.toStringAsFixed(1)} dB');
+  /// 🎯 处理音频数据流（PCM Float32）
+  void _processAudioData(List<Float32List> audioData) {
+    try {
+      // 计算音频数据的RMS能量
+      double rmsEnergy = _calculateRMSEnergy(audioData);
+      
+      // 转换为分贝值
+      double dbFromAudio = _rmsToDecibels(rmsEnergy);
+      
+      // 使用音频数据计算的分贝值作为补充检测
+      if (dbFromAudio > _dbThreshold * 1.2) { // 稍微提高阈值避免误检
+        print('🎵 Audio data detected high energy: ${dbFromAudio.toStringAsFixed(1)} dB');
+        _checkStrikeFromAudioData(dbFromAudio);
       }
-    });
+      
+    } catch (e) {
+      print('⚠️ Audio data processing error: $e');
+    }
   }
   
-  /// 获取自适应阈值
-  double _getAdaptiveThreshold() {
-    if (!_isCalibrated) {
-      return _dbThreshold;
+  /// 🎯 计算RMS能量
+  double _calculateRMSEnergy(List<Float32List> audioData) {
+    if (audioData.isEmpty) return 0.0;
+    
+    double sum = 0.0;
+    int count = 0;
+    
+    for (var channel in audioData) {
+      for (var sample in channel) {
+        sum += sample * sample;
+        count++;
+      }
     }
     
-    // 基于环境噪声水平调整阈值
-    final adaptiveThreshold = _ambientNoiseLevel + 15.0; // 环境噪声 + 15dB
-    return max(adaptiveThreshold, _dbThreshold);
+    if (count == 0) return 0.0;
+    return sqrt(sum / count);
   }
   
-  /// 🎯 基于分贝值检测击打声音（增强版）
+  /// 🎯 将RMS能量转换为分贝值
+  double _rmsToDecibels(double rms) {
+    if (rms <= 0.0) return -60.0; // 最小分贝值
+    return 20.0 * log(rms) / ln10;
+  }
+  
+  /// 🎯 基于分贝值检测击打声音
   void _checkStrikeFromAmplitude(double db) {
     final now = DateTime.now();
-    final threshold = _getAdaptiveThreshold();
     
     // 检查分贝值是否超过阈值
-    if (db > threshold) {
+    if (db > _dbThreshold) {
       // 检查时间间隔
       if (_lastStrikeTime == null || 
           now.difference(_lastStrikeTime!).inMilliseconds > _minStrikeInterval) {
         
-        // 额外的验证：检查是否是真正的击打声音
-        if (_isValidStrikeSound(db)) {
-          _lastStrikeTime = now;
-          _hitCount++;
-          
-          print('🎯 STRIKE DETECTED! dB: ${db.toStringAsFixed(1)} (threshold: ${threshold.toStringAsFixed(1)}), Count: $_hitCount');
-          
-          // 触发击打检测回调
-          onStrikeDetected?.call();
-        } else {
-          print('⚠️ Invalid strike sound detected: dB ${db.toStringAsFixed(1)} (filtered out)');
-        }
+        _lastStrikeTime = now;
+        _hitCount++;
+        
+        print('🎯 STRIKE DETECTED! dB: ${db.toStringAsFixed(1)} (threshold: $_dbThreshold), Count: $_hitCount');
+        
+        // 触发击打检测回调
+        onStrikeDetected?.call();
       } else {
         // 记录被忽略的检测（时间间隔太短）
         final timeSinceLast = now.difference(_lastStrikeTime!).inMilliseconds;
@@ -294,32 +310,24 @@ class RealAudioDetector {
     }
   }
   
-  /// 验证是否为有效的击打声音
-  bool _isValidStrikeSound(double db) {
-    if (!_isCalibrated || _dbHistory.length < 3) {
-      return true; // 未校准时接受所有超过阈值的声音
-    }
+  /// 🎯 基于音频数据检测击打声音
+  void _checkStrikeFromAudioData(double db) {
+    final now = DateTime.now();
     
-    // 检查分贝值突增
-    final recentAvg = _dbHistory.take(_dbHistory.length - 1).reduce((a, b) => a + b) / (_dbHistory.length - 1);
-    final dbIncrease = db - recentAvg;
-    
-    // 分贝值突增必须超过8dB
-    if (dbIncrease < 8.0) {
-      return false;
-    }
-    
-    // 检查分贝值变化趋势
-    if (_dbHistory.length >= 5) {
-      final recentValues = _dbHistory.skip(_dbHistory.length - 5).toList();
-      final isRising = recentValues[recentValues.length - 1] > recentValues[0];
-      
-      if (!isRising) {
-        return false; // 分贝值没有上升趋势
+    // 使用更严格的阈值和时间间隔
+    if (db > _dbThreshold * 1.2) {
+      if (_lastStrikeTime == null || 
+          now.difference(_lastStrikeTime!).inMilliseconds > _minStrikeInterval * 1.5) {
+        
+        _lastStrikeTime = now;
+        _hitCount++;
+        
+        print('🎵 AUDIO STRIKE DETECTED! dB: ${db.toStringAsFixed(1)}, Count: $_hitCount');
+        
+        // 触发击打检测回调
+        onStrikeDetected?.call();
       }
     }
-    
-    return true;
   }
   
   /// Get listening status
@@ -334,11 +342,8 @@ class RealAudioDetector {
   /// Get hit count
   int get hitCount => _hitCount;
   
-  /// Get ambient noise level
-  double get ambientNoiseLevel => _ambientNoiseLevel;
-  
-  /// Get calibration status
-  bool get isCalibrated => _isCalibrated;
+  /// Get amplitude history
+  List<double> get amplitudeHistory => List.from(_amplitudeHistory);
   
   /// Reset hit count
   void resetHitCount() {
@@ -362,6 +367,9 @@ class RealAudioDetector {
     try {
       stopListening();
       _amplitudeSubscription?.cancel();
+      _audioDataSubscription?.cancel();
+      _audioDataController?.close();
+      _amplitudeController?.close();
       _recorder.closeRecorder();
       print('🎯 Real audio detector disposed');
     } catch (e) {
