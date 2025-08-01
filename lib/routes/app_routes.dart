@@ -14,6 +14,7 @@ import '../presentation/checkin_start_training/training_rule_page.dart';
 import '../presentation/checkin_start_training/checkin_training_page.dart';
 import '../presentation/checkin_start_training/checkin_training_voice_page.dart';
 import '../presentation/checkin_start_training/checkin_countdown_page.dart';
+import '../presentation/checkin_start_training/audio_test_page.dart';
 
 class AppRoutes {
   static const String home = '/home';
@@ -33,6 +34,7 @@ class AppRoutes {
   static const String checkinTraining = '/checkin_training';
   static const String checkinTrainingVoice = '/checkin_training_voice';
   static const String checkinCountdown = '/checkin_countdown';
+  static const String audioTest = '/audio_test';
 
   static Map<String, WidgetBuilder> get routes => {
     profile: (_) => const ProfilePage(),
@@ -82,5 +84,6 @@ class AppRoutes {
         productId: args?['productId'] ?? '',
       );
     },
+    audioTest: (_) => const AudioTestPage(),
   };
 }
