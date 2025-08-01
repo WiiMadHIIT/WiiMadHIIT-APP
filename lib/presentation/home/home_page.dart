@@ -140,12 +140,17 @@ class HomePage extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: _StatCard(
-                      icon: Icons.emoji_events,
-                      value: '3',
-                      label: 'Challenges',
-                      color: AppColors.primary,
-                      gradient: [AppColors.primary, Colors.purple],
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(context, AppRoutes.toneSpecificAudioDetectorExample);
+                      },
+                      child: _StatCard(
+                        icon: Icons.emoji_events,
+                        value: '3',
+                        label: 'Challenges',
+                        color: AppColors.primary,
+                        gradient: [AppColors.primary, Colors.purple],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
