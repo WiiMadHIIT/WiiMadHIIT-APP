@@ -9,7 +9,7 @@ import '../../widgets/layout_bg_type.dart';
 import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
-import '../../knock_voice/real_audio_detector.dart';
+import '../../knock_voice/simple_audio_detector.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
@@ -90,7 +90,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   bool _isSubmittingResult = false;
   
   // 声音检测相关
-  RealAudioDetector? _audioDetector;
+  SimpleAudioDetector? _audioDetector;
   bool _audioDetectionEnabled = true; // 默认开启
   bool _isInitializingAudioDetection = false;
   
@@ -201,7 +201,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 🎯 Stop audio detection before disposal
     if (_audioDetectionEnabled && _audioDetector != null) {
       _audioDetector!.stopListening().catchError((e) {
-        print('🎯 Audio detection stop error during disposal: $e');
+        print('🎯 Simple audio detection stop error during disposal: $e');
       });
     }
     
@@ -519,8 +519,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         print("✅ iOS: 音频会话激活成功");
       }
 
-      // 2. 创建真实声音检测器实例（如果还没有创建）
-      _audioDetector ??= RealAudioDetector();
+      // 2. 创建简单声音检测器实例（如果还没有创建）
+      _audioDetector ??= SimpleAudioDetector();
 
       // 3. 设置检测回调
       _audioDetector!.onStrikeDetected = () {
@@ -541,7 +541,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         print('Audio detection status: $status');
       };
 
-      // 6. 初始化真实音频检测器
+      // 6. 初始化简单音频检测器
       final initSuccess = await _audioDetector!.initialize();
       if (!initSuccess) {
         print('⚠️ Audio detector initialization failed, but continuing...');
@@ -591,7 +591,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         _isInitializingAudioDetection = false;
       });
 
-      print('🎯 Audio detection initialization completed with audio_session integration');
+      print('🎯 Simple audio detection initialization completed (mock mode)');
     } catch (e) {
       print('❌ Error during audio detection initialization: $e');
       setState(() {
@@ -682,7 +682,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       showPreCountdown = false;
     });
     
-    print('🎯 Training reset completed with audio detection cleanup');
+          print('🎯 Training reset completed with simple audio detection cleanup (mock mode)');
     _startPreCountdown();
   }
 
@@ -1479,7 +1479,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       
       final success = await _audioDetector!.startListening();
       if (success) {
-        print('🎯 Audio detection started for round $currentRound');
+        print('🎯 Simple audio detection started for round $currentRound (mock mode)');
         
         // 提供用户反馈（可选）
         if (mounted) {
@@ -1489,11 +1489,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           });
         }
       } else {
-        print('⚠️ Failed to start audio detection for round $currentRound, but continuing...');
+        print('⚠️ Failed to start simple audio detection for round $currentRound, but continuing...');
         // 不显示错误对话框，让训练继续进行
       }
     } catch (e) {
-      print('⚠️ Error starting audio detection: $e, but continuing...');
+      print('⚠️ Error starting simple audio detection: $e, but continuing...');
       // 不显示错误对话框，让训练继续进行
     }
   }
@@ -1505,12 +1505,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 添加状态检查，避免重复停止
       if (_audioDetector != null && _audioDetector!.isListening) {
         await _audioDetector!.stopListening();
-        print('🎯 Audio detection stopped for round $currentRound');
+        print('🎯 Simple audio detection stopped for round $currentRound (mock mode)');
       } else {
-        print('🎯 Audio detection already stopped for round $currentRound');
+        print('🎯 Simple audio detection already stopped for round $currentRound (mock mode)');
       }
     } catch (e) {
-      print('❌ Error stopping audio detection: $e');
+      print('❌ Error stopping simple audio detection: $e');
     }
   }
 
