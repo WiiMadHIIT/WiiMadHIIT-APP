@@ -47,7 +47,6 @@ dependencies:
   audio_session: ^0.2.2
   path_provider: ^2.1.2
   tflite_flutter: ^0.11.0
-  flutter_sound_processing: ^0.1.0
 
 dev_dependencies:
   flutter_test:

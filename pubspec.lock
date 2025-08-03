@@ -206,14 +206,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "9.28.0"
-  flutter_sound_processing:
-    dependency: "direct main"
-    description:
-      name: flutter_sound_processing
-      sha256: b2f344a38c09dc12366d0165e512613652a6d9ffc340be1cb9ed2d6fb926c02f
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.0"
   flutter_sound_web:
     dependency: transitive
     description:
