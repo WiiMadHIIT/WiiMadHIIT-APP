@@ -142,12 +142,12 @@ class HomePage extends StatelessWidget {
                   Expanded(
                     child: GestureDetector(
                       onTap: () {
-                        Navigator.pushNamed(context, AppRoutes.toneSpecificAudioDetectorExample);
+                        Navigator.pushNamed(context, AppRoutes.xvectorAudioDetectorExample);
                       },
                       child: _StatCard(
                         icon: Icons.emoji_events,
                         value: '3',
-                        label: 'Challenges',
+                        label: 'XVector Voice',
                         color: AppColors.primary,
                         gradient: [AppColors.primary, Colors.purple],
                       ),
