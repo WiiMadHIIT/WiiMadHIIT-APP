@@ -1,9 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'xvector_audio_detector.dart';
 
+/// XVector Audio Detector 使用示例
+/// 展示如何在 Flutter 应用中使用基于 x-vector 的音频检测器
 class XVectorAudioDetectorExample extends StatefulWidget {
-  const XVectorAudioDetectorExample({super.key});
+  const XVectorAudioDetectorExample({Key? key}) : super(key: key);
 
   @override
   State<XVectorAudioDetectorExample> createState() => _XVectorAudioDetectorExampleState();
@@ -15,465 +16,286 @@ class _XVectorAudioDetectorExampleState extends State<XVectorAudioDetectorExampl
   bool _isInitialized = false;
   bool _isListening = false;
   bool _isRecordingSample = false;
-  bool _hasSample = false;
-  bool _voiceMatchLoaded = false;
   int _hitCount = 0;
   double _currentDb = 0.0;
-  double _currentSimilarity = 0.8;
-  double _lastDetectedSimilarity = 0.0;
-  int _audioBufferSize = 0;
-  String _status = 'Not initialized';
-  double _recordingProgress = 0.0;
-  Timer? _recordingTimer;
-  
+  double _lastSimilarity = 0.0;
+  String _status = '未初始化';
+
   @override
   void initState() {
     super.initState();
     _setupDetector();
   }
-  
+
   void _setupDetector() {
     _detector.onStrikeDetected = () {
       setState(() {
         _hitCount = _detector.hitCount;
-        _lastDetectedSimilarity = _currentSimilarity;
       });
-      print('🎯 XVector strike detected! Count: $_hitCount');
+      print('🎯 Strike detected! Total: $_hitCount');
     };
-    
+
     _detector.onSampleRecorded = () {
       setState(() {
-        _hasSample = true;
-        _status = 'Voice sample recorded successfully';
+        _isRecordingSample = false;
+        _status = '样本录制完成';
       });
-      print('🎵 Voice sample recorded successfully');
+      print('🎵 Sample recorded successfully');
     };
-    
+
     _detector.onError = (error) {
       setState(() {
-        _status = 'Error: $error';
+        _status = '错误: $error';
       });
       print('❌ Error: $error');
     };
-    
+
     _detector.onStatusUpdate = (status) {
       setState(() {
         _status = status;
       });
-      print('📝 Status: $status');
+      print('📊 Status: $status');
     };
   }
-  
+
   Future<void> _initializeDetector() async {
     setState(() {
-      _status = 'Initializing XVector detector...';
+      _status = '正在初始化...';
     });
+
+    bool success = await _detector.initialize();
     
-    final success = await _detector.initialize();
     setState(() {
       _isInitialized = success;
-      _voiceMatchLoaded = _detector.voiceMatchLoaded;
-      _status = success ? 'XVector detector initialized' : 'Initialization failed';
+      _status = success ? '初始化完成' : '初始化失败';
     });
-    
-    if (success) {
-      print('✅ XVector detector initialized successfully');
-    } else {
-      print('❌ XVector detector initialization failed');
-    }
   }
-  
-  Future<void> _recordVoiceSample() async {
+
+  Future<void> _recordSample() async {
     if (!_isInitialized) {
-      await _initializeDetector();
-    }
-    
-    if (!_isInitialized) return;
-    
-    if (!_voiceMatchLoaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('X-vector model not loaded. Please check the model file.')),
-      );
+      _showSnackBar('请先初始化检测器');
       return;
     }
-    
+
     setState(() {
       _isRecordingSample = true;
-      _recordingProgress = 0.0;
-      _status = 'Recording voice sample...';
+      _status = '正在录制样本...';
     });
+
+    bool success = await _detector.recordToneSample(duration: const Duration(seconds: 5));
     
-    _recordingTimer = Timer.periodic(Duration(milliseconds: 100), (timer) {
+    if (!success) {
       setState(() {
-        _recordingProgress += 0.1 / 5.0; // 5 seconds
-        if (_recordingProgress >= 1.0) {
-          _recordingProgress = 1.0;
-          timer.cancel();
-        }
+        _isRecordingSample = false;
+        _status = '样本录制失败';
       });
-    });
-    
-    final success = await _detector.recordVoiceSample(duration: Duration(seconds: 5));
-    
-    _recordingTimer?.cancel();
-    _recordingTimer = null;
+    }
+  }
+
+  Future<void> _startListening() async {
+    if (!_isInitialized) {
+      _showSnackBar('请先初始化检测器');
+      return;
+    }
+
+    if (_detector.sampleEmbeddingSize == 0) {
+      _showSnackBar('请先录制样本');
+      return;
+    }
+
+    bool success = await _detector.startListening();
     
     setState(() {
-      _isRecordingSample = false;
-      _recordingProgress = 0.0;
-      if (success) {
-        _hasSample = true;
-        _status = 'Voice sample recorded successfully';
-      } else {
-        _status = 'Voice sample recording failed';
+      _isListening = success;
+      _status = success ? '正在监听...' : '启动监听失败';
+    });
+
+    if (success) {
+      _startStatusUpdates();
+    }
+  }
+
+  Future<void> _stopListening() async {
+    await _detector.stopListening();
+    
+    setState(() {
+      _isListening = false;
+      _status = '已停止监听';
+    });
+  }
+
+  void _startStatusUpdates() {
+    // 定期更新状态信息
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_isListening) {
+        setState(() {
+          _currentDb = _detector.currentDb;
+          _lastSimilarity = _detector.lastDetectedSimilarity;
+        });
+        _startStatusUpdates();
       }
     });
   }
-  
-  Future<void> _startListening() async {
-    if (!_isInitialized) {
-      await _initializeDetector();
-    }
-    
-    if (!_hasSample) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please record a voice sample first')),
-      );
-      return;
-    }
-    
-    setState(() {
-      _status = 'Starting XVector detection...';
-    });
-    
-    final success = await _detector.startListening();
-    setState(() {
-      _isListening = success;
-      _status = success ? 'Listening for voice match' : 'Failed to start';
-    });
-    
-    if (success) {
-      Timer.periodic(Duration(milliseconds: 100), (timer) {
-        if (!_isListening) {
-          timer.cancel();
-          return;
-        }
-        
-        setState(() {
-          _currentDb = _detector.currentDb;
-          _audioBufferSize = _detector.audioBufferSize;
-          _currentSimilarity = _detector.similarityThreshold;
-          _lastDetectedSimilarity = _detector.lastDetectedSimilarity;
-        });
-      });
-    }
-  }
-  
-  Future<void> _stopListening() async {
-    await _detector.stopListening();
-    setState(() {
-      _isListening = false;
-      _status = 'Stopped';
-    });
-  }
-  
+
   void _resetCount() {
     _detector.resetHitCount();
     setState(() {
       _hitCount = 0;
     });
   }
-  
+
   void _clearSample() {
     _detector.clearSampleEmbedding();
     setState(() {
-      _hasSample = false;
-      _status = 'Voice sample cleared';
+      _status = '样本已清除';
     });
   }
-  
-  void _adjustSimilarityThreshold(double value) {
-    _detector.setSimilarityThreshold(value);
-    setState(() {
-      _currentSimilarity = value;
-    });
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
-  
+
   @override
   void dispose() {
-    _recordingTimer?.cancel();
     _detector.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('XVector Audio Detector'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
+        title: const Text('XVector 音频检测器示例'),
+        backgroundColor: Colors.blue,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Status Card
+            // 状态卡片
             Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '状态: $_status',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('初始化: ${_isInitialized ? "是" : "否"}'),
+                    Text('监听中: ${_isListening ? "是" : "否"}'),
+                    Text('录制样本: ${_isRecordingSample ? "是" : "否"}'),
+                    Text('样本特征数: ${_detector.sampleEmbeddingSize}'),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // 实时数据显示
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '实时数据',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('当前分贝: ${_currentDb.toStringAsFixed(1)} dB'),
+                    Text('最后相似度: ${_lastSimilarity.toStringAsFixed(3)}'),
+                    Text('检测次数: $_hitCount'),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // 控制按钮
+            ElevatedButton(
+              onPressed: _isInitialized ? null : _initializeDetector,
+              child: const Text('初始化检测器'),
+            ),
+            
+            const SizedBox(height: 8),
+            
+            ElevatedButton(
+              onPressed: _isInitialized && !_isRecordingSample && !_isListening ? _recordSample : null,
+              child: Text(_isRecordingSample ? '录制中...' : '录制样本 (5秒)'),
+            ),
+            
+            const SizedBox(height: 8),
+            
+            ElevatedButton(
+              onPressed: _isInitialized && !_isListening && _detector.sampleEmbeddingSize > 0 ? _startListening : null,
+              child: const Text('开始监听'),
+            ),
+            
+            const SizedBox(height: 8),
+            
+            ElevatedButton(
+              onPressed: _isListening ? _stopListening : null,
+              child: const Text('停止监听'),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // 重置按钮
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _resetCount,
+                    style: ElevatedButton.styleFrom(surfaceTintColor: Colors.orange),
+                    child: const Text('重置计数'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _clearSample,
+                    style: ElevatedButton.styleFrom(surfaceTintColor: Colors.red),
+                    child: const Text('清除样本'),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // 使用说明
+            const Card(
               child: Padding(
                 padding: EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'XVector Status',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      '使用说明',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 8),
-                    Text('State: $_status'),
-                    Text('Initialized: $_isInitialized'),
-                    Text('Voice Match Loaded: $_voiceMatchLoaded'),
-                    Text('Has Sample: $_hasSample'),
-                    Text('Listening: $_isListening'),
-                    Text('Recording Sample: $_isRecordingSample'),
+                    Text('1. 点击"初始化检测器"'),
+                    Text('2. 点击"录制样本"录制目标音色'),
+                    Text('3. 点击"开始监听"开始实时检测'),
+                    Text('4. 当检测到相似音色时会自动计数'),
+                    Text('5. 使用"重置计数"或"清除样本"管理数据'),
                   ],
                 ),
               ),
             ),
-            
-            SizedBox(height: 16),
-            
-            // Voice Sample Recording Card
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Voice Sample (X-Vector)',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text('Sample Embedding: ${_detector.sampleEmbeddingCount} dimensions'),
-                    Text('Sample Status: ${_hasSample ? 'Recorded ✓' : 'Not Recorded'}'),
-                    if (_isRecordingSample) ...[
-                      SizedBox(height: 8),
-                      LinearProgressIndicator(value: _recordingProgress),
-                      SizedBox(height: 4),
-                      Text('Recording... ${(_recordingProgress * 100).toStringAsFixed(0)}%'),
-                    ],
-                    SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _isRecordingSample ? null : _recordVoiceSample,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.indigo,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: Text('Record Voice Sample'),
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _hasSample ? _clearSample : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: Text('Clear Sample'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            SizedBox(height: 16),
-            
-            // Audio Info Card
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'XVector Audio Information',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text('Current dB: ${_currentDb.toStringAsFixed(1)}'),
-                    Text('Amplitude Threshold: 50.0 dB'),
-                    Text('Audio Data Threshold: 60.0 dB'),
-                    Text('Amplitude Interval: 200ms'),
-                    Text('Audio Data Interval: 300ms'),
-                    Text('Hit Count: $_hitCount'),
-                    Text('Audio Buffer Size: $_audioBufferSize'),
-                    Text('Voice Similarity Threshold: ${_currentSimilarity.toStringAsFixed(2)}'),
-                    Text('Detection Mode: ${_hasSample ? 'Two-Step Detection (Dual Threshold + X-Vector)' : 'No Sample'}'),
-                    Text('Last Voice Similarity: ${_lastDetectedSimilarity.toStringAsFixed(3)}'),
-                    Text('Model: x-vector.tflite (512-dim embeddings)'),
-                  ],
-                ),
-              ),
-            ),
-            
-            SizedBox(height: 16),
-            
-            // Voice Similarity Threshold Slider
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Voice Similarity Threshold',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text('Adjust how similar the detected voice must be to the sample'),
-                    SizedBox(height: 8),
-                    Slider(
-                      value: _currentSimilarity,
-                      min: 0.0,
-                      max: 1.0,
-                      divisions: 20,
-                      label: _currentSimilarity.toStringAsFixed(2),
-                      onChanged: _adjustSimilarityThreshold,
-                    ),
-                    Text('Current: ${_currentSimilarity.toStringAsFixed(2)} (${(_currentSimilarity * 100).toStringAsFixed(0)}%)'),
-                  ],
-                ),
-              ),
-            ),
-            
-            SizedBox(height: 16),
-            
-            // Controls
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'XVector Controls',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 16),
-                    
-                    ElevatedButton(
-                      onPressed: _isInitialized ? null : _initializeDetector,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isInitialized ? Colors.grey : Colors.indigo,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text(_isInitialized ? 'Initialized ✓' : 'Initialize XVector'),
-                    ),
-                    
-                    SizedBox(height: 8),
-                    
-                    ElevatedButton(
-                      onPressed: _isListening ? _stopListening : _startListening,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isListening ? Colors.red : Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text(_isListening ? 'Stop Detection' : 'Start Detection'),
-                    ),
-                    
-                    SizedBox(height: 8),
-                    
-                    ElevatedButton(
-                      onPressed: _hitCount > 0 ? _resetCount : null,
-                      child: Text('Reset Count'),
-                    ),
-                    
-                    SizedBox(height: 8),
-                    
-                    ElevatedButton(
-                      onPressed: _hasSample ? () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Test: Speak the SAME voice as your sample to see hits!'),
-                            backgroundColor: Colors.indigo,
-                            duration: Duration(seconds: 3),
-                          ),
-                        );
-                      } : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text('Test Instructions'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            SizedBox(height: 16),
-            
-            // Instructions
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'XVector Instructions',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text('1. Initialize the XVector detector'),
-                    Text('2. Record a voice sample (5 seconds)'),
-                    Text('3. Adjust voice similarity threshold if needed'),
-                    Text('4. Start two-step detection'),
-                    Text('5. Speak the same voice as the sample'),
-                    Text('6. Watch for XVector strikes'),
-                    Text('7. Stop detection when done'),
-                    SizedBox(height: 8),
-                    Text(
-                      '🎯 Important: Two-step detection - Dual threshold (50dB/60dB) + Dual interval (200ms/300ms) + X-Vector voice matching!',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '💡 Tip: Record a clear, consistent voice as your sample for best results!',
-                      style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: Colors.indigo,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '🔬 Technology: Uses x-vector TFLite model for 512-dimensional voice embeddings',
-                      style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            SizedBox(height: 32), // Extra space at bottom
           ],
         ),
       ),
     );
   }
-} 
+}

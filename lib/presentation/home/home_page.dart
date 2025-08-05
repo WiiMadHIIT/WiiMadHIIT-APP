@@ -127,7 +127,7 @@ class HomePage extends StatelessWidget {
                   Expanded(
                     child: GestureDetector(
                       onTap: () {
-                        Navigator.pushNamed(context, AppRoutes.streamAudioDetectorExample);
+                        Navigator.pushNamed(context, AppRoutes.yamnetTestPage);
                       },
                       child: _StatCard(
                         icon: Icons.local_fire_department,

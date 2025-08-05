@@ -42,3 +42,7 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // No additional dependencies needed for tflite plugin
+}
