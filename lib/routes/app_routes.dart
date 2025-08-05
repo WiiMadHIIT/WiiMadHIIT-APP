@@ -16,7 +16,6 @@ import '../presentation/checkin_start_training/checkin_training_voice_page.dart'
 import '../presentation/checkin_start_training/checkin_countdown_page.dart';
 import '../knock_voice/stream_audio_detector_example.dart';
 import '../knock_voice/tone_specific_audio_detector_example.dart';
-import '../knock_voice/xvector_audio_detector_example.dart';
 import '../knock_voice/yamnet_test_page.dart';
 
 class AppRoutes {
@@ -39,7 +38,6 @@ class AppRoutes {
   static const String checkinCountdown = '/checkin_countdown';
   static const String streamAudioDetectorExample = '/stream_audio_detector_example';
   static const String toneSpecificAudioDetectorExample = '/tone_specific_audio_detector_example';
-  static const String xvectorAudioDetectorExample = '/xvector_audio_detector_example';
   static const String yamnetTestPage = '/yamnet_test_page';
 
   static Map<String, WidgetBuilder> get routes => {
@@ -92,7 +90,6 @@ class AppRoutes {
     },
       streamAudioDetectorExample: (_) => const StreamAudioDetectorExample(),
       toneSpecificAudioDetectorExample: (_) => const ToneSpecificAudioDetectorExample(),
-      xvectorAudioDetectorExample: (_) => const XVectorAudioDetectorExample(),
       yamnetTestPage: (_) => const YamnetTestPage(),
   };
 }
