@@ -9,7 +9,7 @@ import '../../widgets/layout_bg_type.dart';
 import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
-import '../../knock_voice/simple_audio_detector.dart';
+import '../../knock_voice/stream_audio_detector.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
@@ -90,7 +90,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   bool _isSubmittingResult = false;
   
   // 声音检测相关
-  SimpleAudioDetector? _audioDetector;
+  StreamAudioDetector? _audioDetector;
   bool _audioDetectionEnabled = true; // 默认开启
   bool _isInitializingAudioDetection = false;
   
@@ -201,7 +201,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     // 🎯 Stop audio detection before disposal
     if (_audioDetectionEnabled && _audioDetector != null) {
       _audioDetector!.stopListening().catchError((e) {
-        print('🎯 Simple audio detection stop error during disposal: $e');
+        print('🎯 Stream audio detection stop error during disposal: $e');
       });
     }
     
@@ -494,20 +494,20 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     );
   }
 
-  /// 🎯 Apple-level Simple Audio Detection Initialization
-  /// 针对 SimpleAudioDetector (mock mode) 的优化初始化
+  /// 🎯 Apple-level Stream Audio Detection Initialization
+  /// 针对 StreamAudioDetector 的优化初始化
   Future<void> _initializeAudioDetection() async {
     try {
       setState(() {
         _isInitializingAudioDetection = true;
       });
 
-      // 1. 创建简单声音检测器实例（如果还没有创建）
-      _audioDetector ??= SimpleAudioDetector();
+      // 1. 创建流音频检测器实例（如果还没有创建）
+      _audioDetector ??= StreamAudioDetector();
 
       // 2. 设置检测回调
       _audioDetector!.onStrikeDetected = () {
-        print('🎯 Mock strike detected! Triggering count...');
+        print('🎯 Real strike detected! Triggering count...');
         if (isCounting && mounted) {
           _onCountPressed(); // 自动触发计数
         }
@@ -515,19 +515,19 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
       // 3. 设置错误回调
       _audioDetector!.onError = (error) {
-        print('Simple audio detection error: $error');
+        print('Stream audio detection error: $error');
         // 不在这里显示错误对话框，让用户有机会尝试
       };
 
       // 4. 设置状态回调
       _audioDetector!.onStatusUpdate = (status) {
-        print('Simple audio detection status: $status');
+        print('Stream audio detection status: $status');
       };
 
-      // 5. 初始化简单音频检测器
+      // 5. 初始化流音频检测器
       final initSuccess = await _audioDetector!.initialize();
       if (!initSuccess) {
-        print('⚠️ Simple audio detector initialization failed, but continuing...');
+        print('⚠️ Stream audio detector initialization failed, but continuing...');
         // 不抛出异常，让用户有机会尝试
       }
 
@@ -536,9 +536,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         _isInitializingAudioDetection = false;
       });
 
-      print('🎯 Simple audio detection initialization completed (mock mode)');
+      print('🎯 Stream audio detection initialization completed');
     } catch (e) {
-      print('❌ Error during simple audio detection initialization: $e');
+      print('❌ Error during stream audio detection initialization: $e');
       setState(() {
         _isInitializingAudioDetection = false;
         _audioDetectionEnabled = true; // 默认开启
@@ -627,7 +627,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       showPreCountdown = false;
     });
     
-          print('🎯 Training reset completed with simple audio detection cleanup (mock mode)');
+          print('🎯 Training reset completed with stream audio detection cleanup');
     _startPreCountdown();
   }
 
@@ -1424,7 +1424,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       
       final success = await _audioDetector!.startListening();
       if (success) {
-        print('🎯 Simple audio detection started for round $currentRound (mock mode)');
+        print('🎯 Stream audio detection started for round $currentRound');
         
         // 提供用户反馈（可选）
         if (mounted) {
@@ -1434,11 +1434,11 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
           });
         }
       } else {
-        print('⚠️ Failed to start simple audio detection for round $currentRound, but continuing...');
+        print('⚠️ Failed to start stream audio detection for round $currentRound, but continuing...');
         // 不显示错误对话框，让训练继续进行
       }
     } catch (e) {
-      print('⚠️ Error starting simple audio detection: $e, but continuing...');
+      print('⚠️ Error starting stream audio detection: $e, but continuing...');
       // 不显示错误对话框，让训练继续进行
     }
   }
@@ -1450,12 +1450,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 添加状态检查，避免重复停止
       if (_audioDetector != null && _audioDetector!.isListening) {
         await _audioDetector!.stopListening();
-        print('🎯 Simple audio detection stopped for round $currentRound (mock mode)');
+        print('🎯 Stream audio detection stopped for round $currentRound');
       } else {
-        print('🎯 Simple audio detection already stopped for round $currentRound (mock mode)');
+        print('🎯 Stream audio detection already stopped for round $currentRound');
       }
     } catch (e) {
-      print('❌ Error stopping simple audio detection: $e');
+      print('❌ Error stopping stream audio detection: $e');
     }
   }
 
