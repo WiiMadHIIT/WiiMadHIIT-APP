@@ -17,6 +17,7 @@ import 'package:app_settings/app_settings.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'dart:io' show Platform;
 
+
 class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
   final String? productId;
@@ -60,12 +61,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   bool _cameraPermissionGranted = false; // 新增：相机权限状态
   bool _isInitializingCamera = false; // 新增：相机初始化状态
 
-  // 假数据历史排名
-  final List<Map<String, dynamic>> history = [
-    {"rank": 1, "date": "May 19, 2025", "counts": 19, "note": ""},
-    {"rank": 2, "date": "May 13, 2025", "counts": 18, "note": ""},
-    {"rank": 3, "date": "May 13, 2025", "counts": 15, "note": ""},
-  ];
+  // 历史排名数据 - 从API获取
+  List<Map<String, dynamic>> history = [];
+  
+  // 历史数据加载状态
+  bool _isLoadingHistory = false;
+  String? _historyError;
 
   // 临时结果 - 存储每个round的数据
   // tmpResult = [
@@ -93,6 +94,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   StreamAudioDetector? _audioDetector;
   bool _audioDetectionEnabled = true; // 默认开启
   bool _isInitializingAudioDetection = false;
+  
+
   
 
   @override
@@ -138,9 +141,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         "trainingId": widget.trainingId,
         "totalRounds": totalRounds,
         "roundDuration": roundDuration,
-        "date": DateTime.now().toIso8601String(),
+        "timestamp": DateTime.now().millisecondsSinceEpoch,
         "maxCounts": 0
       };
+      
+      // 🎯 加载历史训练数据（不依赖权限，优先加载）
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (mounted) {
+          await _loadTrainingHistory();
+        }
+      });
       
       // 🎯 Apple-level Permission Management
       // 延迟执行权限检查，确保页面完全加载
@@ -1489,6 +1499,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       "note": "current",
       "totalRounds": totalRounds,
       "roundDuration": roundDuration,
+      "id": "temp_${DateTime.now().millisecondsSinceEpoch}", // 临时ID
+      "trainingId": widget.trainingId,
+      "productId": widget.productId,
     };
     
     history.insert(0, result);
@@ -1525,16 +1538,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   // 添加round结果到临时结果列表
   void _addRoundToTmpResult(int counts) {
     final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
     
     final roundResult = {
       "roundNumber": currentRound,
       "counts": counts,
-      "date": dateStr,
       "timestamp": now.millisecondsSinceEpoch,
       "roundDuration": roundDuration,
     };
@@ -1542,6 +1549,122 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     tmpResult.add(roundResult);
     print('Added round $currentRound result: $counts counts to tmpResult');
   }
+
+  // 清理临时结果数据
+  void _clearTmpResult() {
+    tmpResult.clear();
+    print('Cleared tmpResult after final submission');
+  }
+
+  // 获取历史训练数据
+  Future<void> _loadTrainingHistory() async {
+    if (_isLoadingHistory) return; // 防止重复请求
+    
+    setState(() {
+      _isLoadingHistory = true;
+      _historyError = null;
+    });
+
+    try {
+      print('🔄 Loading training history for trainingId: ${widget.trainingId}, productId: ${widget.productId}');
+      
+      // 模拟API请求延迟
+      await Future.delayed(Duration(milliseconds: 800));
+      
+      // 模拟API返回的历史数据
+      final apiResponse = await _getTrainingHistoryApi();
+      
+      if (mounted) {
+        setState(() {
+          history = apiResponse;
+          _isLoadingHistory = false;
+        });
+        print('✅ Training history loaded successfully: ${history.length} records');
+      }
+    } catch (e) {
+      print('❌ Error loading training history: $e');
+      if (mounted) {
+        setState(() {
+          _historyError = e.toString();
+          _isLoadingHistory = false;
+        });
+      }
+    }
+  }
+
+  // 模拟获取历史数据的API请求
+  Future<List<Map<String, dynamic>>> _getTrainingHistoryApi() async {
+    // 模拟网络请求
+    await Future.delayed(Duration(milliseconds: 500));
+    
+    // 根据trainingId和productId返回不同的模拟数据
+    final now = DateTime.now();
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    
+    // 模拟历史数据
+    final mockHistoryData = [
+      {
+        "id": "662553355",
+        "rank": 1,
+        "timestamp": now.subtract(Duration(days: 2)).millisecondsSinceEpoch,
+        "counts": 25,
+        "note": "",
+      },
+      {
+        "id": "662553356",
+        "rank": 2,
+        "timestamp": now.subtract(Duration(days: 5)).millisecondsSinceEpoch,
+        "counts": 22,
+        "note": "",
+      },
+      {
+        "id": "662553357",
+        "rank": 3,
+        "timestamp": now.subtract(Duration(days: 8)).millisecondsSinceEpoch,
+        "counts": 19,
+        "note": "",
+      },
+      {
+        "id": "662553358",
+        "rank": 4,
+        "timestamp": now.subtract(Duration(days: 12)).millisecondsSinceEpoch,
+        "counts": 18,
+        "note": "",
+      },
+      {
+        "id": "662553359",
+        "rank": 5,
+        "timestamp": now.subtract(Duration(days: 15)).millisecondsSinceEpoch,
+        "counts": 16,
+        "note": "",
+      },
+    ];
+    
+    // 转换为UI显示格式
+    return mockHistoryData.map((item) {
+      final date = DateTime.fromMillisecondsSinceEpoch(item["timestamp"] as int);
+      final dateStr = "${months[date.month - 1]} ${date.day}, ${date.year}";
+      
+      return {
+        "rank": item["rank"],
+        "date": dateStr,
+        "counts": item["counts"],
+        "note": item["note"],
+        "id": item["id"],
+      };
+    }).toList();
+  }
+
+  // 刷新历史数据
+  Future<void> _refreshHistory() async {
+    if (_isLoadingHistory) return;
+    await _loadTrainingHistory();
+  }
+
+
 
   // 提交最终结果到后端
   Future<void> _submitFinalResult() async {
@@ -1554,12 +1677,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     try {
       // 找出最大counts的round
       int maxCounts = 0;
-      Map<String, dynamic>? bestRound;
       
       for (var round in tmpResult) {
         if (round["counts"] > maxCounts) {
           maxCounts = round["counts"];
-          bestRound = round;
         }
       }
       
@@ -1569,8 +1690,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       finalResult["totalRounds"] = totalRounds;
       finalResult["roundDuration"] = roundDuration;
       finalResult["maxCounts"] = maxCounts;
-      finalResult["date"] = DateTime.now().toIso8601String();
-      finalResult["bestRound"] = bestRound;
+      finalResult["timestamp"] = DateTime.now().millisecondsSinceEpoch;
       
       print('Submitting final result: $finalResult');
       
@@ -1579,14 +1699,21 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       
       if (mounted) {
         setState(() {
-          // 只更新当前结果的rank
+          // 更新当前结果的rank和ID
           final currentIdx = history.indexWhere((e) => e["note"] == "current");
           if (currentIdx >= 0) {
             history[currentIdx]["rank"] = apiResult["rank"];
+            history[currentIdx]["id"] = apiResult["id"]; // 更新为真实的ID
           }
           
           _isSubmittingResult = false;
         });
+        
+        // 清理临时结果数据
+        _clearTmpResult();
+        
+        // 可选：重新加载历史数据以确保数据一致性
+        // await _loadTrainingHistory();
       }
     } catch (e) {
       print('Error submitting result: $e');
@@ -1602,24 +1729,17 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   Future<Map<String, dynamic>> _submitTrainingResult(Map<String, dynamic> result) async {
     // 模拟网络延迟
     await Future.delayed(Duration(milliseconds: 1500));
-    
-    // 模拟API返回结果
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
-    
-    // 模拟返回的排名数据
-    return {
+
+    // 模拟进行API请求，返回结果
+    final apiRespondData =  {
+      "id": "662553355",
       "rank": 1, // 这里应该是从后端返回的实际排名
-      "date": dateStr,
-      "counts": result["maxCounts"],
-      "note": "current",
       "totalRounds": result["totalRounds"],
       "roundDuration": result["roundDuration"],
     };
+    
+    // 模拟返回的排名数据
+    return apiRespondData;
   }
 
   // 🎯 Apple-level Enhanced Countdown with Audio Detection

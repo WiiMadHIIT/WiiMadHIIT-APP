@@ -10,6 +10,13 @@ import '../../widgets/circle_progress_painter.dart';
 import '../../widgets/layout_bg_type.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
 import 'package:camera/camera.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:app_settings/app_settings.dart';
+
+import 'package:flutter_sound/flutter_sound.dart';
+import 'dart:io' show Platform;
+import '../../knock_voice/stream_audio_detector.dart';
+
 
 class ChallengeGamePage extends StatefulWidget {
   final String challengeId;
@@ -47,6 +54,9 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   bool _isAnimating = false;
   Timer? _animationDebounceTimer;
 
+  /// 🎤 权限状态监听
+  Timer? _permissionCheckTimer;
+
   // 背景切换相关
   LayoutBgType bgType = LayoutBgType.color;
   late AnimationController _videoFadeController;
@@ -57,12 +67,20 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   bool _cameraPermissionGranted = false; // 新增：相机权限状态
   bool _isInitializingCamera = false; // 新增：相机初始化状态
   bool _isSubmittingResult = false; // 新增：API请求状态
+  
+  // 声音检测相关
+  StreamAudioDetector? _audioDetector;
+  bool _audioDetectionEnabled = true; // 默认开启
+  bool _isInitializingAudioDetection = false;
+  
 
-  final List<Map<String, dynamic>> history = [
-    {"rank": 1, "date": "May 19, 2025", "counts": 19, "note": ""},
-    {"rank": 2, "date": "May 13, 2025", "counts": 18, "note": ""},
-    {"rank": 3, "date": "May 13, 2025", "counts": 15, "note": ""},
-  ];
+
+  // 历史排名数据 - 从API获取
+  List<Map<String, dynamic>> history = [];
+  
+  // 历史数据加载状态
+  bool _isLoadingHistory = false;
+  String? _historyError;
   
   // 临时结果 - 存储每个round的数据
   List<Map<String, dynamic>> tmpResult = [];
@@ -73,42 +91,89 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   @override
   void initState() {
     super.initState();
-    bounceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-      lowerBound: 1.0,
-      upperBound: 1.18,
-    );
-    bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
-    pageController = PageController();
-    _portraitController = DraggableScrollableController();
-    _landscapeController = DraggableScrollableController();
-    _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
-      ..setLooping(true)
-      ..setVolume(0.0)
-      ..initialize().then((_) {
-        setState(() {
-          _videoReady = true;
+    
+    try {
+      bounceController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 180),
+        lowerBound: 1.0,
+        upperBound: 1.18,
+      );
+      bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
+      pageController = PageController();
+      _portraitController = DraggableScrollableController();
+      _landscapeController = DraggableScrollableController();
+      
+      // 安全初始化视频控制器
+      _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
+        ..setLooping(true)
+        ..setVolume(0.0)
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _videoReady = true;
+            });
+            _videoController.play();
+          }
+        }).catchError((e) {
+          print('❌ Video initialization error: $e');
         });
-        _videoController.play();
+        
+      _videoFadeController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 500),
+        value: 1.0,
+      );
+      
+      // 初始化finalResult
+      finalResult = {
+        "challengeId": widget.challengeId,
+        "totalRounds": totalRounds,
+        "roundDuration": roundDuration,
+        "timestamp": DateTime.now().millisecondsSinceEpoch,
+        "maxCounts": 0
+      };
+      
+      // 🎯 加载历史训练数据（不依赖权限，优先加载）
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (mounted) {
+          await _loadTrainingHistory();
+        }
       });
-    _videoFadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-      value: 1.0,
-    );
-    
-    // 初始化finalResult
-    finalResult = {
-      "challengeId": widget.challengeId,
-      "totalRounds": totalRounds,
-      "roundDuration": roundDuration,
-      "date": DateTime.now().toIso8601String(),
-      "maxCounts": 0
-    };
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showSetupDialog());
-    // 移除页面初始化时的相机权限请求
+      
+      // 🎤 Apple-level Voice Detection Initialization
+      // 延迟执行权限检查，确保页面完全加载
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // 再延迟一点时间，确保页面稳定
+        Future.delayed(Duration(milliseconds: 500), () async {
+          if (!mounted) return;
+          
+          try {
+            print('🎤 Starting voice permission check...');
+            bool permissionGranted = await _requestMicrophonePermissionDirectly();
+            
+            // 🎤 只有在权限未授予时才启动权限状态监听
+            // 如果权限已授予，不需要监听器
+            if (!permissionGranted && mounted) {
+              _startPermissionListener();
+            }
+          } catch (e) {
+            print('❌ Error during voice permission initialization: $e');
+            // 权限初始化失败时，显示权限要求对话框
+            if (mounted) {
+              _showMicrophonePermissionRequiredDialog();
+            }
+          }
+        });
+      });
+      
+    } catch (e) {
+      print('❌ Error in initState: $e');
+      // 初始化失败时，显示权限要求对话框
+      if (mounted) {
+        _showMicrophonePermissionRequiredDialog();
+      }
+    }
   }
 
   @override
@@ -125,8 +190,22 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
 
   @override
   void dispose() {
+    // 🎤 Apple-level Resource Cleanup
     // 立即停止所有动画和定时器
     _stopAllAnimationsAndTimers();
+    
+    // 🎤 停止权限监听器
+    _permissionCheckTimer?.cancel();
+    
+    // 🎤 Stop voice detection before disposal
+    if (_audioDetectionEnabled && _audioDetector != null) {
+      _audioDetector!.stopListening().catchError((e) {
+        print('🎤 Stream voice detection stop error during disposal: $e');
+      });
+    }
+    
+    // 停止声音检测
+    _audioDetector?.dispose();
     
     // 释放所有控制器资源
     bounceController.dispose();
@@ -137,6 +216,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     _videoFadeController.dispose();
     _cameraController?.stopImageStream();
     _cameraController?.dispose();
+    
+    print('🎤 All resources cleaned up successfully');
     super.dispose();
   }
 
@@ -170,6 +251,182 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     }
     
     print('All animations and timers stopped, memory cleaned up');
+  }
+
+  /// 🎤 Apple-level Direct Microphone Permission Request
+  Future<bool> _requestMicrophonePermissionDirectly() async {
+    try {
+      // 1. 检查当前权限状态
+      PermissionStatus status = await Permission.microphone.status;
+      print('🎤 Current microphone permission status: $status');
+      
+      if (status.isGranted) {
+        // 2. 权限已授予，直接初始化音频检测并显示设置对话框
+        print('✅ Microphone permission already granted');
+        await _initializeVoiceDetection();
+        if (mounted) {
+          _showSetupDialog();
+        }
+        return true;
+      }
+      
+      if (status.isPermanentlyDenied) {
+        // 3. 权限被永久拒绝，显示设置指导
+        print('❌ Microphone permission permanently denied');
+        if (mounted) {
+          _showMicrophonePermissionRequiredDialog();
+        }
+        return false;
+      }
+      
+      // 4. 权限未授予，直接请求权限（会显示系统弹窗）
+      print('🎤 Requesting microphone permission...');
+      status = await Permission.microphone.request();
+      print('🎤 Permission request result: $status');
+      
+      // 5. 等待用户响应系统权限弹窗
+      await Future.delayed(Duration(milliseconds: 1000));
+      
+      // 6. 再次检查权限状态
+      status = await Permission.microphone.status;
+      print('🎤 Final permission status after user response: $status');
+      
+      if (status.isGranted) {
+        // 7. 权限授予成功，初始化音频检测并显示设置对话框
+        print('✅ Microphone permission granted');
+        await _initializeVoiceDetection();
+        if (mounted) {
+          _showSetupDialog();
+        }
+        return true;
+      } else if (status.isDenied) {
+        // 8. 用户拒绝了权限，显示设置指导
+        print('❌ User denied microphone permission');
+        if (mounted) {
+          _showMicrophonePermissionRequiredDialog();
+        }
+        return false;
+      } else if (status.isPermanentlyDenied) {
+        // 9. 用户永久拒绝了权限，显示设置指导
+        print('❌ User permanently denied microphone permission');
+        if (mounted) {
+          _showMicrophonePermissionRequiredDialog();
+        }
+        return false;
+      } else {
+        // 10. 其他状态，可能是用户还没有响应，不显示任何对话框
+        print('⚠️ Permission status unclear, user may still be deciding');
+        return false;
+      }
+      
+    } catch (e) {
+      print('❌ Error requesting microphone permission: $e');
+      if (mounted) {
+        _showMicrophonePermissionRequiredDialog();
+      }
+      return false;
+    }
+  }
+
+  /// 🎤 Apple-level Permission Status Listener
+  void _startPermissionListener() {
+    // 每3秒检查一次权限状态，减少频率
+    _permissionCheckTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      try {
+        final micStatus = await Permission.microphone.status;
+        print('🎤 Permission listener check: $micStatus');
+        
+        if (micStatus.isGranted && _audioDetector == null) {
+          // 麦克风权限授予，初始化音频检测并显示设置对话框
+          print('✅ Microphone permission granted via listener, initializing voice detection');
+          await _initializeVoiceDetection();
+          if (mounted) {
+            _showSetupDialog();
+          }
+          // 停止监听
+          timer.cancel();
+        } else if (micStatus.isPermanentlyDenied) {
+          // 权限被永久拒绝，显示设置指导
+          print('❌ Microphone permission permanently denied via listener');
+          if (mounted) {
+            _showMicrophonePermissionRequiredDialog();
+          }
+          // 停止监听
+          timer.cancel();
+        } else if (micStatus.isDenied) {
+          // 权限被拒绝，显示设置指导
+          print('❌ Microphone permission denied via listener');
+          if (mounted) {
+            _showMicrophonePermissionRequiredDialog();
+          }
+          // 停止监听
+          timer.cancel();
+        }
+        // 如果是其他状态（如 isRestricted），继续监听，不显示任何对话框
+      } catch (e) {
+        print('❌ Error in permission listener: $e');
+        // 出错时停止监听
+        timer.cancel();
+      }
+    });
+  }
+
+  /// 🎤 Apple-level Voice Detection Initialization
+  Future<void> _initializeVoiceDetection() async {
+    try {
+      setState(() {
+        _isInitializingAudioDetection = true;
+      });
+
+      // 1. 创建流音频检测器实例（如果还没有创建）
+      _audioDetector ??= StreamAudioDetector();
+
+      // 2. 设置检测回调
+      _audioDetector!.onStrikeDetected = () {
+        print('🎤 Voice strike detected! Triggering count...');
+        if (isCounting && mounted) {
+          _onCountPressed(); // 自动触发计数
+        }
+      };
+
+      // 3. 设置错误回调
+      _audioDetector!.onError = (error) {
+        print('Voice detection error: $error');
+        // 不在这里显示错误对话框，让用户有机会尝试
+      };
+
+      // 4. 设置状态回调
+      _audioDetector!.onStatusUpdate = (status) {
+        print('Voice detection status: $status');
+      };
+
+      // 5. 初始化流音频检测器
+      final initSuccess = await _audioDetector!.initialize();
+      if (!initSuccess) {
+        print('⚠️ Voice detector initialization failed, but continuing...');
+        // 不抛出异常，让用户有机会尝试
+      }
+
+      setState(() {
+        _audioDetectionEnabled = true; // 默认开启
+        _isInitializingAudioDetection = false;
+      });
+
+      print('🎤 Voice detection initialization completed');
+    } catch (e) {
+      print('❌ Error during voice detection initialization: $e');
+      setState(() {
+        _isInitializingAudioDetection = false;
+        _audioDetectionEnabled = true; // 默认开启
+      });
+      // 重新抛出异常让上层处理
+      rethrow;
+    }
   }
 
   // 新增：请求相机权限并初始化相机
@@ -264,6 +521,50 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     );
   }
 
+  /// 🎤 Apple-level Voice Detection Management
+  Future<void> _startVoiceDetectionForRound() async {
+    try {
+      if (_audioDetector == null) {
+        print('⚠️ Voice detector not available, skipping voice detection');
+        return;
+      }
+      
+      final success = await _audioDetector!.startListening();
+      if (success) {
+        print('🎤 Voice detection started for round $currentRound');
+        
+        // 提供用户反馈（可选）
+        if (mounted) {
+          // 可以在这里添加轻微的视觉反馈，比如按钮闪烁
+          setState(() {
+            // 可以添加一个状态来显示音频检测已启动
+          });
+        }
+      } else {
+        print('⚠️ Failed to start voice detection for round $currentRound, but continuing...');
+        // 不显示错误对话框，让训练继续进行
+      }
+    } catch (e) {
+      print('⚠️ Error starting voice detection: $e, but continuing...');
+      // 不显示错误对话框，让训练继续进行
+    }
+  }
+
+  /// 🎤 Apple-level Voice Detection Stop
+  Future<void> _stopVoiceDetectionForRound() async {
+    try {
+      // 添加状态检查，避免重复停止
+      if (_audioDetector != null && _audioDetector!.isListening) {
+        await _audioDetector!.stopListening();
+        print('🎤 Voice detection stopped for round $currentRound');
+      } else {
+        print('🎤 Voice detection already stopped for round $currentRound');
+      }
+    } catch (e) {
+      print('❌ Error stopping voice detection: $e');
+    }
+  }
+
   // 新增：显示相机错误对话框
   void _showCameraErrorDialog(String message) {
     showDialog(
@@ -277,6 +578,117 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
             child: Text('OK'),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 🎤 Apple-level Settings Dialog
+  void _showMicrophonePermissionRequiredDialog() {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 确保遮罩不可点击
+      barrierColor: Colors.black54, // 优雅的遮罩颜色
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false, // 防止返回键关闭对话框
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 8, // 增加阴影效果
+          backgroundColor: Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.mic, color: Colors.blue, size: 20),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Voice Training Requires Microphone',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Voice detection requires microphone access to count your training repetitions. Please enable it in Settings to continue voice training.',
+                style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.5),
+              ),
+              SizedBox(height: 12),
+              Container(
+                padding: EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.15)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.security, color: Colors.blue, size: 14),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Voice processed locally only',
+                        style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // 返回上一页
+              },
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              child: Text(
+                'Cancel',
+                style: TextStyle(fontSize: 15, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await AppSettings.openAppSettings();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+                shadowColor: Colors.blue.withOpacity(0.3),
+              ),
+              child: Text(
+                'Open Settings',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+          actionsPadding: EdgeInsets.fromLTRB(24, 0, 24, 20),
+        ),
       ),
     );
   }
@@ -865,7 +1277,37 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       tmpResult.clear();
     }
     
+    // 🎤 Apple-level Voice Detection Integration
+    // 如果用户启用了声音检测，在训练开始时自动启动
+    print('🎤 Starting round $currentRound, voice detection enabled: $_audioDetectionEnabled');
+    if (_audioDetectionEnabled) {
+      print('🎤 Voice detection is enabled, starting detection...');
+      _startVoiceDetectionForRound();
+    } else {
+      print('🎤 Voice detection is disabled, skipping...');
+    }
+    
     _tick();
+  }
+
+  /// 🎤 Apple-level Training Reset with Voice Detection Management
+  void _resetTraining() async {
+    // 🎤 Stop voice detection before reset
+    if (_audioDetectionEnabled) {
+      await _stopVoiceDetectionForRound();
+    }
+    
+    setState(() {
+      showResultOverlay = false;
+      currentRound = 1;
+      counter = 0;
+      isStarted = false;
+      isCounting = false;
+      showPreCountdown = false;
+    });
+    
+    print('🎤 Training reset completed with voice detection cleanup');
+    _startPreCountdown();
   }
 
   void _insertRoundResult(int counts, {bool isFinal = false}) {
@@ -909,6 +1351,11 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       _tick();
     } else {
       if (!mounted) return;
+      
+      // 🎤 Stop voice detection when round ends
+      if (_audioDetectionEnabled) {
+        await _stopVoiceDetectionForRound();
+      }
       
       // 当前round结束，记录结果到tmpResult
       _addRoundToTmpResult(counter);
@@ -961,6 +1408,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       "note": "current",
       "totalRounds": totalRounds,
       "roundDuration": roundDuration,
+      "id": "temp_${DateTime.now().millisecondsSinceEpoch}", // Temporary ID
+      "challengeId": widget.challengeId,
     };
     
     history.insert(0, result);
@@ -997,16 +1446,10 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   // 添加round结果到临时结果列表
   void _addRoundToTmpResult(int counts) {
     final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
     
     final roundResult = {
       "roundNumber": currentRound,
       "counts": counts,
-      "date": dateStr,
       "timestamp": now.millisecondsSinceEpoch,
       "roundDuration": roundDuration,
     };
@@ -1014,6 +1457,122 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     tmpResult.add(roundResult);
     print('Added round $currentRound result: $counts counts to tmpResult');
   }
+
+  // 清理临时结果数据
+  void _clearTmpResult() {
+    tmpResult.clear();
+    print('Cleared tmpResult after final submission');
+  }
+
+  // 获取历史训练数据
+  Future<void> _loadTrainingHistory() async {
+    if (_isLoadingHistory) return; // 防止重复请求
+    
+    setState(() {
+      _isLoadingHistory = true;
+      _historyError = null;
+    });
+
+    try {
+      print('🔄 Loading training history for challengeId: ${widget.challengeId}');
+      
+      // 模拟API请求延迟
+      await Future.delayed(Duration(milliseconds: 800));
+      
+      // 模拟API返回的历史数据
+      final apiResponse = await _getTrainingHistoryApi();
+      
+      if (mounted) {
+        setState(() {
+          history = apiResponse;
+          _isLoadingHistory = false;
+        });
+        print('✅ Training history loaded successfully: ${history.length} records');
+      }
+    } catch (e) {
+      print('❌ Error loading training history: $e');
+      if (mounted) {
+        setState(() {
+          _historyError = e.toString();
+          _isLoadingHistory = false;
+        });
+      }
+    }
+  }
+
+  // 模拟获取历史数据的API请求
+  Future<List<Map<String, dynamic>>> _getTrainingHistoryApi() async {
+    // 模拟网络请求
+    await Future.delayed(Duration(milliseconds: 500));
+    
+    // 根据challengeId返回不同的模拟数据
+    final now = DateTime.now();
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    
+    // 模拟历史数据
+    final mockHistoryData = [
+      {
+        "id": "662553355",
+        "rank": 1,
+        "timestamp": now.subtract(Duration(days: 2)).millisecondsSinceEpoch,
+        "counts": 25,
+        "note": "",
+      },
+      {
+        "id": "662553356",
+        "rank": 2,
+        "timestamp": now.subtract(Duration(days: 5)).millisecondsSinceEpoch,
+        "counts": 22,
+        "note": "",
+      },
+      {
+        "id": "662553357",
+        "rank": 3,
+        "timestamp": now.subtract(Duration(days: 8)).millisecondsSinceEpoch,
+        "counts": 19,
+        "note": "",
+      },
+      {
+        "id": "662553358",
+        "rank": 4,
+        "timestamp": now.subtract(Duration(days: 12)).millisecondsSinceEpoch,
+        "counts": 18,
+        "note": "",
+      },
+      {
+        "id": "662553359",
+        "rank": 5,
+        "timestamp": now.subtract(Duration(days: 15)).millisecondsSinceEpoch,
+        "counts": 16,
+        "note": "",
+      },
+    ];
+    
+    // 转换为UI显示格式
+    return mockHistoryData.map((item) {
+      final date = DateTime.fromMillisecondsSinceEpoch(item["timestamp"] as int);
+      final dateStr = "${months[date.month - 1]} ${date.day}, ${date.year}";
+      
+      return {
+        "rank": item["rank"],
+        "date": dateStr,
+        "counts": item["counts"],
+        "note": item["note"],
+        "id": item["id"],
+      };
+    }).toList();
+  }
+
+  // 刷新历史数据
+  Future<void> _refreshHistory() async {
+    if (_isLoadingHistory) return;
+    await _loadTrainingHistory();
+  }
+
+
 
   // 提交最终结果到后端
   Future<void> _submitFinalResult() async {
@@ -1040,8 +1599,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       finalResult["totalRounds"] = totalRounds;
       finalResult["roundDuration"] = roundDuration;
       finalResult["maxCounts"] = maxCounts;
-      finalResult["date"] = DateTime.now().toIso8601String();
-      finalResult["bestRound"] = bestRound;
+      finalResult["timestamp"] = DateTime.now().millisecondsSinceEpoch;
+
       
       print('Submitting final result: $finalResult');
       
@@ -1054,10 +1613,14 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
           final currentIdx = history.indexWhere((e) => e["note"] == "current");
           if (currentIdx >= 0) {
             history[currentIdx]["rank"] = apiResult["rank"];
+            history[currentIdx]["id"] = apiResult["id"]; // Update with real ID
           }
           
           _isSubmittingResult = false;
         });
+        
+        // 清理临时结果数据
+        _clearTmpResult();
       }
     } catch (e) {
       print('Error submitting result: $e');
@@ -1074,23 +1637,15 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     // 模拟网络延迟
     await Future.delayed(Duration(milliseconds: 1500));
     
-    // 模拟API返回结果
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
-    
-    // 模拟返回的排名数据
-    return {
+    // 模拟进行API请求，返回结果
+    final apiRespondData = {
+      "id": "662553355",
       "rank": 1, // 这里应该是从后端返回的实际排名
-      "date": dateStr,
-      "counts": result["maxCounts"],
-      "note": "current",
       "totalRounds": result["totalRounds"],
       "roundDuration": result["roundDuration"],
     };
+    
+    return apiRespondData;
   }
 
   void _onStartPressed() {
@@ -1466,17 +2021,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
                 curve: Curves.easeOutCubic,
               );
             },
-            onResultReset: () {
-              setState(() {
-                showResultOverlay = false;
-                currentRound = 1;
-                counter = 0;
-                isStarted = false;
-                isCounting = false;
-                showPreCountdown = false;
-              });
-              _startPreCountdown();
-            },
+            onResultReset: _resetTraining,
             onResultBack: () {
               Navigator.pop(context);
             },
@@ -1515,17 +2060,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
                 curve: Curves.easeOutCubic,
               );
             },
-            onResultReset: () {
-              setState(() {
-                showResultOverlay = false;
-                currentRound = 1;
-                counter = 0;
-                isStarted = false;
-                isCounting = false;
-                showPreCountdown = false;
-              });
-              _startPreCountdown();
-            },
+            onResultReset: _resetTraining,
             onResultBack: () {
               Navigator.pop(context);
             },

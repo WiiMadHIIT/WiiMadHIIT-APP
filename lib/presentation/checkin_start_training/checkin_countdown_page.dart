@@ -53,11 +53,12 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
   bool _cameraPermissionGranted = false; // 新增：相机权限状态
   bool _isInitializingCamera = false; // 新增：相机初始化状态
 
-  final List<Map<String, dynamic>> history = [
-    {"rank": 1, "date": "May 19, 2025", "daySeconds": 1140, "seconds": 1140, "note": ""}, // 19分钟 = 1140秒
-    {"rank": 2, "date": "May 13, 2025", "daySeconds": 1080, "seconds": 1080, "note": ""}, // 18分钟 = 1080秒
-    {"rank": 3, "date": "May 11, 2025", "daySeconds": 900, "seconds": 900, "note": ""}, // 15分钟 = 900秒
-  ];
+  // 历史排名数据 - 从API获取
+  List<Map<String, dynamic>> history = [];
+  
+  // 历史数据加载状态
+  bool _isLoadingHistory = false;
+  String? _historyError;
 
   // 最终结果 - 用于API请求
   // finalResult= {
@@ -107,13 +108,20 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
       "trainingId": widget.trainingId,
       "totalRounds": totalRounds,
       "roundDuration": roundDuration,
-      "date": DateTime.now().toIso8601String(),
+      "timestamp": DateTime.now().millisecondsSinceEpoch,
       "seconds": 0
     };
     
     countdown = roundDuration; // 直接使用秒，不需要乘以60
+    
+    // 🎯 加载历史训练数据（不依赖权限，优先加载）
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted) {
+        await _loadTrainingHistory();
+      }
+    });
+    
     WidgetsBinding.instance.addPostFrameCallback((_) => _showSetupDialog());
-    // 移除页面初始化时的相机权限请求
   }
 
   @override
@@ -810,7 +818,119 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     });
   }
 
+  // 获取历史训练数据
+  Future<void> _loadTrainingHistory() async {
+    if (_isLoadingHistory) return; // 防止重复请求
+    
+    setState(() {
+      _isLoadingHistory = true;
+      _historyError = null;
+    });
 
+    try {
+      print('🔄 Loading training history for trainingId: ${widget.trainingId}, productId: ${widget.productId}');
+      
+      // 模拟API请求延迟
+      await Future.delayed(Duration(milliseconds: 800));
+      
+      // 模拟API返回的历史数据
+      final apiResponse = await _getTrainingHistoryApi();
+      
+      if (mounted) {
+        setState(() {
+          history = apiResponse;
+          _isLoadingHistory = false;
+        });
+        print('✅ Training history loaded successfully: ${history.length} records');
+      }
+    } catch (e) {
+      print('❌ Error loading training history: $e');
+      if (mounted) {
+        setState(() {
+          _historyError = e.toString();
+          _isLoadingHistory = false;
+        });
+      }
+    }
+  }
+
+  // 模拟获取历史数据的API请求
+  Future<List<Map<String, dynamic>>> _getTrainingHistoryApi() async {
+    // 模拟网络请求
+    await Future.delayed(Duration(milliseconds: 500));
+    
+    // 根据trainingId和productId返回不同的模拟数据
+    final now = DateTime.now();
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    
+    // 模拟历史数据 - 使用 countdown 页面特有的数据结构
+    final mockHistoryData = [
+      {
+        "id": "662553355",
+        "rank": 1,
+        "timestamp": now.subtract(Duration(days: 2)).millisecondsSinceEpoch,
+        "daySeconds": 1140,
+        "seconds": 1140,
+        "note": "",
+      },
+      {
+        "id": "662553356",
+        "rank": 2,
+        "timestamp": now.subtract(Duration(days: 5)).millisecondsSinceEpoch,
+        "daySeconds": 1080,
+        "seconds": 1080,
+        "note": "",
+      },
+      {
+        "id": "662553357",
+        "rank": 3,
+        "timestamp": now.subtract(Duration(days: 8)).millisecondsSinceEpoch,
+        "daySeconds": 900,
+        "seconds": 900,
+        "note": "",
+      },
+      {
+        "id": "662553358",
+        "rank": 4,
+        "timestamp": now.subtract(Duration(days: 12)).millisecondsSinceEpoch,
+        "daySeconds": 840,
+        "seconds": 840,
+        "note": "",
+      },
+      {
+        "id": "662553359",
+        "rank": 5,
+        "timestamp": now.subtract(Duration(days: 15)).millisecondsSinceEpoch,
+        "daySeconds": 720,
+        "seconds": 720,
+        "note": "",
+      },
+    ];
+    
+    // 转换为UI显示格式
+    return mockHistoryData.map((item) {
+      final date = DateTime.fromMillisecondsSinceEpoch(item["timestamp"] as int);
+      final dateStr = "${months[date.month - 1]} ${date.day}, ${date.year}";
+      
+      return {
+        "rank": item["rank"],
+        "date": dateStr,
+        "daySeconds": item["daySeconds"],
+        "seconds": item["seconds"],
+        "note": item["note"],
+        "id": item["id"],
+      };
+    }).toList();
+  }
+
+  // 刷新历史数据
+  Future<void> _refreshHistory() async {
+    if (_isLoadingHistory) return;
+    await _loadTrainingHistory();
+  }
 
   void _startPreCountdown() {
     // 取消之前的Timer（如果存在）
@@ -864,10 +984,14 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     final result = {
       "rank": null, // 暂时为null，等待API返回
       "date": dateStr,
+      "daySeconds": totalSeconds,
       "seconds": totalSeconds,
       "note": "current",
       "totalRounds": totalRounds,
       "roundDuration": roundDuration,
+      "id": "temp_${DateTime.now().millisecondsSinceEpoch}", // 临时ID
+      "trainingId": widget.trainingId,
+      "productId": widget.productId,
     };
     
     history.insert(0, result);
@@ -918,7 +1042,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
       finalResult["totalRounds"] = totalRounds;
       finalResult["roundDuration"] = roundDuration;
       finalResult["seconds"] = totalSeconds;
-      finalResult["date"] = DateTime.now().toIso8601String();
+      finalResult["timestamp"] = DateTime.now().millisecondsSinceEpoch;
 
       
       print('Submitting final result: $finalResult');
@@ -928,11 +1052,11 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
       
       if (mounted) {
         setState(() {
-          // 只更新当前结果的rank
+          // 更新当前结果的rank和ID
           final currentIdx = history.indexWhere((e) => e["note"] == "current");
           if (currentIdx >= 0) {
             history[currentIdx]["rank"] = apiResult["rank"];
-            history[currentIdx]["daySeconds"] = apiResult["daySeconds"];
+            history[currentIdx]["id"] = apiResult["id"]; // 更新为真实的ID
           }
           
           _isSubmittingResult = false;
@@ -963,13 +1087,10 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     
     // 模拟返回的排名数据
     return {
+      "id": "662553355",
       "rank": 1, // 这里应该是从后端返回的实际排名
-      "date": dateStr,
-      "seconds": result["seconds"],
-      "note": "current",
       "totalRounds": result["totalRounds"],
       "roundDuration": result["roundDuration"],
-      "daySeconds": result["daySeconds"],
     };
   }
 
@@ -987,6 +1108,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     final totalSeconds = totalRounds * roundDuration; // 直接使用秒
     final result = {
       "date": dateStr,
+      "daySeconds": totalSeconds,
       "seconds": totalSeconds,
       "note": "current",
     };
