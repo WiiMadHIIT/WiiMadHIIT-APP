@@ -18,7 +18,6 @@ class TrainingPortraitLayout extends StatelessWidget {
   final Animation<double> bounceAnim;
   final PageController pageController;
   final VoidCallback onStartPressed;
-  final VoidCallback onCountPressed;
   final Color dynamicBgColor;
   final VoidCallback onBgSwitchPressed;
   final LayoutBgType bgType;
@@ -52,7 +51,6 @@ class TrainingPortraitLayout extends StatelessWidget {
     required this.bounceAnim,
     required this.pageController,
     required this.onStartPressed,
-    required this.onCountPressed,
     required this.dynamicBgColor,
     required this.onBgSwitchPressed,
     required this.bgType,
@@ -139,7 +137,7 @@ class TrainingPortraitLayout extends StatelessWidget {
                   ),
                   Center(
                     child: GestureDetector(
-                      onTap: isStarted && isCounting ? onCountPressed : (isStarted ? null : onStartPressed),
+                      onTap: isStarted ? null : onStartPressed,
                       child: AnimatedBuilder(
                         animation: bounceController,
                         builder: (context, child) => Transform.scale(

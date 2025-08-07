@@ -61,6 +61,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   bool _cameraPermissionGranted = false; // 新增：相机权限状态
   bool _isInitializingCamera = false; // 新增：相机初始化状态
 
+  // 视频配置相关
+  String? _portraitVideoUrl; // 竖屏视频URL
+  String? _landscapeVideoUrl; // 横屏视频URL
+  bool _isLoadingVideoConfig = false; // 视频配置加载状态
+  String? _videoConfigError; // 视频配置错误
+
   // 历史排名数据 - 从API获取
   List<Map<String, dynamic>> history = [];
   
@@ -114,7 +120,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       _portraitController = DraggableScrollableController();
       _landscapeController = DraggableScrollableController();
       
-      // 安全初始化视频控制器
+      // 安全初始化视频控制器 - 使用默认视频，后续会根据配置更新
       _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
         ..setLooping(true)
         ..setVolume(0.0)
@@ -145,10 +151,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         "maxCounts": 0
       };
       
-      // 🎯 加载历史训练数据（不依赖权限，优先加载）
+      // 🎯 加载历史训练数据和视频配置（不依赖权限，优先加载）
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (mounted) {
-          await _loadTrainingHistory();
+          await _loadTrainingDataAndVideoConfig();
         }
       });
       
@@ -197,6 +203,13 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     if (orientation == Orientation.landscape && _landscapeController == null) {
       _landscapeController = DraggableScrollableController();
     }
+    
+    // 监听屏幕方向变化，重新初始化视频
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _videoReady && !_isLoadingVideoConfig) {
+        _onOrientationChanged();
+      }
+    });
   }
 
   @override
@@ -1556,44 +1569,60 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     print('Cleared tmpResult after final submission');
   }
 
-  // 获取历史训练数据
-  Future<void> _loadTrainingHistory() async {
-    if (_isLoadingHistory) return; // 防止重复请求
+  // 获取历史训练数据和视频配置
+  Future<void> _loadTrainingDataAndVideoConfig() async {
+    if (_isLoadingHistory || _isLoadingVideoConfig) return; // 防止重复请求
     
     setState(() {
       _isLoadingHistory = true;
+      _isLoadingVideoConfig = true;
       _historyError = null;
+      _videoConfigError = null;
     });
 
     try {
-      print('🔄 Loading training history for trainingId: ${widget.trainingId}, productId: ${widget.productId}');
+      print('🔄 Loading training data and video config for trainingId: ${widget.trainingId}, productId: ${widget.productId}');
       
       // 模拟API请求延迟
       await Future.delayed(Duration(milliseconds: 800));
       
-      // 模拟API返回的历史数据
-      final apiResponse = await _getTrainingHistoryApi();
+      // 模拟API返回的历史数据和视频配置
+      final apiResponse = await _getTrainingDataAndVideoConfigApi();
       
       if (mounted) {
         setState(() {
-          history = apiResponse;
+          history = apiResponse['history'];
+          _portraitVideoUrl = apiResponse['videoConfig']['portraitUrl'];
+          _landscapeVideoUrl = apiResponse['videoConfig']['landscapeUrl'];
           _isLoadingHistory = false;
+          _isLoadingVideoConfig = false;
         });
-        print('✅ Training history loaded successfully: ${history.length} records');
+        
+        // 根据当前屏幕方向初始化视频
+        await _initializeVideoBasedOnOrientation();
+        
+        print('✅ Training data and video config loaded successfully: ${history.length} records');
       }
     } catch (e) {
-      print('❌ Error loading training history: $e');
+      print('❌ Error loading training data and video config: $e');
       if (mounted) {
         setState(() {
           _historyError = e.toString();
+          _videoConfigError = e.toString();
           _isLoadingHistory = false;
+          _isLoadingVideoConfig = false;
         });
+        
+        // 使用默认视频配置
+        await _initializeDefaultVideo();
       }
     }
   }
 
-  // 模拟获取历史数据的API请求
-  Future<List<Map<String, dynamic>>> _getTrainingHistoryApi() async {
+
+
+  // 模拟获取历史数据和视频配置的API请求
+  Future<Map<String, dynamic>> _getTrainingDataAndVideoConfigApi() async {
     // 模拟网络请求
     await Future.delayed(Duration(milliseconds: 500));
     
@@ -1643,8 +1672,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       },
     ];
     
+    // 模拟视频配置数据
+    final mockVideoConfig = {
+      "portraitUrl": "https://example.com/videos/training_portrait.mp4", // 远程竖屏视频URL
+      "landscapeUrl": "https://example.com/videos/training_landscape.mp4", // 远程横屏视频URL
+    };
+    
     // 转换为UI显示格式
-    return mockHistoryData.map((item) {
+    final historyData = mockHistoryData.map((item) {
       final date = DateTime.fromMillisecondsSinceEpoch(item["timestamp"] as int);
       final dateStr = "${months[date.month - 1]} ${date.day}, ${date.year}";
       
@@ -1656,12 +1691,150 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         "id": item["id"],
       };
     }).toList();
+    
+    // 返回历史数据和视频配置
+    return {
+      "history": historyData,
+      "videoConfig": mockVideoConfig,
+    };
   }
+
+
 
   // 刷新历史数据
   Future<void> _refreshHistory() async {
     if (_isLoadingHistory) return;
-    await _loadTrainingHistory();
+    await _loadTrainingDataAndVideoConfig();
+  }
+
+  // 根据屏幕方向初始化视频
+  Future<void> _initializeVideoBasedOnOrientation() async {
+    try {
+      final orientation = MediaQuery.of(context).orientation;
+      String? videoUrl;
+      
+      if (orientation == Orientation.portrait) {
+        videoUrl = _portraitVideoUrl;
+        print('📱 Using portrait video URL: $videoUrl');
+      } else {
+        videoUrl = _landscapeVideoUrl;
+        print('🖥️ Using landscape video URL: $videoUrl');
+      }
+      
+      // 如果远程URL可用，尝试使用远程视频
+      if (videoUrl != null && videoUrl.isNotEmpty && videoUrl != 'null') {
+        await _initializeRemoteVideo(videoUrl);
+      } else {
+        // 使用默认本地视频
+        await _initializeDefaultVideo();
+      }
+    } catch (e) {
+      print('❌ Error initializing video based on orientation: $e');
+      await _initializeDefaultVideo();
+    }
+  }
+
+  // 初始化远程视频
+  Future<void> _initializeRemoteVideo(String videoUrl) async {
+    try {
+      print('🌐 Initializing remote video: $videoUrl');
+      
+      // 停止当前视频
+      if (_videoController.value.isPlaying) {
+        await _videoController.pause();
+      }
+      
+      // 释放当前控制器
+      await _videoController.dispose();
+      
+      // 创建新的远程视频控制器
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
+        ..setLooping(true)
+        ..setVolume(0.0);
+      
+      // 初始化远程视频
+      await _videoController.initialize();
+      
+      if (mounted) {
+        setState(() {
+          _videoReady = true;
+        });
+        _videoController.play();
+        print('✅ Remote video initialized successfully');
+      }
+    } catch (e) {
+      print('❌ Error initializing remote video: $e');
+      // 远程视频失败，回退到默认视频
+      await _initializeDefaultVideo();
+    }
+  }
+
+  // 初始化默认本地视频
+  Future<void> _initializeDefaultVideo() async {
+    try {
+      print('📁 Initializing default local video');
+      
+      final orientation = MediaQuery.of(context).orientation;
+      String defaultVideoPath;
+      
+      if (orientation == Orientation.portrait) {
+        defaultVideoPath = 'assets/video/video1.mp4'; // 竖屏默认视频
+        print('📱 Using default portrait video: $defaultVideoPath');
+      } else {
+        defaultVideoPath = 'assets/video/video2.mp4'; // 横屏默认视频
+        print('🖥️ Using default landscape video: $defaultVideoPath');
+      }
+      
+      // 停止当前视频
+      if (_videoController.value.isPlaying) {
+        await _videoController.pause();
+      }
+      
+      // 释放当前控制器
+      await _videoController.dispose();
+      
+      // 创建新的本地视频控制器
+      _videoController = VideoPlayerController.asset(defaultVideoPath)
+        ..setLooping(true)
+        ..setVolume(0.0);
+      
+      // 初始化本地视频
+      await _videoController.initialize();
+      
+      if (mounted) {
+        setState(() {
+          _videoReady = true;
+        });
+        _videoController.play();
+        print('✅ Default local video initialized successfully');
+      }
+    } catch (e) {
+      print('❌ Error initializing default video: $e');
+      // 如果连默认视频都失败，尝试使用video1.mp4作为最后的回退
+      try {
+        await _videoController.dispose();
+        _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
+          ..setLooping(true)
+          ..setVolume(0.0);
+        await _videoController.initialize();
+        if (mounted) {
+          setState(() {
+            _videoReady = true;
+          });
+          _videoController.play();
+          print('✅ Fallback video initialized successfully');
+        }
+      } catch (fallbackError) {
+        print('❌ Error initializing fallback video: $fallbackError');
+      }
+    }
+  }
+
+  // 屏幕方向改变时重新初始化视频
+  void _onOrientationChanged() {
+    if (_videoReady) {
+      _initializeVideoBasedOnOrientation();
+    }
   }
 
 
@@ -1713,7 +1886,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         _clearTmpResult();
         
         // 可选：重新加载历史数据以确保数据一致性
-        // await _loadTrainingHistory();
+        // await _loadTrainingDataAndVideoConfig();
       }
     } catch (e) {
       print('Error submitting result: $e');
@@ -2008,7 +2181,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             bounceAnim: bounceAnim,
             pageController: pageController,
             onStartPressed: _onStartPressed,
-            onCountPressed: _onCountPressed,
             dynamicBgColor: _dynamicBgColor,
             onBgSwitchPressed: _onBgSwitchPressed,
             bgType: bgType,
@@ -2048,7 +2220,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             bounceAnim: bounceAnim,
             pageController: pageController,
             onStartPressed: _onStartPressed,
-            onCountPressed: _onCountPressed,
             dynamicBgColor: _dynamicBgColor,
             bgType: bgType,
             videoWidget: videoWidget,
@@ -2465,3 +2636,4 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     );
   }
 }
+

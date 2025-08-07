@@ -30,8 +30,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
   final PageController pageController;
   // 开始按钮回调
   final VoidCallback onStartPressed;
-  // 计数按钮回调
-  final VoidCallback onCountPressed;
+
   // 背景色（动态变化）
   final Color dynamicBgColor;
   final LayoutBgType bgType;
@@ -67,7 +66,6 @@ class TrainingLandscapeLayout extends StatelessWidget {
     required this.bounceAnim,
     required this.pageController,
     required this.onStartPressed,
-    required this.onCountPressed,
     required this.dynamicBgColor,
     required this.bgType,
     required this.videoWidget,
@@ -175,7 +173,7 @@ class TrainingLandscapeLayout extends StatelessWidget {
                             Align(
                               alignment: Alignment(0, 5/7*2-1), // y=5/7处
                               child: GestureDetector(
-                                onTap: isStarted && isCounting ? onCountPressed : (isStarted ? null : onStartPressed),
+                                onTap: isStarted ? null : onStartPressed,
                                 child: AnimatedBuilder(
                                   animation: bounceController,
                                   builder: (context, child) => Transform.scale(
