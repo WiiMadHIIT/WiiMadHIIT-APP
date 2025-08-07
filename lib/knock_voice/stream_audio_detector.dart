@@ -44,7 +44,7 @@ class StreamAudioDetector {
   int _hitCount = 0;
   DateTime? _lastStrikeTime;
   static const double _dbThreshold = 60.0;
-  static const int _minStrikeInterval = 100;
+  static const int _minStrikeInterval = 300;
   
   // Audio processing mode
   bool _interleaved = false;
