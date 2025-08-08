@@ -17,6 +17,8 @@ import 'package:app_settings/app_settings.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'dart:io' show Platform;
 
+// 新增：导入音频会话相关包（如果可用）
+// import 'package:audio_session/audio_session.dart';
 
 class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -27,7 +29,7 @@ class CheckinTrainingPage extends StatefulWidget {
   State<CheckinTrainingPage> createState() => _CheckinTrainingPageState();
 }
 
-class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerProviderStateMixin {
+class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerProviderStateMixin, WidgetsBindingObserver {
   Map<String, dynamic>? currentResult;
   int totalRounds = 1;
   int roundDuration = 60; // 单位：秒（修改为秒）
@@ -100,13 +102,23 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   StreamAudioDetector? _audioDetector;
   bool _audioDetectionEnabled = true; // 默认开启
   bool _isInitializingAudioDetection = false;
+  bool _isAudioDetectionActive = false; // 新增：音频检测活动状态
   
-
-  
+  // 🎯 新增：音频路由和状态监控相关
+  Timer? _audioQualityMonitorTimer;
+  Timer? _permissionCheckTimer; // 权限检查定时器
+  bool _isAudioRoutingStable = true; // 音频路由是否稳定
+  int _audioDetectionFailures = 0; // 音频检测失败次数
+  static const int _maxAudioFailures = 3; // 最大失败次数
+  DateTime? _lastAudioRouteCheck; // 上次音频路由检查时间
+  static const Duration _audioRouteCheckInterval = Duration(seconds: 5); // 音频路由检查间隔
 
   @override
   void initState() {
     super.initState();
+    
+    // 🎯 新增：注册应用生命周期监听
+    WidgetsBinding.instance.addObserver(this);
     
     try {
       bounceController = AnimationController(
@@ -172,7 +184,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             // 🎯 只有在权限未授予时才启动权限状态监听
             // 如果权限已授予，不需要监听器
             if (!permissionGranted && mounted) {
-              _startPermissionListener();
+              _startEnhancedPermissionListener();
             }
           } catch (e) {
             print('❌ Error during permission initialization: $e');
@@ -220,18 +232,26 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     
     // 🎯 停止权限监听器
     _permissionCheckTimer?.cancel();
+    _permissionCheckTimer = null; // 明确设置为null
+    
+    // 🎯 停止音频质量监控
+    _audioQualityMonitorTimer?.cancel();
+    _audioQualityMonitorTimer = null;
+    
+    // 🎯 移除应用生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
     
     // 🎯 Stop audio detection before disposal
-    if (_audioDetectionEnabled && _audioDetector != null) {
+    if (_audioDetectionEnabled && _audioDetector != null && _isAudioDetectionActive) {
       _audioDetector!.stopListening().catchError((e) {
         print('🎯 Stream audio detection stop error during disposal: $e');
       });
+      _isAudioDetectionActive = false;
     }
     
     // 停止声音检测
     _audioDetector?.dispose();
-    
-
+    _audioDetector = null; // 明确设置为null
     
     // 释放所有控制器资源
     bounceController.dispose();
@@ -247,6 +267,228 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     super.dispose();
   }
 
+  /// 🎯 新增：应用生命周期状态变化处理
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    switch (state) {
+      case AppLifecycleState.resumed:
+        print('🎯 App resumed - checking audio detection state');
+        // 应用恢复时检查音频检测状态
+        _restoreAudioDetectionIfNeeded();
+        break;
+      case AppLifecycleState.paused:
+        print('🎯 App paused - audio detection may be affected');
+        // 应用暂停时，音频检测可能会受到影响
+        break;
+      case AppLifecycleState.inactive:
+        print('🎯 App inactive - audio detection may be interrupted');
+        break;
+      case AppLifecycleState.detached:
+        print('🎯 App detached - cleaning up audio detection');
+        break;
+      default:
+        break;
+    }
+  }
+
+  /// 🎯 新增：音频路由检测
+  Future<void> _checkAudioRouting() async {
+    try {
+      final now = DateTime.now();
+      
+      // 限制检查频率，避免过于频繁
+      if (_lastAudioRouteCheck != null && 
+          now.difference(_lastAudioRouteCheck!) < _audioRouteCheckInterval) {
+        return;
+      }
+      
+      _lastAudioRouteCheck = now;
+      
+      // 检查麦克风权限状态
+      final micStatus = await Permission.microphone.status;
+      
+      // 检查音频检测器状态
+      bool audioDetectorHealthy = _audioDetector != null && 
+                                 _audioDetectionEnabled && 
+                                 _isAudioDetectionActive;
+      
+      print('🎯 Audio routing check - Mic status: $micStatus, Detector healthy: $audioDetectorHealthy');
+      
+      // 如果检测到音频路由不稳定，尝试恢复
+      if (!_isAudioRoutingStable || !audioDetectorHealthy) {
+        print('⚠️ Audio routing unstable, attempting to restore...');
+        await _restoreAudioDetectionIfNeeded();
+      }
+      
+      _isAudioRoutingStable = audioDetectorHealthy;
+      
+    } catch (e) {
+      print('❌ Error checking audio routing: $e');
+      _isAudioRoutingStable = false;
+    }
+  }
+
+  /// 🎯 新增：音频检测状态恢复机制
+  Future<void> _restoreAudioDetectionIfNeeded() async {
+    if (!mounted) return;
+    
+    try {
+      // 只有在训练进行中且音频检测被启用时才恢复
+      if (_audioDetectionEnabled && isCounting && !_isAudioDetectionActive) {
+        print('🎯 Restoring audio detection after system change');
+        
+        // 检查麦克风权限
+        final micStatus = await Permission.microphone.status;
+        if (!micStatus.isGranted) {
+          print('❌ Microphone permission not granted, cannot restore audio detection');
+          return;
+        }
+        
+        // 重新初始化音频检测器（如果需要）
+        if (_audioDetector == null) {
+          await _initializeAudioDetection();
+        }
+        
+        // 启动音频检测
+        await _startAudioDetectionForRound();
+        
+        print('✅ Audio detection restored successfully');
+      }
+    } catch (e) {
+      print('❌ Error restoring audio detection: $e');
+      _audioDetectionFailures++;
+      
+      // 如果失败次数过多，禁用音频检测
+      if (_audioDetectionFailures >= _maxAudioFailures) {
+        print('⚠️ Too many audio detection failures, disabling audio detection');
+        setState(() {
+          _audioDetectionEnabled = false;
+        });
+      }
+    }
+  }
+
+  /// 🎯 新增：音频检测质量监控
+  void _startAudioQualityMonitoring() {
+    // 停止现有的监控定时器
+    _audioQualityMonitorTimer?.cancel();
+    
+    // 启动新的监控定时器
+    _audioQualityMonitorTimer = Timer.periodic(Duration(seconds: 10), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        _audioQualityMonitorTimer = null;
+        return;
+      }
+      
+      try {
+        // 检查音频路由
+        await _checkAudioRouting();
+        
+        // 监控音频检测质量
+        _monitorAudioDetectionQuality();
+        
+      } catch (e) {
+        print('❌ Error in audio quality monitoring: $e');
+      }
+    });
+  }
+
+  /// 🎯 新增：监控音频检测质量
+  void _monitorAudioDetectionQuality() {
+    if (_audioDetector == null || !_isAudioDetectionActive) {
+      return;
+    }
+    
+    try {
+      // 这里可以添加音频质量检测逻辑
+      // 例如：检查音频输入级别、检测异常等
+      
+      // 简单的健康检查
+      bool isHealthy = _audioDetector!.isListening;
+      
+      if (!isHealthy && _isAudioDetectionActive) {
+        print('⚠️ Audio detection quality issue detected, attempting recovery...');
+        _audioDetectionFailures++;
+        
+        // 尝试重新启动音频检测
+        if (_audioDetectionFailures < _maxAudioFailures) {
+          _restoreAudioDetectionIfNeeded();
+        }
+      } else if (isHealthy) {
+        // 重置失败计数
+        _audioDetectionFailures = 0;
+      }
+      
+    } catch (e) {
+      print('❌ Error monitoring audio detection quality: $e');
+    }
+  }
+
+  /// 🎯 新增：增强的权限状态监听
+  void _startEnhancedPermissionListener() {
+    // 防止重复启动监听器
+    if (_permissionCheckTimer != null) {
+      print('⚠️ Permission listener already active, skipping start');
+      return;
+    }
+    
+    // 每3秒检查一次权限状态，减少频率
+    _permissionCheckTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        _permissionCheckTimer = null;
+        return;
+      }
+      
+      try {
+        final micStatus = await Permission.microphone.status;
+        print('🎯 Enhanced permission listener check: $micStatus');
+        
+        // 检查音频路由
+        await _checkAudioRouting();
+        
+        if (micStatus.isGranted && _audioDetector == null) {
+          // 麦克风权限授予，初始化音频检测并显示设置对话框
+          print('✅ Microphone permission granted via listener, initializing audio detection');
+          await _initializeAudioDetection();
+          if (mounted) {
+            _showSetupDialog();
+          }
+          // 停止监听
+          timer.cancel();
+          _permissionCheckTimer = null;
+        } else if (micStatus.isPermanentlyDenied) {
+          // 权限被永久拒绝，显示设置指导（不显示设置对话框）
+          print('❌ Microphone permission permanently denied via listener');
+          if (mounted) {
+            _showMicrophonePermissionRequiredDialog();
+          }
+          // 停止监听
+          timer.cancel();
+          _permissionCheckTimer = null;
+        } else if (micStatus.isDenied) {
+          // 权限被拒绝，显示设置指导（不显示设置对话框）
+          print('❌ Microphone permission denied via listener');
+          if (mounted) {
+            _showMicrophonePermissionRequiredDialog();
+          }
+          // 停止监听
+          timer.cancel();
+          _permissionCheckTimer = null;
+        }
+        // 如果是其他状态（如 isRestricted），继续监听，不显示任何对话框
+      } catch (e) {
+        print('❌ Error in enhanced permission listener: $e');
+        // 出错时停止监听
+        timer.cancel();
+        _permissionCheckTimer = null;
+      }
+    });
+  }
+
   /// 停止所有动画和定时器，释放内存
   void _stopAllAnimationsAndTimers() {
     // 取消所有定时器
@@ -255,6 +497,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     
     _animationDebounceTimer?.cancel();
     _animationDebounceTimer = null;
+    
+    // 🎯 停止权限监听器
+    _permissionCheckTimer?.cancel();
+    _permissionCheckTimer = null;
+    
+    // 🎯 停止音频质量监控
+    _audioQualityMonitorTimer?.cancel();
+    _audioQualityMonitorTimer = null;
     
     // 立即停止动画控制器
     if (bounceController.isAnimating) {
@@ -276,58 +526,18 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 忽略相机停止错误
     }
     
+    // 停止音频检测（如果正在运行）
+    if (_isAudioDetectionActive && _audioDetector != null) {
+      _audioDetector!.stopListening().catchError((e) {
+        print('🎯 Audio detection stop error during cleanup: $e');
+      });
+      _isAudioDetectionActive = false;
+    }
+    
     print('All animations and timers stopped, memory cleaned up');
   }
 
-  /// 🎯 权限状态监听
-  Timer? _permissionCheckTimer;
-  
-  void _startPermissionListener() {
-    // 每3秒检查一次权限状态，减少频率
-    _permissionCheckTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      
-      try {
-        final micStatus = await Permission.microphone.status;
-        print('🎯 Permission listener check: $micStatus');
-        
-        if (micStatus.isGranted && _audioDetector == null) {
-          // 麦克风权限授予，初始化音频检测并显示设置对话框
-          print('✅ Microphone permission granted via listener, initializing audio detection');
-          await _initializeAudioDetection();
-          if (mounted) {
-            _showSetupDialog();
-          }
-          // 停止监听
-          timer.cancel();
-        } else if (micStatus.isPermanentlyDenied) {
-          // 权限被永久拒绝，显示设置指导（不显示设置对话框）
-          print('❌ Microphone permission permanently denied via listener');
-          if (mounted) {
-            _showMicrophonePermissionRequiredDialog();
-          }
-          // 停止监听
-          timer.cancel();
-        } else if (micStatus.isDenied) {
-          // 权限被拒绝，显示设置指导（不显示设置对话框）
-          print('❌ Microphone permission denied via listener');
-          if (mounted) {
-            _showMicrophonePermissionRequiredDialog();
-          }
-          // 停止监听
-          timer.cancel();
-        }
-        // 如果是其他状态（如 isRestricted），继续监听，不显示任何对话框
-      } catch (e) {
-        print('❌ Error in permission listener: $e');
-        // 出错时停止监听
-        timer.cancel();
-      }
-    });
-  }
+
 
   /// 🍎 Apple-level Direct Microphone Permission Request
   Future<bool> _requestMicrophonePermissionDirectly() async {
@@ -539,6 +749,8 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 3. 设置错误回调
       _audioDetector!.onError = (error) {
         print('Stream audio detection error: $error');
+        // 记录失败次数
+        _audioDetectionFailures++;
         // 不在这里显示错误对话框，让用户有机会尝试
       };
 
@@ -551,20 +763,30 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       final initSuccess = await _audioDetector!.initialize();
       if (!initSuccess) {
         print('⚠️ Stream audio detector initialization failed, but continuing...');
+        _audioDetectionFailures++;
         // 不抛出异常，让用户有机会尝试
       }
 
       setState(() {
         _audioDetectionEnabled = true; // 默认开启
         _isInitializingAudioDetection = false;
+        _isAudioDetectionActive = false; // 初始化时设置为非活动状态
       });
 
+      // 🎯 新增：启动音频质量监控
+      _startAudioQualityMonitoring();
+
       print('🎯 Stream audio detection initialization completed');
+      
+      // 🎯 新增：打印初始化后的状态
+      _printAudioDetectionStatus();
     } catch (e) {
       print('❌ Error during stream audio detection initialization: $e');
+      _audioDetectionFailures++;
       setState(() {
         _isInitializingAudioDetection = false;
         _audioDetectionEnabled = true; // 默认开启
+        _isAudioDetectionActive = false;
       });
       // 重新抛出异常让上层处理
       rethrow;
@@ -637,9 +859,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   /// 🎯 Apple-level Training Reset with Audio Detection Management
   void _resetTraining() async {
     // 🎯 Stop audio detection before reset
-    if (_audioDetectionEnabled) {
+    if (_audioDetectionEnabled && _isAudioDetectionActive) {
       await _stopAudioDetectionForRound();
     }
+    
+    // 🎯 新增：重置音频检测失败计数
+    _audioDetectionFailures = 0;
     
     setState(() {
       showResultOverlay = false;
@@ -650,7 +875,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       showPreCountdown = false;
     });
     
-          print('🎯 Training reset completed with stream audio detection cleanup');
+    print('🎯 Training reset completed with stream audio detection cleanup');
     _startPreCountdown();
   }
 
@@ -1423,6 +1648,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       tmpResult.clear();
     }
     
+    // 🎯 新增：在训练开始时检查音频路由
+    _checkAudioRouting();
+    
     // 🎯 Apple-level Audio Detection Integration
     // 如果用户启用了声音检测，在训练开始时自动启动
     print('🎯 Starting round $currentRound, audio detection enabled: $_audioDetectionEnabled');
@@ -1433,6 +1661,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       print('🎯 Audio detection is disabled, skipping...');
     }
     
+    // 🎯 新增：打印音频检测状态
+    _printAudioDetectionStatus();
+    
     _tick();
   }
 
@@ -1440,28 +1671,47 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   /// 为当前round启动声音检测
   Future<void> _startAudioDetectionForRound() async {
     try {
+      // 防止重复启动
+      if (_isAudioDetectionActive) {
+        print('⚠️ Audio detection already active, skipping start');
+        return;
+      }
+      
       if (_audioDetector == null) {
         print('⚠️ Audio detector not available, skipping audio detection');
+        return;
+      }
+      
+      // 🎯 新增：检查麦克风权限
+      final micStatus = await Permission.microphone.status;
+      if (!micStatus.isGranted) {
+        print('❌ Microphone permission not granted, cannot start audio detection');
         return;
       }
       
       final success = await _audioDetector!.startListening();
       if (success) {
         print('🎯 Stream audio detection started for round $currentRound');
+        _isAudioDetectionActive = true;
+        
+        // 🎯 新增：重置失败计数
+        _audioDetectionFailures = 0;
         
         // 提供用户反馈（可选）
         if (mounted) {
-          // 可以在这里添加轻微的视觉反馈，比如按钮闪烁
           setState(() {
             // 可以添加一个状态来显示音频检测已启动
           });
         }
+        
       } else {
         print('⚠️ Failed to start stream audio detection for round $currentRound, but continuing...');
+        _audioDetectionFailures++;
         // 不显示错误对话框，让训练继续进行
       }
     } catch (e) {
       print('⚠️ Error starting stream audio detection: $e, but continuing...');
+      _audioDetectionFailures++;
       // 不显示错误对话框，让训练继续进行
     }
   }
@@ -1470,6 +1720,12 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   /// 停止当前round的声音检测
   Future<void> _stopAudioDetectionForRound() async {
     try {
+      // 防止重复停止
+      if (!_isAudioDetectionActive) {
+        print('🎯 Audio detection already stopped for round $currentRound');
+        return;
+      }
+      
       // 添加状态检查，避免重复停止
       if (_audioDetector != null && _audioDetector!.isListening) {
         await _audioDetector!.stopListening();
@@ -1477,8 +1733,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       } else {
         print('🎯 Stream audio detection already stopped for round $currentRound');
       }
+      
+      _isAudioDetectionActive = false;
+      
+      // 🎯 新增：记录停止状态
+      print('🎯 Audio detection state: inactive');
+      
     } catch (e) {
       print('❌ Error stopping stream audio detection: $e');
+      // 即使出错也要重置状态
+      _isAudioDetectionActive = false;
     }
   }
 
@@ -1929,7 +2193,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       if (!mounted) return;
       
       // 🎯 Stop audio detection when round ends
-      if (_audioDetectionEnabled) {
+      if (_audioDetectionEnabled && _isAudioDetectionActive) {
         await _stopAudioDetectionForRound();
       }
       
@@ -1952,6 +2216,47 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
   void _onStartPressed() {
     _startPreCountdown();
+  }
+
+
+
+  /// 🎯 获取音频检测状态
+  bool get isAudioDetectionReady => _audioDetector != null && _audioDetectionEnabled;
+  
+  /// 🎯 获取音频检测是否正在运行
+  bool get isAudioDetectionRunning => _isAudioDetectionActive && _audioDetector != null;
+  
+  /// 🎯 新增：获取音频检测健康状态
+  bool get isAudioDetectionHealthy => _audioDetectionFailures < _maxAudioFailures;
+  
+  /// 🎯 新增：获取音频路由状态
+  bool get isAudioRoutingStable => _isAudioRoutingStable;
+
+  /// 🎯 新增：获取音频检测状态摘要
+  Map<String, dynamic> get audioDetectionStatus {
+    return {
+      'enabled': _audioDetectionEnabled,
+      'active': _isAudioDetectionActive,
+      'healthy': isAudioDetectionHealthy,
+      'routingStable': _isAudioRoutingStable,
+      'failures': _audioDetectionFailures,
+      'maxFailures': _maxAudioFailures,
+      'detectorAvailable': _audioDetector != null,
+      'isListening': _audioDetector?.isListening ?? false,
+    };
+  }
+
+  /// 🎯 新增：打印音频检测状态（用于调试）
+  void _printAudioDetectionStatus() {
+    final status = audioDetectionStatus;
+    print('🎯 Audio Detection Status:');
+    print('  - Enabled: ${status['enabled']}');
+    print('  - Active: ${status['active']}');
+    print('  - Healthy: ${status['healthy']}');
+    print('  - Routing Stable: ${status['routingStable']}');
+    print('  - Failures: ${status['failures']}/${status['maxFailures']}');
+    print('  - Detector Available: ${status['detectorAvailable']}');
+    print('  - Is Listening: ${status['isListening']}');
   }
 
   // 新增：动画状态管理
