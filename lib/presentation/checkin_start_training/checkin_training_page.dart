@@ -10,6 +10,7 @@ import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
 import '../../widgets/microphone_permission_manager.dart';
+import '../../widgets/background_switcher.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
@@ -2162,130 +2163,28 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   void _onBgSwitchPressed() {
-    showModalBottomSheet(
+    BackgroundSwitcher.show(
       context: context,
-      backgroundColor: Colors.white.withOpacity(0.95),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
-            child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-                Container(
-                  width: 40, height: 4,
-                  margin: EdgeInsets.only(bottom: 18),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Text('Background', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                SizedBox(height: 16),
-                // 背景选择
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildBgTypeOption(
-                      icon: Icons.format_paint_rounded,
-                      label: 'Color',
-                      type: LayoutBgType.color,
-                    ),
-                    _buildBgTypeOption(
-                      icon: Icons.videocam_rounded,
-                      label: 'Video',
-                      type: LayoutBgType.video,
-                    ),
-                    _buildBgTypeOption(
-                      icon: Icons.camera_front_rounded,
-                      label: 'Selfie',
-                      type: LayoutBgType.selfie,
-                    ),
-                    _buildBgTypeOption(
-                      icon: Icons.dark_mode_rounded,
-                      label: 'Black',
-                      type: LayoutBgType.black,
-                    ),
-                  ],
-                ),
-                SizedBox(height: 12),
-          ],
-        ),
-      ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBgTypeOption({
-    required IconData icon,
-    required String label,
-    required LayoutBgType type,
-  }) {
-    final bool selected = bgType == type;
-    final bool isSelfieType = type == LayoutBgType.selfie;
-    final bool isLoading = isSelfieType && _isInitializingCamera;
-    
-    return GestureDetector(
-      onTap: () async {
-        if (isSelfieType) {
-          // 对于自拍模式，先请求相机权限
-          final success = await _requestCameraPermissionAndInitialize();
-          if (!success) {
-            return; // 权限被拒绝或初始化失败，不切换模式
-          }
-        }
-        
-        Navigator.of(context).pop();
+      currentBgType: bgType,
+      isInitializingCamera: _isInitializingCamera,
+      onBgTypeChanged: (LayoutBgType newType) {
         setState(() {
-          bgType = type;
+          bgType = newType;
         });
+      },
+      onSelfiePermissionRequest: () async {
+        return await _requestCameraPermissionAndInitialize();
+      },
+      onVideoPlay: (LayoutBgType type) {
         if (type == LayoutBgType.video && _videoReady) {
           _videoController.play();
           _videoFadeController.forward();
         }
       },
-      child: Column(
-        children: [
-          AnimatedContainer(
-            duration: Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            padding: EdgeInsets.all(selected ? 10 : 8),
-            decoration: BoxDecoration(
-              color: selected ? Colors.black : Colors.grey[200],
-              shape: BoxShape.circle,
-              boxShadow: selected
-                  ? [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))]
-                  : [],
-            ),
-            child: isLoading
-                ? SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        selected ? Colors.white : Colors.black54,
-                      ),
-                    ),
-                  )
-                : Icon(icon, size: 32, color: selected ? Colors.white : Colors.black54),
-          ),
-          SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              color: selected ? Colors.black : Colors.black54,
-            ),
-          ),
-        ],
-      ),
+      title: 'Background',
     );
   }
+
+
 }
 
