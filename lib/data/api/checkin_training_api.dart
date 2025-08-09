@@ -14,7 +14,7 @@ class CheckinTrainingApi {
   }) async {
     try {
       final response = await _dio.get(
-        '/api/training/data',
+        '/api/checkin/training/data',
         queryParameters: {
           'trainingId': trainingId,
           if (productId != null) 'productId': productId,
@@ -62,7 +62,7 @@ class CheckinTrainingApi {
   ) async {
     try {
       final response = await _dio.post(
-        '/api/training/submit',
+        '/api/checkin/training/submit',
         data: result.toJson(),
       );
 

@@ -62,7 +62,7 @@ Future<void> _loadTrainingDataAndVideoConfig() async {
 - 方向适配：自动根据屏幕方向切换视频
 
 **API需求：**
-- **接口**: `GET /api/training/data`
+- **接口**: `GET /api/checkin/training/data`
 - **参数**: 
   - `trainingId` (训练ID)
   - `productId` (产品ID，可选)
@@ -167,7 +167,7 @@ void _clearTmpResult() {
 - **权限管理**: 所有训练页面都已实现Apple级别的权限管理和声音检测功能
 
 **API需求：**
-- **接口**: `POST /api/training/submit`
+- **接口**: `POST /api/checkin/training/submit`
 - **请求数据**:
   ```json
   {
