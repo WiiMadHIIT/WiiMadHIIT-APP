@@ -7,7 +7,7 @@ class CheckinTrainingApi {
 
   /// 获取训练数据和视频配置
   /// 包含历史排名数据和视频配置信息
-  Future<Map<String, dynamic>> getTrainingDataAndVideoConfig(
+  Future<Map<String, dynamic>> getTrainingDataAndVideoConfig_REAL(
     String trainingId, {
     String? productId,
     int? limit,
@@ -90,5 +90,89 @@ class CheckinTrainingApi {
     } catch (e) {
       throw Exception('Failed to get video config: $e');
     }
+  }
+
+  /// 创建伪数据用于测试 - 对应后端 createMockTrainingData 方法
+  /// 模拟后端 CheckinServiceImpl.createMockTrainingData 的数据结构
+  Future<Map<String, dynamic>> getTrainingDataAndVideoConfig(
+    String trainingId, {
+    String? productId,
+    int? limit,
+  }) async {
+    // 模拟网络延迟
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // 创建历史训练记录 - 对应后端 createMockTrainingHistory
+    final history = _createMockTrainingHistory(trainingId, productId, limit);
+    
+    // 创建视频配置 - 对应后端 createMockVideoConfig
+    final videoConfig = _createMockVideoConfig(trainingId, productId);
+    
+    return {
+      'history': history.map((item) => CheckinTrainingHistoryApiModel.fromJson(item.toJson())).toList(),
+      'videoConfig': videoConfig,
+    };
+  }
+
+  /// 创建模拟训练历史记录 - 对应后端方法
+  List<Map<String, dynamic>> _createMockTrainingHistory(String trainingId, String? productId, int? limit) {
+    final history = <Map<String, dynamic>>[];
+    
+    // 设置默认限制 - 对应后端逻辑
+    final maxLimit = (limit != null) ? (limit < 10 ? limit : 10) : 10;
+    
+    // 根据产品ID生成不同的历史数据 - 对应后端逻辑
+    int baseCounts = 15;
+    if (productId == "hiit_pro_001") {
+      baseCounts = 25; // HIIT训练通常有更高的次数
+    } else if (productId == "yoga_flex_002") {
+      baseCounts = 10; // 瑜伽训练次数相对较少
+    }
+    
+    // 生成历史记录 - 对应后端逻辑
+    for (int i = 0; i < maxLimit; i++) {
+      final timestamp = DateTime.now().millisecondsSinceEpoch - (i * 24 * 60 * 60 * 1000); // 每天一条记录
+      final counts = baseCounts + (DateTime.now().millisecondsSinceEpoch % 10).toInt(); // 随机变化
+      final rank = i + 1;
+      
+      final note = (i == 0) ? "current" : null; // 第一条记录标记为当前
+      
+      history.add({
+        "id": "history_${trainingId}_$i",
+        "rank": rank,
+        "counts": counts,
+        "timestamp": timestamp,
+        "note": note,
+      });
+    }
+    
+    return history;
+  }
+
+  /// 创建模拟视频配置 - 对应后端方法
+  Map<String, dynamic> _createMockVideoConfig(String trainingId, String? productId) {
+    String portraitUrl;
+    String landscapeUrl;
+    
+    // 根据产品ID设置不同的视频URL - 对应后端逻辑
+    switch (productId) {
+      case "hiit_pro_001":
+        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/hiit_portrait.mp4";
+        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/hiit_landscape.mp4";
+        break;
+      case "yoga_flex_002":
+        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/yoga_portrait.mp4";
+        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/yoga_landscape.mp4";
+        break;
+      default:
+        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/default_portrait.mp4";
+        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/default_landscape.mp4";
+        break;
+    }
+    
+    return {
+      "portraitUrl": portraitUrl,
+      "landscapeUrl": landscapeUrl,
+    };
   }
 } 
