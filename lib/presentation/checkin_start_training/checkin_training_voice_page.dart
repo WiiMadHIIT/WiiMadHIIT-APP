@@ -11,6 +11,7 @@ import '../../widgets/layout_bg_type.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
 import '../../widgets/history_ranking_widget.dart';
 import '../../widgets/microphone_permission_manager.dart';
+import '../../widgets/training_setup_dialog.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
