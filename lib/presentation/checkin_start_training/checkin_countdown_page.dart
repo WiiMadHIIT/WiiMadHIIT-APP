@@ -9,6 +9,7 @@ import '../../widgets/layout_bg_type.dart';
 import '../../widgets/countdown_portrait_layout.dart';
 import '../../widgets/countdown_landscape_layout.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
+import '../../widgets/training_history_ranking_widget.dart';
 import 'package:camera/camera.dart';
 
 class CheckinCountdownPage extends StatefulWidget {
@@ -1077,7 +1078,7 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
     countdown = roundDuration;
     setState(() {
       showPreCountdown = true;
-      preCountdown = 10;
+      preCountdown = 3;
     });
     _preCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (preCountdown > 1) {
@@ -1663,254 +1664,16 @@ class _CheckinCountdownPageState extends State<CheckinCountdownPage> with Ticker
   }
 
   Widget _buildHistoryRanking(ScrollController scrollController) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 24,
-            offset: const Offset(0, -6),
-          ),
-        ],
-      ),
-      child: CustomScrollView(
-        controller: scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                // 顶部大面积可拖动区域
-                Container(
-                  height: 32,
-                  alignment: Alignment.topCenter,
-                  child: Container(
-                    width: 32,
-                    height: 3,
-                    margin: const EdgeInsets.only(top: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(1.5),
-                    ),
-                  ),
-                ),
-                // 标题区域
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 3,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(1.5),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'TOP SCORES',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          letterSpacing: 1.0,
-                          shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.10),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
-                        ),
-                        child: Text(
-                          '${history.length}',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // 榜单表头
-                Padding(
-                  padding: const EdgeInsets.only(left: 24, right: 24, top: 0, bottom: 2),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 44,
-                        child: Text('RANK', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                      ),
-                      Expanded(
-                        child: Text('DATE', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                      ),
-                      SizedBox(
-                        width: 60,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Text('TIME', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final e = history[index];
-                final isCurrent = e["note"] == "current";
-                final isTopThree = e["rank"] != null && e["rank"] <= 3;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isCurrent 
-                        ? Colors.white.withOpacity(0.10)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    border: isCurrent
-                        ? Border.all(color: Colors.redAccent, width: 2)
-                        : null,
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      child: Row(
-                        children: [
-                          // 排名徽章
-                          Container(
-                            width: 28,
-                            height: 28,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              gradient: isTopThree && !isCurrent && e["rank"] != null
-                                  ? LinearGradient(
-                                     colors: e["rank"] == 1
-                                         ? [Color(0xFFFFF176), Color(0xFFFFA500)]
-                                         : e["rank"] == 2
-                                             ? [Color(0xFFB0BEC5), Color(0xFF90A4AE)]
-                                             : [Color(0xFFBCAAA4), Color(0xFF8D6E63)],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    )
-                                  : null,
-                              color: isCurrent
-                                  ? Colors.redAccent
-                                  : (isTopThree ? null : Colors.white.withOpacity(0.10)),
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: isTopThree
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.18),
-                                        blurRadius: 3,
-                                        offset: const Offset(0, 1),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Text(
-                              e["rank"] != null ? '${e["rank"]}' : '...',
-                              style: TextStyle(
-                                color: isCurrent ? Colors.white : (isTopThree ? Colors.black : Colors.white),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // 日期和当前标识
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    e["date"],
-                                    style: TextStyle(
-                                      color: isCurrent ? Colors.white : Colors.white70,
-                                      fontSize: 14,
-                                      fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w500,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (isCurrent) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [Colors.redAccent, Colors.red],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.redAccent.withOpacity(0.18),
-                                          blurRadius: 3,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ],
-                                    ),
-                                    child: const Text(
-                                      'CURRENT',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 9,
-                                        letterSpacing: 0.6,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          // seconds展示 - 转换为MM:SS格式
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _formatTime(e["seconds"]),
-                                style: TextStyle(
-                                  color: isCurrent ? Colors.white : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.timer,
-                                color: isCurrent ? Colors.white : Colors.white54,
-                                size: 16,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-              childCount: history.length,
-            ),
-          ),
-          // 底部补空白
-          SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
-      ),
+    return TrainingHistoryRankingWidget(
+      history: history,
+      scrollController: scrollController,
+      title: 'TOP SCORES',
+      showCount: true,
+      currentNote: 'current',
+      rankField: 'rank',
+      dateField: 'date',
+      secondsField: 'seconds',
+      noteField: 'note',
     );
   }
 

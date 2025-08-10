@@ -9,8 +9,9 @@ import '../../widgets/layout_bg_type.dart';
 import '../../widgets/training_portrait_layout.dart';
 import '../../widgets/training_landscape_layout.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
+import '../../widgets/history_ranking_widget.dart';
 import '../../widgets/microphone_permission_manager.dart';
-import '../../widgets/background_switcher.dart';
+import '../../widgets/training_setup_dialog.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
@@ -279,8 +280,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     _permissionManager?.handleAppLifecycleStateChange(state);
   }
 
-
-
   /// 停止所有动画和定时器，释放内存
   void _stopAllAnimationsAndTimers() {
     // 取消所有定时器
@@ -310,26 +309,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 忽略相机停止错误
     }
     
-    // 停止音频检测（如果正在运行）
-    if (_permissionManager?.isAudioDetectionRunning == true) {
-      _permissionManager!.stopAudioDetectionForRound();
-    }
+    // 停止音频检测
+    _permissionManager?.stopAudioDetectionForRound();
     
     print('All animations and timers stopped, memory cleaned up');
   }
 
-
-
-
-
-
-
   /// 🎯 Apple-level Training Reset with Audio Detection Management
   void _resetTraining() async {
-    // 🎯 Stop audio detection before reset
-    if (_permissionManager?.isAudioDetectionRunning == true) {
-      await _permissionManager!.stopAudioDetectionForRound();
-    }
+    // 🎯 Stop audio detection before reset 
+    await _permissionManager?.stopAudioDetectionForRound();
     
     setState(() {
       showResultOverlay = false;
@@ -534,262 +523,40 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       _isSetupDialogOpen = true;
     });
     
-    int tempRounds = totalRounds;
-    int tempMinutes = roundDuration ~/ 60; // 从秒转换为分钟
-    int tempSeconds = roundDuration % 60; // 从秒转换为秒数
+    final config = TrainingSetupConfig(
+      initialRounds: totalRounds,
+      initialRoundDuration: roundDuration,
+      maxRounds: 10,
+      maxMinutes: 60,
+      maxSeconds: 59,
+      title: 'Set Rounds & Time',
+      roundsColor: Colors.orange,
+      timeColor: Colors.deepPurple,
+    );
     
-    final result = await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      isDismissible: true,
-      builder: (context) {
-        return OrientationBuilder(
-          builder: (context, orientation) {
-            // 如果方向改变为横屏，关闭当前对话框并打开横屏对话框
-            if (orientation == Orientation.landscape) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
+    final result = await TrainingSetupDialog.showPortrait(
+      context,
+      config: config,
+      onClose: () {
                 setState(() {
                   _isSetupDialogOpen = false;
                 });
-                Navigator.of(context).pop();
-                _showSetupDialogLandscape();
-              });
-            }
-            
-            return StatefulBuilder(
-              builder: (context, setStateModal) {
-                final totalSeconds = tempRounds * (tempMinutes * 60 + tempSeconds);
-                final totalMinutes = totalSeconds ~/ 60;
-                final remainingSeconds = totalSeconds % 60;
-                
-                return Container(
-                  padding: EdgeInsets.only(
-                    left: 24, right: 24,
-                    top: 16,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.10),
-                        blurRadius: 32,
-                        offset: Offset(0, -8),
-                      ),
-                    ],
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 40, height: 4,
-                          margin: EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[300],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        Text(
-                          'Set Rounds & Time',
-                          style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1,
-                          ),
-                                                ),
-                        SizedBox(height: 16),
-                        
-                        // 设置区域 - 轮次和时间并排
-                      Row(
-                        children: [
-                          // 轮次设置
-                          Expanded(
-                            child: Container(
-                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.orange.withOpacity(0.1), width: 1),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    'Rounds',
-                                    style: TextStyle(
-                                      fontSize: 15, 
-                                      fontWeight: FontWeight.w600, 
-                                      color: Colors.orange.shade700,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  TikTokWheelPicker(
-                                    label: '',
-                                    value: tempRounds,
-                                    min: 1,
-                                    max: 10,
-                                    onChanged: (v) => setStateModal(() => tempRounds = v),
-                                    color: Colors.orange,
-                                    compact: true,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          
-                          SizedBox(width: 16),
-                          
-                          // 时间设置
-                          Expanded(
-                            child: Container(
-                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.deepPurple.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.deepPurple.withOpacity(0.1), width: 1),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    'Duration',
-                                    style: TextStyle(
-                                      fontSize: 15, 
-                                      fontWeight: FontWeight.w600, 
-                                      color: Colors.deepPurple.shade700,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      // 分钟选择器
-                                      Expanded(
-                                        child: TikTokWheelPicker(
-                                          label: 'Min',
-                                          value: tempMinutes,
-                                          min: 0,
-                                          max: 60,
-                                          onChanged: (v) => setStateModal(() => tempMinutes = v),
-                                          color: Colors.deepPurple,
-                                          compact: true,
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: EdgeInsets.symmetric(horizontal: 6),
-                                        child: Text(
-                                          ':',
-                                          style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.deepPurple.shade400,
-                                          ),
-                                        ),
-                                      ),
-                                      // 秒选择器
-                                      Expanded(
-                                        child: TikTokWheelPicker(
-                                          label: 'Sec',
-                                          value: tempSeconds,
-                                          min: 0,
-                                          max: 59,
-                                          onChanged: (v) => setStateModal(() => tempSeconds = v),
-                                          color: Colors.deepPurple,
-                                          compact: true,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      SizedBox(height: 16),
-                      
-                      // 总时间显示
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black.withOpacity(0.1), width: 1),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.timer_outlined,
-                              size: 20,
-                              color: Colors.black54,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              '${tempRounds} Rounds × ${tempMinutes.toString().padLeft(2, '0')}:${tempSeconds.toString().padLeft(2, '0')} = ${totalMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}',
-                              style: TextStyle(
-                                color: Colors.black87, 
-                                fontWeight: FontWeight.w600, 
-                                fontSize: 16,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      SizedBox(height: 20),
-                      
-                      // 确认按钮
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              totalRounds = tempRounds;
-                              roundDuration = tempMinutes * 60 + tempSeconds; // 转换为秒
-                              currentRound = 1;
-                              countdown = roundDuration; // 直接使用roundDuration（已经是秒）
-                              _isSetupDialogOpen = false;
-                            });
-                            Navigator.of(context).pop();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 8,
-                          ),
-                          child: Text(
-                            'OK', 
-                            style: TextStyle(
-                              fontSize: 18, 
-                              fontWeight: FontWeight.bold, 
-                              letterSpacing: 1.2
-                            )
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                    ),
-                );
-              },
-            );
-          },
-        );
       },
     );
     
-    // 对话框关闭后重置状态
+    if (result != null) {
+                            setState(() {
+        totalRounds = result.rounds;
+        roundDuration = result.roundDuration;
+                              currentRound = 1;
+        countdown = roundDuration;
+                              _isSetupDialogOpen = false;
+                            });
+    } else {
     setState(() {
       _isSetupDialogOpen = false;
     });
+    }
   }
 
   void _showSetupDialogLandscape() async {
@@ -797,282 +564,41 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       _isSetupDialogOpen = true;
     });
     
-    int tempRounds = totalRounds;
-    int tempMinutes = roundDuration ~/ 60; // 从秒转换为分钟
-    int tempSeconds = roundDuration % 60; // 从秒转换为秒数
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double dialogWidth = screenWidth > 468 ? 420 : screenWidth - 48;
-    final bool isFinalResult = showResultOverlay;
+    final config = TrainingSetupConfig(
+      initialRounds: totalRounds,
+      initialRoundDuration: roundDuration,
+      maxRounds: 10,
+      maxMinutes: 60,
+      maxSeconds: 59,
+      title: 'Set Rounds & Time',
+      roundsColor: Colors.orange,
+      timeColor: Colors.deepPurple,
+    );
     
-    final result = await showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return OrientationBuilder(
-          builder: (context, orientation) {
-            // 如果方向改变为竖屏，关闭当前对话框并打开竖屏对话框
-            if (orientation == Orientation.portrait) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
+    final result = await TrainingSetupDialog.showLandscape(
+      context,
+      config: config,
+      onClose: () {
                 setState(() {
                   _isSetupDialogOpen = false;
                 });
-                Navigator.of(context).pop();
-                _showSetupDialog();
-              });
-            }
-            
-            return Center(
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  width: dialogWidth,
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.10),
-                        blurRadius: 28,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: StatefulBuilder(
-                    builder: (context, setStateModal) {
-                      final totalSeconds = tempRounds * (tempMinutes * 60 + tempSeconds);
-                      final totalMinutes = totalSeconds ~/ 60;
-                      final remainingSeconds = totalSeconds % 60;
-                      
-                      return ConstrainedBox(
-                        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
-                        child: Stack(
-                          children: [
-                            // 右上角关闭按钮
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: IconButton(
-                                icon: Icon(Icons.close_rounded, color: Colors.black54),
-                                onPressed: () {
-                                  setState(() {
-                                    _isSetupDialogOpen = false;
-                                  });
-                                  Navigator.of(context).pop();
-                                  if (isFinalResult) {
-                                    Navigator.of(context).maybePop();
-                                  }
-                                },
-                              ),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SizedBox(height: 2),
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Text(
-                                    'Set Rounds & Time',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1),
-                                  ),
-                                ),
-                                
-                                // 设置区域 - 轮次和时间并排
-                                Row(
-                                  children: [
-                                    // 轮次设置
-                                    Expanded(
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.withOpacity(0.05),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.orange.withOpacity(0.1), width: 1),
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Text(
-                                              'Rounds',
-                                              style: TextStyle(
-                                                fontSize: 13, 
-                                                fontWeight: FontWeight.w600, 
-                                                color: Colors.orange.shade700,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            TikTokWheelPicker(
-                                              label: '',
-                                              value: tempRounds,
-                                              min: 1,
-                                              max: 10,
-                                              onChanged: (v) => setStateModal(() => tempRounds = v),
-                                              color: Colors.orange,
-                                              compact: true,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    
-                                    SizedBox(width: 12),
-                                    
-                                    // 时间设置
-                                    Expanded(
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.deepPurple.withOpacity(0.05),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.deepPurple.withOpacity(0.1), width: 1),
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Text(
-                                              'Duration',
-                                              style: TextStyle(
-                                                fontSize: 13, 
-                                                fontWeight: FontWeight.w600, 
-                                                color: Colors.deepPurple.shade700,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                // 分钟选择器
-                                                Expanded(
-                                                  child: TikTokWheelPicker(
-                                                    label: 'Min',
-                                                    value: tempMinutes,
-                                                    min: 0,
-                                                    max: 60,
-                                                    onChanged: (v) => setStateModal(() => tempMinutes = v),
-                                                    color: Colors.deepPurple,
-                                                    compact: true,
-                                                  ),
-                                                ),
-                                                Container(
-                                                  padding: EdgeInsets.symmetric(horizontal: 4),
-                                                  child: Text(
-                                                    ':',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.deepPurple.shade400,
-                                                    ),
-                                                  ),
-                                                ),
-                                                // 秒选择器
-                                                Expanded(
-                                                  child: TikTokWheelPicker(
-                                                    label: 'Sec',
-                                                    value: tempSeconds,
-                                                    min: 0,
-                                                    max: 59,
-                                                    onChanged: (v) => setStateModal(() => tempSeconds = v),
-                                                    color: Colors.deepPurple,
-                                                    compact: true,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                
-                                SizedBox(height: 8),
-                                
-                                // 总时间显示
-                                Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.black.withOpacity(0.1), width: 1),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.timer_outlined,
-                                        size: 16,
-                                        color: Colors.black54,
-                                      ),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        '${tempRounds} × ${tempMinutes.toString().padLeft(2, '0')}:${tempSeconds.toString().padLeft(2, '0')} = ${totalMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}',
-                                        style: TextStyle(
-                                          color: Colors.black87, 
-                                          fontWeight: FontWeight.w600, 
-                                          fontSize: 13,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                SizedBox(height: 12),
-                                
-                                // 确认按钮
-                                SizedBox(
-                                  width: 120,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        totalRounds = tempRounds;
-                                        roundDuration = tempMinutes * 60 + tempSeconds; // 转换为秒
-                                        currentRound = 1;
-                                        countdown = roundDuration; // 直接使用roundDuration（已经是秒）
-                                        _isSetupDialogOpen = false;
-                                      });
-                                      Navigator.of(context).pop();
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.black,
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                      elevation: 8,
-                                    ),
-                                    child: Text(
-                                      'OK', 
-                                      style: TextStyle(
-                                        fontSize: 15, 
-                                        fontWeight: FontWeight.bold, 
-                                        letterSpacing: 1.1
-                                      )
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        );
       },
+      showResultOverlay: showResultOverlay,
     );
     
-    // 对话框关闭后重置状态
+    if (result != null) {
+                                      setState(() {
+        totalRounds = result.rounds;
+        roundDuration = result.roundDuration;
+                                        currentRound = 1;
+        countdown = roundDuration;
+                                        _isSetupDialogOpen = false;
+                                      });
+    } else {
     setState(() {
       _isSetupDialogOpen = false;
     });
+    }
   }
 
 
@@ -1084,7 +610,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     countdown = roundDuration;
     setState(() {
       showPreCountdown = true;
-      preCountdown = 10;
+      preCountdown = 3;
     });
     _preCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (preCountdown > 1) {
@@ -1114,22 +640,15 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     }
     
     // 🎯 Apple-level Audio Detection Integration
-    // 如果权限管理器可用且音频检测已准备就绪，在训练开始时自动启动
+    // 直接启动音频检测，内部已有状态检查
     print('🎯 Starting round $currentRound');
-    if (_permissionManager?.isAudioDetectionReady == true) {
-      print('🎯 Audio detection is ready, starting detection...');
-      _permissionManager!.startAudioDetectionForRound();
-    } else {
-      print('🎯 Audio detection not ready, skipping...');
-    }
+    _permissionManager?.startAudioDetectionForRound();
     
     // 🎯 新增：打印音频检测状态
     _permissionManager?.printAudioDetectionStatus();
     
     _tick();
   }
-
-
 
   // 立即显示训练结果（排名为null，等待API返回）
   Future<void> _showImmediateResult() async {
@@ -1578,9 +1097,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       if (!mounted) return;
       
       // 🎯 Stop audio detection when round ends
-      if (_permissionManager?.isAudioDetectionRunning == true) {
-        await _permissionManager!.stopAudioDetectionForRound();
-      }
+      await _permissionManager?.stopAudioDetectionForRound();
       
       // 当前round结束，记录结果到tmpResult
       _addRoundToTmpResult(counter);
@@ -1602,10 +1119,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   void _onStartPressed() {
     _startPreCountdown();
   }
-
-
-
-
 
   // 新增：动画状态管理
   bool _isAnimating = false;
@@ -1905,253 +1418,21 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   Widget _buildHistoryRanking(ScrollController scrollController) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 24,
-            offset: const Offset(0, -6),
-          ),
-        ],
-      ),
-      child: CustomScrollView(
-        controller: scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-      child: Column(
-        children: [
-                // 顶部大面积可拖动区域
-          Container(
-                  height: 32,
-                  alignment: Alignment.topCenter,
-                  child: Container(
-                    width: 32,
-                    height: 3,
-                    margin: const EdgeInsets.only(top: 8),
-            decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(1.5),
-                    ),
-                  ),
-                ),
-                // 标题区域
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 3,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(1.5),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-          const Text(
-            'TOP SCORES',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              letterSpacing: 1.0,
-              shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
-            ),
-          ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.10),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
-                        ),
-                        child: Text(
-                          '${history.length}',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-               // 榜单表头
-               Padding(
-                 padding: const EdgeInsets.only(left: 24, right: 24, top: 0, bottom: 2),
-                 child: Row(
-                   children: [
-                     SizedBox(
-                       width: 44,
-                       child: Text('RANK', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                     ),
-          Expanded(
-                       child: Text('DATE', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                     ),
-                     SizedBox(
-                       width: 60,
-                       child: Align(
-                         alignment: Alignment.centerRight,
-                         child: Text('COUNTS', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-                       ),
-                     ),
-                   ],
-                 ),
-               ),
-              ],
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final e = history[index];
-                final isCurrent = e["note"] == "current";
-                final isTopThree = e["rank"] != null && e["rank"] <= 3;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isCurrent 
-                        ? Colors.white.withOpacity(0.10)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    border: isCurrent
-                        ? Border.all(color: Colors.redAccent, width: 2)
-                        : null,
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Row(
-                    children: [
-                          // 排名徽章
-                      Container(
-                        width: 28,
-                        height: 28,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                              gradient: isTopThree && !isCurrent && e["rank"] != null
-                                  ? LinearGradient(
-                                     colors: e["rank"] == 1
-                                         ? [Color(0xFFFFF176), Color(0xFFFFA500)]
-                                         : e["rank"] == 2
-                                             ? [Color(0xFFB0BEC5), Color(0xFF90A4AE)]
-                                             : [Color(0xFFBCAAA4), Color(0xFF8D6E63)],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    )
-                                  : null,
-                              color: isCurrent
-                                  ? Colors.redAccent
-                                  : (isTopThree ? null : Colors.white.withOpacity(0.10)),
-                            borderRadius: BorderRadius.circular(8),
-                              boxShadow: isTopThree
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.18),
-                                        blurRadius: 3,
-                                        offset: const Offset(0, 1),
-                                      ),
-                                    ]
-                                  : null,
-                        ),
-                        child: Text(
-                          e["rank"] != null ? '${e["rank"]}' : '...',
-                              style: TextStyle(
-                                color: isCurrent ? Colors.white : (isTopThree ? Colors.black : Colors.white),
-                            fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                          ),
-                        ),
-                      ),
-                          const SizedBox(width: 12),
-                          // 日期和当前标识
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                        e["date"],
-                                    style: TextStyle(
-                                      color: isCurrent ? Colors.white : Colors.white70,
-                                      fontSize: 14,
-                                      fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w500,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (isCurrent) ...[
-                                  const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [Colors.redAccent, Colors.red],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                            borderRadius: BorderRadius.circular(6),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.redAccent.withOpacity(0.18),
-                                          blurRadius: 3,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ],
-                          ),
-                          child: const Text(
-                                      'CURRENT',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                                        fontSize: 9,
-                                        letterSpacing: 0.6,
-                            ),
-                          ),
-                        ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          // 计数和图标
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                      Text(
-                        '${e["counts"]}',
-                                style: TextStyle(
-                                  color: isCurrent ? Colors.white : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.fitness_center,
-                                color: isCurrent ? Colors.white : Colors.white54,
-                                size: 16,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-              childCount: history.length,
-            ),
-          ),
-          // 底部补空白
-          SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
+    // 将原始数据转换为通用组件的数据格式
+    final rankingItems = history.map((e) => HistoryRankingItem(
+      rank: e["rank"],
+      date: e["date"] ?? "",
+      counts: e["counts"] ?? 0,
+      note: e["note"],
+      additionalData: e,
+    )).toList();
+
+    return HistoryRankingWidget(
+      history: rankingItems,
+      scrollController: scrollController,
+      config: const HistoryRankingConfig(
+        title: 'TOP SCORES',
+        currentItemColor: Colors.redAccent,
       ),
     );
   }
@@ -2163,28 +1444,130 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   void _onBgSwitchPressed() {
-    BackgroundSwitcher.show(
+    showModalBottomSheet(
       context: context,
-      currentBgType: bgType,
-      isInitializingCamera: _isInitializingCamera,
-      onBgTypeChanged: (LayoutBgType newType) {
+      backgroundColor: Colors.white.withOpacity(0.95),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+            child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+                Container(
+                  width: 40, height: 4,
+                  margin: EdgeInsets.only(bottom: 18),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Text('Background', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                SizedBox(height: 16),
+                // 背景选择
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildBgTypeOption(
+                      icon: Icons.format_paint_rounded,
+                      label: 'Color',
+                      type: LayoutBgType.color,
+                    ),
+                    _buildBgTypeOption(
+                      icon: Icons.videocam_rounded,
+                      label: 'Video',
+                      type: LayoutBgType.video,
+                    ),
+                    _buildBgTypeOption(
+                      icon: Icons.camera_front_rounded,
+                      label: 'Selfie',
+                      type: LayoutBgType.selfie,
+                    ),
+                    _buildBgTypeOption(
+                      icon: Icons.dark_mode_rounded,
+                      label: 'Black',
+                      type: LayoutBgType.black,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+          ],
+        ),
+      ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBgTypeOption({
+    required IconData icon,
+    required String label,
+    required LayoutBgType type,
+  }) {
+    final bool selected = bgType == type;
+    final bool isSelfieType = type == LayoutBgType.selfie;
+    final bool isLoading = isSelfieType && _isInitializingCamera;
+    
+    return GestureDetector(
+      onTap: () async {
+        if (isSelfieType) {
+          // 对于自拍模式，先请求相机权限
+          final success = await _requestCameraPermissionAndInitialize();
+          if (!success) {
+            return; // 权限被拒绝或初始化失败，不切换模式
+          }
+        }
+        
+        Navigator.of(context).pop();
         setState(() {
-          bgType = newType;
+          bgType = type;
         });
-      },
-      onSelfiePermissionRequest: () async {
-        return await _requestCameraPermissionAndInitialize();
-      },
-      onVideoPlay: (LayoutBgType type) {
         if (type == LayoutBgType.video && _videoReady) {
           _videoController.play();
           _videoFadeController.forward();
         }
       },
-      title: 'Background',
+      child: Column(
+        children: [
+          AnimatedContainer(
+            duration: Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.all(selected ? 10 : 8),
+            decoration: BoxDecoration(
+              color: selected ? Colors.black : Colors.grey[200],
+              shape: BoxShape.circle,
+              boxShadow: selected
+                  ? [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))]
+                  : [],
+            ),
+            child: isLoading
+                ? SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        selected ? Colors.white : Colors.black54,
+                      ),
+                    ),
+                  )
+                : Icon(icon, size: 32, color: selected ? Colors.white : Colors.black54),
+          ),
+          SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              color: selected ? Colors.black : Colors.black54,
+            ),
+          ),
+        ],
+      ),
     );
   }
-
-
 }
 
