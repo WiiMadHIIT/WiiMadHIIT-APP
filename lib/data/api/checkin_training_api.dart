@@ -7,7 +7,7 @@ class CheckinTrainingApi {
 
   /// 获取训练数据和视频配置
   /// 包含历史排名数据和视频配置信息
-  Future<Map<String, dynamic>> getTrainingDataAndVideoConfig_REAL(
+  Future<Map<String, dynamic>> getTrainingDataAndVideoConfig(
     String trainingId, {
     String? productId,
     int? limit,
@@ -38,24 +38,6 @@ class CheckinTrainingApi {
     }
   }
 
-  /// 获取训练历史数据
-  Future<List<CheckinTrainingHistoryApiModel>> getTrainingHistory(
-    String trainingId, {
-    String? productId,
-    int? limit,
-  }) async {
-    try {
-      final result = await getTrainingDataAndVideoConfig(
-        trainingId,
-        productId: productId,
-        limit: limit,
-      );
-      return result['history'] as List<CheckinTrainingHistoryApiModel>;
-    } catch (e) {
-      throw Exception('Failed to get training history: $e');
-    }
-  }
-
   /// 提交训练结果
   Future<CheckinTrainingSubmitResponseApiModel> submitTrainingResult(
     CheckinTrainingResultApiModel result,
@@ -76,25 +58,9 @@ class CheckinTrainingApi {
     }
   }
 
-  /// 获取视频配置
-  Future<Map<String, dynamic>> getVideoConfig(
-    String trainingId, {
-    String? productId,
-  }) async {
-    try {
-      final result = await getTrainingDataAndVideoConfig(
-        trainingId,
-        productId: productId,
-      );
-      return result['videoConfig'] as Map<String, dynamic>;
-    } catch (e) {
-      throw Exception('Failed to get video config: $e');
-    }
-  }
-
   /// 创建伪数据用于测试 - 对应后端 createMockTrainingData 方法
   /// 模拟后端 CheckinServiceImpl.createMockTrainingData 的数据结构
-  Future<Map<String, dynamic>> getTrainingDataAndVideoConfig(
+  Future<Map<String, dynamic>> getTrainingDataAndVideoConfig_MOCK(
     String trainingId, {
     String? productId,
     int? limit,
@@ -109,7 +75,7 @@ class CheckinTrainingApi {
     final videoConfig = _createMockVideoConfig(trainingId, productId);
     
     return {
-      'history': history.map((item) => CheckinTrainingHistoryApiModel.fromJson(item.toJson())).toList(),
+      'history': history.map((item) => CheckinTrainingHistoryApiModel.fromJson(item)).toList(),
       'videoConfig': videoConfig,
     };
   }
@@ -135,14 +101,15 @@ class CheckinTrainingApi {
       final counts = baseCounts + (DateTime.now().millisecondsSinceEpoch % 10).toInt(); // 随机变化
       final rank = i + 1;
       
-      final note = (i == 0) ? "current" : null; // 第一条记录标记为当前
+      // 计算每分钟标准化计数：使用合理的默认训练时长30秒
+      final countsPerMin = double.parse(((counts * 60.0) / 30.0).toStringAsFixed(2));
       
       history.add({
         "id": "history_${trainingId}_$i",
         "rank": rank,
         "counts": counts,
+        "countsPerMin": countsPerMin,
         "timestamp": timestamp,
-        "note": note,
       });
     }
     
@@ -157,16 +124,16 @@ class CheckinTrainingApi {
     // 根据产品ID设置不同的视频URL - 对应后端逻辑
     switch (productId) {
       case "hiit_pro_001":
-        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/hiit_portrait.mp4";
-        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/hiit_landscape.mp4";
+        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video1.mp4";
+        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video1.mp4";
         break;
       case "yoga_flex_002":
-        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/yoga_portrait.mp4";
-        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/yoga_landscape.mp4";
+        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video1.mp4";
+        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video1.mp4";
         break;
       default:
-        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/default_portrait.mp4";
-        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/default_landscape.mp4";
+        portraitUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video1.mp4";
+        landscapeUrl = "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video1.mp4";
         break;
     }
     

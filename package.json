@@ -1,0 +1,11 @@
+{
+  "name": "wiimadhiit-icon-converter",
+  "version": "1.0.0",
+  "description": "Convert SVG to PNG for Flutter app icons",
+  "scripts": {
+    "convert": "node convert-svg.js"
+  },
+  "devDependencies": {
+    "sharp": "^0.32.6"
+  }
+}

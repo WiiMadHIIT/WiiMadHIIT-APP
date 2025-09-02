@@ -1,195 +1,376 @@
 // 引入所需的包
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
-import 'package:infinite_carousel/infinite_carousel.dart';
 import '../../routes/app_routes.dart';
 import '../leaderboard/leaderboard_page.dart';
 import '../../widgets/floating_logo.dart';
 
-/// PK status enum
-enum PKStatus {
-  ongoing,    // Ongoing
-  ended,      // Ended
-  upcoming    // Upcoming
-}
-
-/// PK item data model
-class PKItem {
-  final String id;             // PK id
-  final String name;           // PK name
-  final String reward;         // PK reward
-  final DateTime endDate;      // End date
-  final String status;         // PK status as string (for backend integration)
-  final String iconAsset;      // Icon asset path
-  final String routeName;      // Route name
-  final String? videoAsset;    // Video asset path (optional)
-  final int? participants;     // Number of participants (optional)
-  final String? description;   // Description (optional)
-
-  PKItem({
-    required this.id,
-    required this.name,
-    required this.reward,
-    required this.endDate,
-    required this.status,
-    required this.iconAsset,
-    required this.routeName,
-    this.videoAsset,
-    this.participants,
-    this.description,
-  });
-
-  /// Map status string to PKStatus enum
-  PKStatus get statusEnum {
-    switch (status.toLowerCase()) {
-      case 'ongoing':
-        return PKStatus.ongoing;
-      case 'ended':
-        return PKStatus.ended;
-      case 'upcoming':
-        return PKStatus.upcoming;
-      default:
-        return PKStatus.upcoming;
-    }
-  }
-}
+import '../../widgets/elegant_refresh_button.dart';
+import '../../domain/entities/challenge.dart';
+import '../../domain/services/challenge_service.dart';
+import '../../domain/usecases/get_challenges_usecase.dart';
+import '../../data/api/challenge_api.dart';
+import '../../data/repository/challenge_repository.dart';
+import '../../core/page_visibility_manager.dart';
+import 'challenge_viewmodel.dart';
 
 /// 挑战主页面，包含顶部LOGO、视频背景、底部滑动卡片等
-class ChallengePage extends StatefulWidget {
+class ChallengePage extends StatelessWidget {
   const ChallengePage({Key? key}) : super(key: key);
 
   @override
-  State<ChallengePage> createState() => _ChallengePageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => ChallengeViewModel(
+        GetChallengesUseCase(
+          ChallengeRepository(ChallengeApi()),
+          ChallengeService(),
+        ),
+      )..loadChallenges(page: 1, size: 10), // Initial load with pagination
+      child: const _ChallengePageContent(),
+    );
+  }
 }
 
-class _ChallengePageState extends State<ChallengePage> with SingleTickerProviderStateMixin {
-  late InfiniteScrollController _carouselController; // 无限轮播控制器
+class _ChallengePageContent extends StatefulWidget {
+  const _ChallengePageContent({Key? key}) : super(key: key);
+
+  @override
+  State<_ChallengePageContent> createState() => _ChallengePageState();
+}
+
+class _ChallengePageState extends State<_ChallengePageContent> 
+    with SingleTickerProviderStateMixin, PageVisibilityMixin {
   late final PageController _pageController = PageController(viewportFraction: 0.78); // 卡片滑动控制器
-  int _currentIndex = 0; // 当前选中的卡片索引
-  late final List<VideoPlayerController> _videoControllers; // 视频控制器列表
+  late final AnimationController _videoSwitchAnim;
+  bool _isSwitchingVideo = false;
+  
+  // 🎯 核心优化：使用 Map 管理控制器，只保留必要的
+  final Map<int, VideoPlayerController> _videoControllers = {};
+  int _currentIndex = 0;
+  static const int _preloadRange = 2; // 前后各预加载2个
+  
+  // 🎯 共享的默认视频控制器，避免重复创建
+  VideoPlayerController? _defaultVideoController;
 
-  /// 当前筛选状态，null为全部
-  PKStatus? currentFilter;
+  @override
+  int get pageIndex => 1; // Challenge页面的索引
 
-  /// PK list (sample data for US/English users)
-  final List<PKItem> pkList = [
-    PKItem(
-      id: 'pk1',
-      name: "7-Day HIIT Showdown 7-Day HIIT Showdown 7-Day HIIT Showdown 7-Day HIIT Showdown",
-      reward: "\uD83C\uDFC6 \$200 Amazon Gift Card Amazon Gift Card Amazon Gift Card Amazon Gift Card",
-      endDate: DateTime.now().add(const Duration(days: 3)),
-      status: 'ongoing',
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: AppRoutes.challengeDetails,
-      videoAsset: "assets/video/video1.mp4",
-      participants: 128,
-      description: "Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle! Push your limits in this high-intensity interval training battle!",
-    ),
-    PKItem(
-      id: 'pk2',
-      name: "Yoga Masters Cup",
-      reward: "\uD83E\uDD47 Gold Medal & Exclusive Badge",
-      endDate: DateTime.now().subtract(const Duration(days: 2)),
-      status: 'ended',
-      iconAsset: "assets/icons/yoga.svg",
-      routeName: AppRoutes.challengeDetails,
-      videoAsset: "assets/video/video2.mp4",
-      participants: 89,
-      description: "Compete for flexibility and balance in the ultimate yoga challenge.",
-    ),
-    PKItem(
-      id: 'pk3',
-      name: "Strength Warriors",
-      reward: "\uD83D\uDCAA Champion Title & Gym Gear",
-      endDate: DateTime.now().add(const Duration(days: 7)),
-      status: 'upcoming',
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: AppRoutes.challengeDetails,
-      videoAsset: "assets/video/video3.mp4",
-      participants: 0,
-      description: "Show your power in this strength training competition.",
-    ),
-    PKItem(
-      id: 'pk4',
-      name: "Endurance Marathon",
-      reward: "\uD83C\uDFC3 \$500 Cash Prize",
-      endDate: DateTime.now().add(const Duration(hours: 12)),
-      status: 'ongoing',
-      iconAsset: "assets/icons/hiit.svg",
-      routeName: AppRoutes.challengeDetails,
-      videoAsset: "assets/video/video1.mp4",
-      participants: 256,
-      description: "Test your stamina in a marathon-style endurance challenge.",
-    ),
-  ];
+  @override
+  void restoreVideoPlayback() {
+    super.restoreVideoPlayback();
+    print('🎯 ChallengePage: Restoring video playback for index $lastVideoIndex');
+    
+    // 恢复播放对应索引的视频
+    final controller = _videoControllers[lastVideoIndex];
+    if (controller != null && controller.value.isInitialized) {
+      controller.play();
+      print('🎯 ChallengePage: Resumed video playback for index $lastVideoIndex');
+    } else if (_defaultVideoController != null && _defaultVideoController!.value.isInitialized) {
+      _defaultVideoController!.play();
+      print('🎯 ChallengePage: Resumed default video playback');
+    }
+  }
 
-  /// 获取筛选后的PK列表
-  List<PKItem> get filteredPkList {
-    if (currentFilter == null) return pkList;
-    return pkList.where((pk) => pk.statusEnum == currentFilter).toList();
+  @override
+  void pauseVideoAndSaveState() {
+    super.pauseVideoAndSaveState();
+    print('🎯 ChallengePage: Pausing video and saving state');
+    
+    // 暂停所有视频
+    _videoControllers.forEach((index, controller) {
+      if (controller.value.isInitialized) {
+        controller.pause();
+        print('🎯 ChallengePage: Paused video for index $index');
+      }
+    });
+    
+    // 暂停默认视频
+    if (_defaultVideoController != null && _defaultVideoController!.value.isInitialized) {
+      _defaultVideoController!.pause();
+      print('🎯 ChallengePage: Paused default video');
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    _carouselController = InfiniteScrollController(initialItem: 0);
-    // 初始化每个PK项的视频控制器
-    _videoControllers = List.generate(pkList.length, (i) {
-      final asset = (pkList[i].videoAsset == null || pkList[i].videoAsset!.isEmpty)
-          ? 'assets/video/video1.mp4'
-          : pkList[i].videoAsset!;
-      final controller = VideoPlayerController.asset(asset)
+    _videoSwitchAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+  }
+
+  /// 🎯 核心方法：智能管理视频控制器
+  void _manageVideoControllers(List<Challenge> challenges, int currentIndex) {
+    // 🎯 安全检查：确保索引不超出范围
+    if (challenges.isEmpty || currentIndex < 0 || currentIndex >= challenges.length) {
+      return;
+    }
+    
+    final Set<int> neededIndices = _getNeededIndices(currentIndex, challenges.length);
+    final Set<int> currentIndices = _videoControllers.keys.toSet();
+    
+    // 释放不需要的控制器（超出前后2页范围的）
+    for (final index in currentIndices) {
+      if (!neededIndices.contains(index)) {
+        _disposeController(index);
+      }
+    }
+    
+    // 初始化需要的控制器（只初始化未加载的）
+    for (final index in neededIndices) {
+      if (!_videoControllers.containsKey(index) && index < challenges.length) {
+        _initializeController(index, challenges[index]);
+      }
+    }
+  }
+  
+  /// 计算需要预加载的索引范围
+  Set<int> _getNeededIndices(int currentIndex, int totalCount) {
+    final Set<int> indices = {currentIndex};
+    
+    // 🎯 安全检查：确保totalCount有效
+    if (totalCount <= 0) return indices;
+    
+    // 前后各预加载_preloadRange个
+    for (int i = 1; i <= _preloadRange; i++) {
+      if (currentIndex - i >= 0) indices.add(currentIndex - i);
+      if (currentIndex + i < totalCount) indices.add(currentIndex + i);
+    }
+    
+    return indices;
+  }
+  
+  /// 释放指定索引的控制器
+  void _disposeController(int index) {
+    final controller = _videoControllers.remove(index);
+    if (controller != null) {
+      // 🎯 如果是共享的默认视频控制器，不暂停也不释放，让它继续播放
+      if (controller == _defaultVideoController) {
+        print('🎯 Keeping default video playing (not paused, not disposed)');
+      } else {
+        // 🎯 其他控制器正常释放
+        controller.pause();
+        controller.dispose();
+        print('🎯 Disposed video controller for index: $index');
+      }
+    }
+  }
+  
+  /// 初始化单个视频控制器
+  void _initializeController(int index, Challenge challenge) {
+    if (_videoControllers.containsKey(index)) return;
+    
+    // 🎯 先创建占位控制器，显示默认视频
+    _createPlaceholderController(index);
+    
+    try {
+      // 🎯 只有网络视频存在且URL有效时才尝试加载
+      if (challenge.hasVideo && challenge.videoUrl != null && challenge.videoUrl!.isNotEmpty) {
+        print('🎯 Attempting to load network video for index: $index');
+        
+        // 网络视频优先
+        final controller = VideoPlayerController.networkUrl(Uri.parse(challenge.videoUrl!));
+        controller.setLooping(true);
+        controller.setVolume(0);
+        
+        controller.initialize().then((_) {
+          if (mounted) {
+            print('✅ Network video loaded successfully for index: $index');
+            // 🎯 只有网络视频加载成功才替换占位控制器
+            _replacePlaceholderWithRealController(index, controller);
+            if (index == _currentIndex) {
+              controller.play();
+              print('🎯 After replacement: controller.isPlaying=${controller.value.isPlaying}');
+            }
+            setState(() {});
+          }
+        }).catchError((error) {
+          print('❌ Network video initialization failed for index $index: $error');
+          // 🎯 网络视频失败，保持使用默认视频，不替换
+          print('🔄 Keeping default video for index: $index due to network failure');
+        });
+      } else {
+        // 🎯 没有网络视频或URL无效，保持使用默认视频
+        print('🎯 No network video available for index: $index, keeping default video');
+        // 不需要做任何替换，继续使用默认视频
+      }
+      
+      print('✅ Initialization process completed for index: $index');
+      
+    } catch (e) {
+      print('❌ Error in initialization process for index $index: $e');
+      // 🎯 发生异常时，保持使用默认视频
+      print('🔄 Keeping default video for index: $index due to error');
+    }
+  }
+  
+  /// 🎯 创建占位控制器，显示默认视频
+  void _createPlaceholderController(int index) {
+    // 确保默认视频控制器已初始化
+    if (_defaultVideoController == null) {
+      _defaultVideoController = VideoPlayerController.asset('assets/video/video1.mp4')
         ..setLooping(true)
         ..setVolume(0);
-      controller.initialize().then((_) {
-        if (i == 0) {
-          controller.play();
+      
+      _defaultVideoController!.initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          // 🎯 默认视频初始化成功后，如果是当前页则开始播放
+          if (index == _currentIndex) {
+            _defaultVideoController!.play();
+            print('🎯 Started playing default video for current index: $index');
+          }
         }
-        if (mounted) setState(() {});
       });
-      return controller;
-    });
+    } else {
+      // 🎯 如果默认视频控制器已存在且已初始化，立即播放
+      if (_defaultVideoController!.value.isInitialized && index == _currentIndex) {
+        _defaultVideoController!.play();
+        print('🎯 Started playing existing default video for current index: $index');
+      }
+    }
+    
+    // 使用默认视频控制器作为占位
+    _videoControllers[index] = _defaultVideoController!;
+    print('🎯 Created placeholder controller for index: $index using default video');
+  }
+  
+  /// 🎯 用真实控制器替换占位控制器
+  void _replacePlaceholderWithRealController(int index, VideoPlayerController realController) {
+    final oldController = _videoControllers[index];
+    
+    // 如果旧控制器是占位控制器，不需要释放（因为它是共享的）
+    if (oldController == _defaultVideoController) {
+      // 🎯 不暂停默认视频，让它继续播放供其他索引使用
+      print('🔄 Keeping default video playing for other indices');
+    } else {
+      oldController?.pause();
+      oldController?.dispose();
+    }
+    
+    _videoControllers[index] = realController;
+    print('🔄 Replaced placeholder with real controller for index: $index');
   }
 
   @override
   void dispose() {
-    // 释放所有视频控制器资源
-    for (final c in _videoControllers) {
-      c.dispose();
+    // 🎯 清理所有控制器
+    _videoControllers.values.forEach((controller) {
+      // 跳过共享的默认视频控制器，避免重复释放
+      if (controller != _defaultVideoController) {
+        controller.pause();
+        controller.dispose();
+      }
+    });
+    _videoControllers.clear();
+    
+    // 🎯 释放共享的默认视频控制器
+    if (_defaultVideoController != null) {
+      _defaultVideoController!.pause();
+      _defaultVideoController!.dispose();
+      _defaultVideoController = null;
     }
+    
     _pageController.dispose();
+    _videoSwitchAnim.dispose();
     super.dispose();
   }
 
-  /// 点击PK卡片时的跳转逻辑
-  void _onPKTap(PKItem pk) {
+  /// 点击挑战卡片时的跳转逻辑
+  void _onChallengeTap(Challenge challenge) {
     Navigator.pushNamed(
       context,
-      pk.routeName,
-      arguments: {'challengeId': pk.id},
+      AppRoutes.challengeDetails,
+      arguments: {'challengeId': challenge.id},
     );
   }
 
-  /// 滑动卡片时切换视频播放
+  /// 优化的页面切换处理
   void _onPageChanged(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-    for (int i = 0; i < _videoControllers.length; i++) {
-      if (i == index) {
-        _videoControllers[i].play();
-      } else {
-        _videoControllers[i].pause();
+    final viewModel = context.read<ChallengeViewModel>();
+    viewModel.updateCurrentIndex(index);
+    
+    // 更新当前索引
+    _currentIndex = index;
+    
+    // 🎯 更新页面可见性管理器中的视频索引
+    updateCurrentVideoIndex(index);
+    
+    // 🎯 检查是否是刷新按钮页面（最后一个页面）
+    final bool isRefreshPage = index == viewModel.filteredChallenges.length;
+    
+    if (isRefreshPage) {
+      // 🎯 刷新按钮页面：使用默认视频
+      _ensureDefaultVideoPlaying();
+    } else {
+      // 🎯 正常挑战页面：管理视频控制器
+      if (viewModel.challenges.isNotEmpty && index < viewModel.challenges.length) {
+        _manageVideoControllers(viewModel.challenges, index);
       }
+    }
+    
+    // 播放当前视频，暂停其他视频
+    _videoControllers.forEach((controllerIndex, controller) {
+      if (controllerIndex == index) {
+        // 🎯 当前页面：确保播放
+        if (controller.value.isInitialized) {
+          controller.play();
+          print('🎯 Playing real video for index: $index');
+          print('🎯 Video controller state: isPlaying=${controller.value.isPlaying}, isInitialized=${controller.value.isInitialized}');
+        } else if (controller == _defaultVideoController) {
+          // 🎯 如果是默认视频控制器且未初始化，确保播放
+          if (_defaultVideoController!.value.isInitialized) {
+            _defaultVideoController!.play();
+            print('🎯 Playing default video for index: $index');
+          }
+        }
+      } else {
+        // 🎯 其他页面：暂停非默认视频，保持默认视频播放
+        if (controller != _defaultVideoController) {
+          controller.pause();
+          print('🎯 Paused video for index: $controllerIndex (not current)');
+        }
+      }
+    });
+  }
+  
+  /// 🎯 确保默认视频播放（用于刷新按钮页面或无挑战数据时）
+  void _ensureDefaultVideoPlaying() {
+    // 确保默认视频控制器已初始化
+    if (_defaultVideoController == null) {
+      _defaultVideoController = VideoPlayerController.asset('assets/video/video1.mp4')
+        ..setLooping(true)
+        ..setVolume(0);
+      
+      _defaultVideoController!.initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          // 开始播放默认视频
+          _defaultVideoController!.play();
+          print('🎯 Started playing default video');
+        }
+      });
+    } else if (_defaultVideoController!.value.isInitialized) {
+      // 如果默认视频已初始化，直接播放
+      _defaultVideoController!.play();
+      print('🎯 Playing existing default video');
+    }
+    
+    // 将默认视频控制器分配给当前索引（如果有的话）
+    if (_currentIndex >= 0) {
+      _videoControllers[_currentIndex] = _defaultVideoController!;
     }
   }
 
   /// 显示底部筛选菜单
-  void _showFilterSheet() {
+  void _showFilterSheet(BuildContext context, ChallengeViewModel viewModel) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white.withOpacity(0.96),
@@ -203,13 +384,13 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildFilterOption(null, 'All'),
+                _buildFilterOption(context, viewModel, null, 'All'),
                 const SizedBox(height: 8),
-                _buildFilterOption(PKStatus.ongoing, 'Ongoing'),
+                _buildFilterOption(context, viewModel, 'ongoing', 'Ongoing'),
                 const SizedBox(height: 8),
-                _buildFilterOption(PKStatus.upcoming, 'Upcoming'),
+                _buildFilterOption(context, viewModel, 'upcoming', 'Upcoming'),
                 const SizedBox(height: 8),
-                _buildFilterOption(PKStatus.ended, 'Ended'),
+                _buildFilterOption(context, viewModel, 'ended', 'Ended'),
               ],
             ),
           ),
@@ -219,14 +400,21 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
   }
 
   /// 构建筛选选项
-  Widget _buildFilterOption(PKStatus? status, String label) {
-    final bool selected = currentFilter == status;
+  Widget _buildFilterOption(BuildContext context, ChallengeViewModel viewModel, String? status, String label) {
+    final bool selected = viewModel.currentFilter == status;
     return GestureDetector(
       onTap: () {
-        setState(() {
-          currentFilter = status;
-          _currentIndex = 0;
-        });
+        viewModel.filterChallengesByStatus(status);
+        
+        // 筛选后跳转到第一页
+        if (_pageController.hasClients) {
+          _pageController.animateToPage(
+            0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+        
         Navigator.pop(context);
       },
       child: AnimatedContainer(
@@ -242,9 +430,9 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
             Icon(
               status == null
                 ? Icons.all_inclusive
-                : status == PKStatus.ongoing
+                : status == 'ongoing'
                   ? Icons.flash_on
-                  : status == PKStatus.upcoming
+                  : status == 'upcoming'
                     ? Icons.schedule
                     : Icons.emoji_events,
               color: selected ? AppColors.primary : Colors.grey[500],
@@ -267,66 +455,76 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
     );
   }
 
-  /// 构建视频背景层，支持滑动切换时的动画和懒加载
-  Widget _buildVideoStack() {
+  /// 优化的视频背景栈
+  Widget _buildVideoStack(List<Challenge> challenges) {
     return AnimatedBuilder(
       animation: _pageController,
       builder: (context, child) {
+        final viewModel = context.watch<ChallengeViewModel>();
         final page = _pageController.hasClients && _pageController.page != null
             ? _pageController.page!
-            : _currentIndex.toDouble();
+            : viewModel.currentIndex.toDouble();
 
         List<Widget> stack = [];
-        bool hasInitialized = false;
-        for (int i = 0; i < pkList.length; i++) {
-          // 只渲染前后1页，提升性能
-          if ((i - page).abs() > 1.2) continue;
+        
+        // 🎯 计算总页面数（包括刷新按钮页面）
+        final int totalPages = challenges.length + 1;
+        
+        // 🎯 只渲染当前页和前后2页的视频
+        for (int i = 0; i < totalPages; i++) {
+          if ((i - page).abs() > 2.2) continue;
+          
           final offset = (i - page) * MediaQuery.of(context).size.height;
           final opacity = (1.0 - (i - page).abs()).clamp(0.0, 1.0);
-
-          if (_videoControllers[i].value.isInitialized) hasInitialized = true;
-
-          stack.add(
-            Positioned.fill(
-              child: Transform.translate(
-                offset: Offset(0, offset),
-                child: Opacity(
-                  opacity: opacity,
-                  child: _videoControllers[i].value.isInitialized
-                      ? FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _videoControllers[i].value.size.width,
-                            height: _videoControllers[i].value.size.height,
-                            child: VideoPlayer(_videoControllers[i]),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          );
-        }
-        // 如果所有视频都没初始化，显示默认视频
-        if (!hasInitialized) {
-          stack.add(
-            Positioned.fill(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: 1,
-                  height: 1,
-                  child: VideoPlayer(
-                    VideoPlayerController.asset('assets/video/video1.mp4')
-                      ..setLooping(true)
-                      ..setVolume(0)
-                      ..initialize(),
+          
+          final controller = _videoControllers[i];
+          if (controller != null && controller.value.isInitialized) {
+            stack.add(
+              Positioned.fill(
+                child: Transform.translate(
+                  offset: Offset(0, offset),
+                  child: Opacity(
+                    opacity: opacity,
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: controller.value.size.width,
+                        height: controller.value.size.height,
+                        child: VideoPlayer(controller),
+                      ),
+                    ),
                   ),
                 ),
               ),
+            );
+          }
+        }
+        
+        // 🎯 如果当前是刷新按钮页面且没有视频，显示默认视频
+        if (stack.isEmpty || (page >= challenges.length && _defaultVideoController != null && _defaultVideoController!.value.isInitialized)) {
+          stack.add(
+            Positioned.fill(
+              child: _defaultVideoController != null && _defaultVideoController!.value.isInitialized
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _defaultVideoController!.value.size.width,
+                      height: _defaultVideoController!.value.size.height,
+                      child: VideoPlayer(_defaultVideoController!),
+                    ),
+                  )
+                : Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
             ),
           );
         }
+        
         return Stack(children: stack);
       },
     );
@@ -334,122 +532,185 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double bottomPadding = MediaQuery.of(context).padding.bottom; //safty安全区高度 
-    // final double bottomPadding2 = MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight; //safty安全区高度 + 底部tabbar高度
-    
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // 全屏视频背景
-          Positioned.fill(
-            child: _buildVideoStack(),
-          ),
-          // 顶部毛玻璃渐变遮罩
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: MediaQuery.of(context).padding.top + 44,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color.fromRGBO(0, 0, 0, 0.22),
-                    Color.fromRGBO(0, 0, 0, 0.10),
-                    Colors.transparent,
-                  ],
-                  stops: [0.0, 0.6, 1.0],
+    return Consumer<ChallengeViewModel>(
+      builder: (context, viewModel, child) {
+        final double screenWidth = MediaQuery.of(context).size.width;
+        final double bottomPadding = MediaQuery.of(context).padding.bottom;
+        
+        // 🎯 当挑战列表更新时，重新管理控制器并确保前后2页预加载
+        if (viewModel.challenges.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _manageVideoControllers(viewModel.challenges, _currentIndex);
+            }
+          });
+        } else {
+          // 🎯 当没有挑战数据时，确保默认视频控制器被初始化和播放
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _ensureDefaultVideoPlaying();
+            }
+          });
+        }
+        
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              // 全屏视频背景
+              if (viewModel.challenges.isNotEmpty)
+                Positioned.fill(
+                  child: _buildVideoStack(viewModel.challenges),
+                )
+              else
+                // 🎯 当没有挑战数据时，显示默认视频
+                Positioned.fill(
+                  child: _defaultVideoController != null && _defaultVideoController!.value.isInitialized
+                    ? FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: _defaultVideoController!.value.size.width,
+                          height: _defaultVideoController!.value.size.height,
+                          child: VideoPlayer(_defaultVideoController!),
+                        ),
+                      )
+                    : Container(color: Colors.black),
+                ),
+              
+              // 顶部毛玻璃渐变遮罩
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: MediaQuery.of(context).padding.top + 44,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color.fromRGBO(0, 0, 0, 0.22),
+                        Color.fromRGBO(0, 0, 0, 0.10),
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.6, 1.0],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          // 顶部悬浮LOGO
-          const FloatingLogo(),
+              
+              // 顶部悬浮LOGO
+              const FloatingLogo(),
 
-          // 底部滑动卡片区
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: EdgeInsets.only(bottom: bottomPadding + 64),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 240, // 增加高度以适应新的卡片设计
-                    child: PageView.builder(
-                      controller: _pageController,
-                      itemCount: filteredPkList.length,
-                      physics: const PageScrollPhysics(),
-                      onPageChanged: _onPageChanged,
-                      itemBuilder: (context, index) {
-                        return AnimatedScale(
-                          scale: _currentIndex == index ? 1.0 : 0.92,
-                          duration: const Duration(milliseconds: 300),
-                          child: _PKEntry(
-                            pk: filteredPkList[index],
-                            onTap: () => _onPKTap(filteredPkList[index]),
-                          ),
-                        );
-                      },
-                    ),
+              // 加载状态
+              if (viewModel.isLoading)
+                const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.primary,
                   ),
-                  const SizedBox(height: 16),
-                  // 底部指示器
-                  AnimatedSmoothIndicator(
-                    activeIndex: _currentIndex,
-                    count: filteredPkList.length,
-                    effect: ExpandingDotsEffect(
-                      dotHeight: 8,
-                      dotWidth: 8,
-                      activeDotColor: AppColors.primary,
-                      dotColor: Colors.white.withOpacity(0.3),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // 悬浮筛选按钮和排行榜按钮（TikTok风格，卡片区和TabBar之间右下角，水平排列）
-          Positioned(
-            right: 16,
-            bottom: bottomPadding + 24,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _LeaderboardFab(onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => LeaderboardPage()),
-                  );
-                }),
-                const SizedBox(width: 16),
-                _FilterFab(onTap: _showFilterSheet, currentFilter: currentFilter),
-              ],
-            ),
-          ),
-          // 无PK时的提示语
-          if (filteredPkList.isEmpty)
-            Center(
-              child: Text(
-                "No PK challenges available!",
-                style: AppTextStyles.headlineLarge.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 8,
-                    ),
-                  ],
                 ),
-              ),
+
+              // 底部滑动卡片区
+              if (!viewModel.isLoading)
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: bottomPadding + 64),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 240,
+                          child: PageView.builder(
+                            controller: _pageController,
+                            itemCount: viewModel.filteredChallenges.length + 1, // 添加1个用于刷新按钮
+                            physics: const PageScrollPhysics(),
+                            onPageChanged: _onPageChanged,
+                            itemBuilder: (context, index) {
+                              // 最后一个item显示为刷新按钮
+                              if (index == viewModel.filteredChallenges.length) {
+                                return AnimatedScale(
+                                  scale: viewModel.currentIndex == index ? 1.0 : 0.92,
+                                  duration: const Duration(milliseconds: 300),
+                                  child: ElegantRefreshButton(
+                                    onRefresh: () async {
+                                      // 🎯 显示加载状态
+                                      viewModel.refresh();
+                                      
+                                      // 🎯 等待数据刷新完成
+                                      await Future.delayed(const Duration(milliseconds: 800));
+                                      
+                                      // 🎯 刷新完成后回到第一页
+                                      if (mounted && _pageController.hasClients) {
+                                        _pageController.animateToPage(
+                                          0,
+                                          duration: const Duration(milliseconds: 500),
+                                          curve: Curves.easeInOut,
+                                        );
+                                      }
+                                    },
+                                    size: 200,
+                                    refreshDuration: const Duration(milliseconds: 800),
+                                  ),
+                                );
+                              }
+                              
+                              return AnimatedScale(
+                                scale: viewModel.currentIndex == index ? 1.0 : 0.92,
+                                duration: const Duration(milliseconds: 300),
+                                child: _ChallengeEntry(
+                                  challenge: viewModel.filteredChallenges[index],
+                                  onTap: () => _onChallengeTap(viewModel.filteredChallenges[index]),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // 底部指示器 - 包含刷新按钮的指示点
+                        AnimatedSmoothIndicator(
+                          activeIndex: viewModel.currentIndex,
+                          count: viewModel.filteredChallenges.length + 1, // 更新指示器数量
+                          effect: ExpandingDotsEffect(
+                            dotHeight: 8,
+                            dotWidth: 8,
+                            activeDotColor: AppColors.primary,
+                            dotColor: Colors.white.withOpacity(0.3),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              
+              // 悬浮筛选按钮和排行榜按钮
+              if (!viewModel.isLoading)
+                Positioned(
+                  right: 16,
+                  bottom: bottomPadding + 24,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LeaderboardFab(onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => LeaderboardPage()),
+                        );
+                      }),
+                      const SizedBox(width: 16),
+                      _FilterFab(
+                        onTap: () => _showFilterSheet(context, viewModel),
+                        currentFilter: viewModel.currentFilter,
+                      ),
+                    ],
+                  ),
+                ),
+              
+
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -457,7 +718,7 @@ class _ChallengePageState extends State<ChallengePage> with SingleTickerProvider
 /// TikTok风格悬浮筛选按钮
 class _FilterFab extends StatelessWidget {
   final VoidCallback onTap;
-  final PKStatus? currentFilter;
+  final String? currentFilter;
   const _FilterFab({required this.onTap, required this.currentFilter});
 
   @override
@@ -506,8 +767,8 @@ class _FilterFab extends StatelessWidget {
                   Icons.circle,
                   color: AppColors.primary,
                   size: 8,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -595,19 +856,25 @@ class _PowerfulTapEffectState extends State<PowerfulTapEffect> {
 
   Future<void> _handleTap() async {
     if (_isAnimating) return;
-    setState(() {
-      _scale = widget.pressedScale;
-      _isAnimating = true;
-    });
+    if (mounted) {
+      setState(() {
+        _scale = widget.pressedScale;
+        _isAnimating = true;
+      });
+    }
     await Future.delayed(widget.pressDuration);
-    setState(() {
-      _scale = 1.0;
-    });
+    if (mounted) {
+      setState(() {
+        _scale = 1.0;
+      });
+    }
     await Future.delayed(widget.reboundDuration);
-    widget.onTap();
-    setState(() {
-      _isAnimating = false;
-    });
+    if (mounted) {
+      widget.onTap();
+      setState(() {
+        _isAnimating = false;
+      });
+    }
   }
 
   @override
@@ -625,68 +892,47 @@ class _PowerfulTapEffectState extends State<PowerfulTapEffect> {
   }
 }
 
-/// 单个PK卡片组件，根据不同状态显示不同样式
-class _PKEntry extends StatefulWidget {
-  final PKItem pk;
+/// 单个挑战卡片组件，根据不同状态显示不同样式
+class _ChallengeEntry extends StatefulWidget {
+  final Challenge challenge;
   final VoidCallback onTap;
 
-  const _PKEntry({required this.pk, required this.onTap});
+  const _ChallengeEntry({required this.challenge, required this.onTap});
 
   @override
-  State<_PKEntry> createState() => _PKEntryState();
+  State<_ChallengeEntry> createState() => _ChallengeEntryState();
 }
 
-class _PKEntryState extends State<_PKEntry> {
+class _ChallengeEntryState extends State<_ChallengeEntry> {
   double _scale = 1.0;
 
   void _onTap() {
-    setState(() => _scale = 0.97);
+    if (mounted) {
+      setState(() => _scale = 0.97);
+    }
     Future.delayed(const Duration(milliseconds: 80), () {
-      setState(() => _scale = 1.0);
-      widget.onTap();
+      if (mounted) {
+        setState(() => _scale = 1.0);
+        widget.onTap();
+      }
     });
   }
 
   /// Get status color
   Color _getStatusColor() {
-    switch (widget.pk.statusEnum) {
-      case PKStatus.ongoing:
+    switch (widget.challenge.statusEnum) {
+      case ChallengeStatus.ongoing:
         return const Color(0xFF00C851); // Green - Ongoing
-      case PKStatus.ended:
+      case ChallengeStatus.ended:
         return const Color(0xFF6C757D); // Gray - Ended
-      case PKStatus.upcoming:
+      case ChallengeStatus.upcoming:
         return const Color(0xFFFF6B35); // Orange - Upcoming
     }
   }
 
   /// Get status label (English)
   String _getStatusText() {
-    switch (widget.pk.statusEnum) {
-      case PKStatus.ongoing:
-        return 'Ongoing';
-      case PKStatus.ended:
-        return 'Ended';
-      case PKStatus.upcoming:
-        return 'Upcoming';
-    }
-  }
-
-  /// Format time remaining (English)
-  String _formatTimeRemaining() {
-    final now = DateTime.now();
-    final difference = widget.pk.endDate.difference(now);
-    
-    if (difference.isNegative) {
-      return 'Ended';
-    }
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ${difference.inHours % 24}h left';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ${difference.inMinutes % 60}m left';
-    } else {
-      return '${difference.inMinutes}m left';
-    }
+    return widget.challenge.statusText;
   }
 
   @override
@@ -728,7 +974,7 @@ class _PKEntryState extends State<_PKEntry> {
                 ),
               ),
               padding: const EdgeInsets.all(20),
-        child: Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -769,43 +1015,14 @@ class _PKEntryState extends State<_PKEntry> {
                         ),
                       ),
                       const Spacer(),
-                      // Participants or Reservations
-                      if (widget.pk.participants != null && widget.pk.participants! > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.people,
-                                size: 12,
-                                color: Colors.grey[600],
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                widget.pk.statusEnum == PKStatus.upcoming
-                                  ? '${widget.pk.participants} reservations'
-                                  : '${widget.pk.participants} joined',
-                                style: AppTextStyles.labelSmall.copyWith(
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                     ],
                   ),
                   
                   const SizedBox(height: 12),
                   
-                  // PK name
+                  // Challenge name
                   Text(
-                    widget.pk.name,
+                    widget.challenge.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.titleLarge.copyWith(
@@ -845,7 +1062,7 @@ class _PKEntryState extends State<_PKEntry> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            widget.pk.reward,
+                            widget.challenge.reward,
                             maxLines: 1,
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: statusColor,
@@ -856,12 +1073,13 @@ class _PKEntryState extends State<_PKEntry> {
                       ],
                     ),
                   ),
-                  // description info
-                  if (widget.pk.description != null && widget.pk.description!.isNotEmpty)
+                  
+                  // Description info
+                  if (widget.challenge.hasDescription)
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0, bottom: 0.0),
                       child: Text(
-                        widget.pk.description!,
+                        widget.challenge.description!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.bodyMedium.copyWith(
@@ -896,7 +1114,7 @@ class _PKEntryState extends State<_PKEntry> {
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
-                                  _formatTimeRemaining(),
+                                  widget.challenge.timeRemainingText,
                                   style: AppTextStyles.labelSmall.copyWith(
                                     color: Colors.grey[600],
                                     fontWeight: FontWeight.w500,
@@ -952,10 +1170,14 @@ class _AnimatedButtonState extends State<_AnimatedButton> {
   double _scale = 1.0;
 
   void _onTap() {
-    setState(() => _scale = 0.90);
+    if (mounted) {
+      setState(() => _scale = 0.90);
+    }
     Future.delayed(const Duration(milliseconds: 80), () {
-      setState(() => _scale = 1.0);
-      widget.onPressed();
+      if (mounted) {
+        setState(() => _scale = 1.0);
+        widget.onPressed();
+      }
     });
   }
 
@@ -972,3 +1194,7 @@ class _AnimatedButtonState extends State<_AnimatedButton> {
     );
   }
 }
+
+
+
+

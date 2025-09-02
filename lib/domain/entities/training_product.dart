@@ -26,11 +26,7 @@ class TrainingProduct {
   bool get hasAvailableTrainings => activeTrainings.isNotEmpty;
 
   // 获取平均完成率
-  double get averageCompletionRate {
-    if (activeTrainings.isEmpty) return 0.0;
-    final totalRate = activeTrainings.fold<double>(0.0, (sum, training) => sum + training.completionRate);
-    return totalRate / activeTrainings.length;
-  }
+  double get averageCompletionRate => 0.0; // 已移除 completionRate
 
   // 获取总参与人数
   int get totalParticipantCount {
@@ -43,14 +39,12 @@ class TrainingPageConfig {
   final String pageSubtitle;
   final String? videoUrl;
   final String? thumbnailUrl;
-  final String? lastUpdated;
 
   TrainingPageConfig({
     required this.pageTitle,
     required this.pageSubtitle,
     this.videoUrl,
     this.thumbnailUrl,
-    this.lastUpdated,
   });
 
   // 获取视频资源（优先网络，回退本地）

@@ -7,58 +7,65 @@ class BonusRepository {
 
   BonusRepository(this._bonusApi);
 
-  /// 获取奖励活动列表
-  Future<List<BonusActivity>> getBonusActivities() async {
-    final BonusListApiModel apiModel = await _bonusApi.fetchBonusActivities();
+  /// 获取奖励活动列表（支持分页）
+  Future<BonusActivityPage> getBonusActivities({
+    int page = 1,
+    int size = 10,
+  }) async {
+    final BonusListApiModel apiModel = await _bonusApi.fetchBonusActivities(
+      page: page,
+      size: size,
+    );
     
     // 转换为业务实体
-    return apiModel.activities.map((activity) => BonusActivity(
+    final activities = apiModel.activities.map((activity) => BonusActivity(
       id: activity.id,
       name: activity.name,
       description: activity.description,
       reward: activity.reward,
       regionLimit: activity.regionLimit,
       videoUrl: activity.videoUrl,
-      thumbnailUrl: activity.thumbnailUrl,
-      status: activity.status,
-      startDate: activity.startDate,
-      endDate: activity.endDate,
-      isClaimed: activity.isClaimed,
-      isEligible: activity.isEligible,
-      claimCount: activity.claimCount,
-      maxClaimCount: activity.maxClaimCount,
-      category: activity.category,
-      difficulty: activity.difficulty,
+      activityName: activity.activityName,
+      activityDescription: activity.activityDescription,
+      activityCode: activity.activityCode,
+      activityUrl: activity.activityUrl,
+      startTimeStep: activity.startTimeStep,
+      endTimeStep: activity.endTimeStep,
     )).toList();
-  }
 
-  /// 获取单个奖励活动
-  Future<BonusActivity> getBonusActivity(String activityId) async {
-    final BonusApiModel apiModel = await _bonusApi.fetchBonusActivity(activityId);
-    
-    // 转换为业务实体
-    return BonusActivity(
-      id: apiModel.id,
-      name: apiModel.name,
-      description: apiModel.description,
-      reward: apiModel.reward,
-      regionLimit: apiModel.regionLimit,
-      videoUrl: apiModel.videoUrl,
-      thumbnailUrl: apiModel.thumbnailUrl,
-      status: apiModel.status,
-      startDate: apiModel.startDate,
-      endDate: apiModel.endDate,
-      isClaimed: apiModel.isClaimed,
-      isEligible: apiModel.isEligible,
-      claimCount: apiModel.claimCount,
-      maxClaimCount: apiModel.maxClaimCount,
-      category: apiModel.category,
-      difficulty: apiModel.difficulty,
+    return BonusActivityPage(
+      activities: activities,
+      total: apiModel.total,
+      currentPage: apiModel.currentPage,
+      pageSize: apiModel.pageSize,
     );
   }
 
-  /// 领取奖励
-  Future<Map<String, dynamic>> claimBonus(String activityId) async {
-    return await _bonusApi.claimBonus(activityId);
+  /// 获取所有奖励活动（向后兼容）
+  Future<List<BonusActivity>> getAllBonusActivities() async {
+    final page = await getBonusActivities(page: 1, size: 1000); // 获取大量数据
+    return page.activities;
   }
+}
+
+/// 分页数据包装类
+class BonusActivityPage {
+  final List<BonusActivity> activities;
+  final int total;
+  final int currentPage;
+  final int pageSize;
+
+  BonusActivityPage({
+    required this.activities,
+    required this.total,
+    required this.currentPage,
+    required this.pageSize,
+  });
+
+  // 分页信息计算
+  int get totalPages => (total / pageSize).ceil();
+  bool get hasNextPage => currentPage < totalPages;
+  bool get hasPreviousPage => currentPage > 1;
+  int get nextPage => hasNextPage ? currentPage + 1 : currentPage;
+  int get previousPage => hasPreviousPage ? currentPage - 1 : currentPage;
 } 

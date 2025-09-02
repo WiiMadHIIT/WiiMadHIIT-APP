@@ -55,13 +55,14 @@ class TrainingRulePage extends StatefulWidget {
 - **规则描述**: 每个规则的详细描述
 
 ### 3.3 投影教程数据
-- **教程视频信息**: 当前使用 `fakeVideoInfo` 硬编码数据
+- **教程视频信息**: 使用 `ProjectionTutorialSheet` 组件中的硬编码数据
   - `videoUrl`: 教程视频链接
   - `title`: 教程标题
-- **教程步骤**: 当前使用 `fakeTutorialSteps` 硬编码数据
+- **教程步骤**: 使用 `ProjectionTutorialSheet` 组件中的硬编码数据
   - `number`: 步骤编号
   - `title`: 步骤标题
   - `description`: 步骤描述
+- **说明**: 投影教程数据不需要从API获取，使用固定的教程内容
 
 ### 3.4 训练基本信息
 - **训练名称**: 基于 `trainingId` 获取的训练名称 - **页面中未使用，可移除**
@@ -122,41 +123,9 @@ GET /api/checkin/rules/{trainingId}?productId={productId}
         "order": 3
       }
     ],
-    "projectionTutorial": {
-      "videoInfo": {
-        "videoUrl": "https://github.com/WiiMadHIIT/hiit-cdn/tree/main/video/video1.mp4",
-        "title": "Watch Video Tutorial"
-      },
-      "tutorialSteps": [
-        {
-          "number": 1,
-          "title": "Find a Flat Surface",
-          "description": "Choose a wall or flat surface that is at least 2 meters wide and 1.5 meters tall."
-        },
-        {
-          "number": 2,
-          "title": "Position Your Device", 
-          "description": "Place your device on a stable surface, approximately 1-2 meters from the projection surface."
-        },
-        {
-          "number": 3,
-          "title": "Enable Projection",
-          "description": "Tap the projection button in the training interface to start casting."
-        },
-        {
-          "number": 4,
-          "title": "Adjust Position",
-          "description": "Use the on-screen controls to adjust the projection size and position."
-        },
-        {
-          "number": 5,
-          "title": "Start Training",
-          "description": "Once the projection is properly set up, you can begin your training session."
-        }
-      ]
-    },
     "trainingConfig": {
-      "nextPageRoute": "/checkin_countdown"
+      "nextPageRoute": "/checkin_countdown",
+      "isActivated": true
     }
   }
 }
@@ -228,7 +197,8 @@ GET /api/checkin/rules/{trainingId}?productId={productId}
 - 图标和颜色在客户端动态生成，不依赖后端
 
 ### 7.2 视频处理
-- 支持网络视频URL
+- 投影教程视频使用固定的网络视频URL
+- 视频数据在 `ProjectionTutorialSheet` 组件中硬编码
 - 添加视频加载失败的回退机制
 
 ### 7.3 路由参数
@@ -247,22 +217,25 @@ GET /api/checkin/rules/{trainingId}?productId={productId}
 
 ### 7.5 跳转逻辑处理
 - 根据 `trainingConfig.nextPageRoute` 动态决定跳转目标
+- 根据 `trainingConfig.isActivated` 控制开始训练按钮状态
 - 支持三种跳转类型：
   - `/checkin_countdown`: 倒计时页面
   - `/checkin_training_voice`: 语音训练页面
   - `/checkin_training`: 普通训练页面
 - 跳转逻辑在 `_startTraining()` 方法中实现
 - 如果 `nextPageRoute` 无效，默认跳转到 `/checkin_countdown`
+- 如果 `isActivated` 为 `false`，禁用开始训练按钮并显示激活提示
 
 ## 8. 预期效果
 
 ### 8.1 功能改进
 - 动态获取训练规则内容
 - 支持不同训练项目的个性化规则
-- 灵活的投影教程配置
+- 固定的投影教程内容（使用ProjectionTutorialSheet组件）
 - 保持UI一致性（固定标题和副标题）
 - 智能跳转逻辑（根据训练类型选择合适的目标页面）
 - 完整的参数传递机制（trainingId + productId）
+- 训练激活状态控制（根据isActivated控制按钮状态和用户提示）
 
 ### 8.2 架构优势
 - 清晰的职责分离

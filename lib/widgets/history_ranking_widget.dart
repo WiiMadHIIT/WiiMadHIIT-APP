@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 class HistoryRankingItem {
   final int? rank;
   final String date;
-  final int counts;
+  final double countsPerMin;
   final String? note;
   final Map<String, dynamic>? additionalData;
 
   const HistoryRankingItem({
     this.rank,
     required this.date,
-    required this.counts,
+    required this.countsPerMin,
     this.note,
     this.additionalData,
   });
@@ -21,7 +21,7 @@ class HistoryRankingItem {
     return HistoryRankingItem(
       rank: map['rank'],
       date: map['date'] ?? '',
-      counts: map['counts'] ?? 0,
+      countsPerMin: (map['countsPerMin'] as num?)?.toDouble() ?? 0.0,
       note: map['note'],
       additionalData: map,
     );
@@ -217,7 +217,7 @@ class HistoryRankingWidget extends StatelessWidget {
               child: const Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  'COUNTS',
+                  'PACE',
                   style: TextStyle(
                     color: Colors.white70,
                     fontWeight: FontWeight.bold,
@@ -235,7 +235,6 @@ class HistoryRankingWidget extends StatelessWidget {
 
   Widget _buildDefaultItem(HistoryRankingItem item, int index, HistoryRankingConfig config) {
     final isCurrent = item.isCurrent;
-    final isTopThree = item.isTopThree;
     
     return GestureDetector(
       onTap: onItemTap,
@@ -283,7 +282,7 @@ class HistoryRankingWidget extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '${item.counts}',
+                      '${item.countsPerMin.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: isCurrent ? Colors.white : Colors.white,
                         fontWeight: FontWeight.bold,
@@ -291,10 +290,13 @@ class HistoryRankingWidget extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    Icon(
-                      Icons.fitness_center,
-                      color: isCurrent ? Colors.white : Colors.white54,
-                      size: 16,
+                    Text(
+                      '/min',
+                      style: TextStyle(
+                        color: isCurrent ? Colors.white : Colors.white54,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -396,10 +398,22 @@ class HistoryRankingWidget extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            emptyMessage ?? '暂无排行榜数据',
+            emptyMessage ?? 'No records yet! 🏆\nStart your fitness journey!',
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 16,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your first workout could be legendary! 💪',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 14,
+              fontStyle: FontStyle.italic,
             ),
           ),
         ],

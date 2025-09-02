@@ -1,7 +1,6 @@
 import '../api/training_rule_api.dart';
 import '../models/training_rule_api_model.dart';
 import '../../domain/entities/training_rule.dart';
-import '../../domain/entities/projection_tutorial.dart';
 import '../../domain/entities/training_config.dart';
 
 class TrainingRuleRepository {
@@ -19,27 +18,17 @@ class TrainingRuleRepository {
         order: rule.order,
       )).toList();
 
-      final projectionTutorial = ProjectionTutorial(
-        videoInfo: VideoInfo(
-          videoUrl: apiModel.projectionTutorial.videoInfo.videoUrl,
-          title: apiModel.projectionTutorial.videoInfo.title,
-        ),
-        tutorialSteps: apiModel.projectionTutorial.tutorialSteps.map((step) => TutorialStep(
-          number: step.number,
-          title: step.title,
-          description: step.description,
-        )).toList(),
-      );
+
 
       final trainingConfig = TrainingConfig(
         nextPageRoute: apiModel.trainingConfig.nextPageRoute,
+        isActivated: apiModel.trainingConfig.isActivated,
       );
 
       return {
         'trainingId': apiModel.trainingId,
         'productId': apiModel.productId,
         'trainingRules': trainingRules,
-        'projectionTutorial': projectionTutorial,
         'trainingConfig': trainingConfig,
       };
     } catch (e) {

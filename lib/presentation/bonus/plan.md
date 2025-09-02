@@ -8,42 +8,8 @@
 - 缺乏状态管理和错误处理
 - 不符合 MVVM + Provider 架构规范
 
-### 当前 BonusActivity 数据结构
-```dart
-class BonusActivity {
-  final String name;           // 活动名称
-  final String description;    // 活动描述
-  final String reward;         // 奖励内容
-  final String regionLimit;    // 地区限制
-  final String videoAsset;     // 视频资源路径
-}
-```
 
-## 🔄 需要从后端 API 获取的参数
-
-### 1. 基础信息（必需）
-- ✅ **`name`** - 活动名称
-- ✅ **`description`** - 活动描述  
-- ✅ **`reward`** - 奖励内容
-- ✅ **`regionLimit`** - 地区限制
-
-### 2. 媒体资源（必需）
-- ✅ **`videoAsset`** - 视频资源路径（改为 `videoUrl`）
-
-### 3. 建议新增的参数
-- 🆔 **`id`** - 活动唯一标识符
-- 🔄 **`status`** - 活动状态（进行中/已结束/未开始）
-- 📅 **`startDate`** - 活动开始时间
-- 📅 **`endDate`** - 活动结束时间
-- ✅ **`isClaimed`** - 用户是否已领取
-- ✅ **`isEligible`** - 用户是否符合领取条件
-- 👥 **`claimCount`** - 已领取人数
-- 🔢 **`maxClaimCount`** - 最大可领取人数
-- 🏷️ **`category`** - 活动分类（挑战/马拉松/限时等）
-- ⭐ **`difficulty`** - 难度等级
-- 🖼️ **`thumbnailUrl`** - 缩略图 URL（可选）
-
-## 📊 建议的 API 数据结构
+## API 数据结构
 
 ```json
 {
@@ -58,16 +24,12 @@ class BonusActivity {
         "reward": "Up to 1000 WiiCoins + Exclusive Badge",
         "regionLimit": "US, Canada, UK",
         "videoUrl": "https://cdn.example.com/videos/bonus1.mp4",
-        "thumbnailUrl": "https://cdn.example.com/thumbnails/bonus1.jpg",
-        "status": "ACTIVE",
-        "startDate": "2024-03-01T00:00:00Z",
-        "endDate": "2024-06-01T00:00:00Z",
-        "isClaimed": false,
-        "isEligible": true,
-        "claimCount": 1250,
-        "maxClaimCount": 10000,
-        "category": "CHALLENGE",
-        "difficulty": "MEDIUM"
+        "startTimeStep": 1737367600000,
+        "endTimeStep": 1737367800000,
+        "activityName":"xxx",
+        "activityDescription": "xxx",
+        "activityCode": "xxxx",
+        "activityUrl": "https://cdn.example.com/videos/bonus1.mp4"
       }
     ]
   }
@@ -140,13 +102,6 @@ lib/
 3. 测试状态管理
 
 ## 🎯 UI 增强建议
-
-### 当前显示内容
-1. 活动名称（`name`）
-2. 活动描述（`description`）
-3. 奖励内容（`reward`）
-4. 地区限制（`regionLimit`）
-5. 视频背景（`videoAsset`）
 
 ### 建议增强显示
 1. 🟢 活动状态指示器（进行中/已结束）

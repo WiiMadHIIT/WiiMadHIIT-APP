@@ -36,7 +36,7 @@ class GetTrainingProductUseCase {
   }
 
   /// 根据难度等级获取训练项目
-  Future<List<TrainingItem>> getTrainingsByLevel(String productId, String level) async {
+  Future<List<TrainingItem>> getTrainingsByLevel(String productId, int level) async {
     try {
       final product = await execute(productId);
       return _service.filterTrainingsByLevel(product.trainings, level);

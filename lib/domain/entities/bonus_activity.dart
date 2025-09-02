@@ -4,17 +4,13 @@ class BonusActivity {
   final String description;
   final String reward;
   final String regionLimit;
-  final String videoUrl; // 改为 videoUrl
-  final String? thumbnailUrl;
-  final String status;
-  final String startDate;
-  final String endDate;
-  final bool isClaimed;
-  final bool isEligible;
-  final int claimCount;
-  final int maxClaimCount;
-  final String category;
-  final String difficulty;
+  final String videoUrl;
+  final String activityName;
+  final String activityDescription;
+  final String activityCode;
+  final String activityUrl;
+  final int startTimeStep;
+  final int endTimeStep;
 
   BonusActivity({
     required this.id,
@@ -23,69 +19,71 @@ class BonusActivity {
     required this.reward,
     required this.regionLimit,
     required this.videoUrl,
-    this.thumbnailUrl,
-    required this.status,
-    required this.startDate,
-    required this.endDate,
-    required this.isClaimed,
-    required this.isEligible,
-    required this.claimCount,
-    required this.maxClaimCount,
-    required this.category,
-    required this.difficulty,
+    required this.activityName,
+    required this.activityDescription,
+    required this.activityCode,
+    required this.activityUrl,
+    required this.startTimeStep,
+    required this.endTimeStep,
   });
 
   // 业务规则示例
-  bool get isActive => status == 'ACTIVE';
-  bool get isExpired => status == 'EXPIRED';
-  bool get canClaim => isActive && isEligible && !isClaimed;
-  bool get isGlobal => regionLimit == 'Global';
+  bool get isActive {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return now >= startTimeStep && now <= endTimeStep;
+  }
   
-  // 计算剩余可领取数量
-  int get remainingCount => maxClaimCount - claimCount;
+  bool get isExpired => DateTime.now().millisecondsSinceEpoch > endTimeStep;
+  bool get isNotStarted => DateTime.now().millisecondsSinceEpoch < startTimeStep;
+  bool get isGlobal => regionLimit == 'Global';
   
   // 检查活动是否在有效期内
   bool get isInValidPeriod {
-    final now = DateTime.now();
-    final start = DateTime.parse(startDate);
-    final end = DateTime.parse(endDate);
-    return now.isAfter(start) && now.isBefore(end);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return now >= startTimeStep && now <= endTimeStep;
   }
 
   // 获取活动状态描述
   String get statusDescription {
     if (isExpired) return 'Expired';
-    if (!isInValidPeriod) return 'Not Started';
-    if (isClaimed) return 'Claimed';
-    if (!isEligible) return 'Not Eligible';
-    return 'Available';
+    if (isNotStarted) return 'Not Started';
+    if (isActive) return 'Active';
+    return 'Unknown';
   }
 
-  // 获取难度等级显示
-  String get difficultyDisplay {
-    switch (difficulty.toLowerCase()) {
-      case 'easy':
-        return 'Easy';
-      case 'medium':
-        return 'Medium';
-      case 'hard':
-        return 'Hard';
-      default:
-        return difficulty;
-    }
+  // 获取剩余时间（毫秒）
+  int get remainingTime {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now > endTimeStep) return 0;
+    return endTimeStep - now;
   }
 
-  // 获取分类显示
-  String get categoryDisplay {
-    switch (category.toLowerCase()) {
-      case 'challenge':
-        return 'Challenge';
-      case 'marathon':
-        return 'Marathon';
-      case 'limited':
-        return 'Limited Time';
-      default:
-        return category;
-    }
+  // 获取剩余天数
+  int get remainingDays {
+    final remainingMs = remainingTime;
+    return (remainingMs / (1000 * 60 * 60 * 24)).ceil();
+  }
+
+  // 获取活动持续时间（天）
+  int get durationDays {
+    final durationMs = endTimeStep - startTimeStep;
+    return (durationMs / (1000 * 60 * 60 * 24)).ceil();
+  }
+
+  // 检查用户是否符合地区限制
+  bool isEligibleForRegion(String userRegion) {
+    if (isGlobal) return true;
+    return regionLimit.contains(userRegion);
+  }
+
+  // 获取活动进度百分比
+  double get progressPercentage {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now < startTimeStep) return 0.0;
+    if (now > endTimeStep) return 100.0;
+    
+    final totalDuration = endTimeStep - startTimeStep;
+    final elapsed = now - startTimeStep;
+    return (elapsed / totalDuration) * 100;
   }
 } 

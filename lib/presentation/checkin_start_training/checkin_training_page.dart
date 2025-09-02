@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 import '../../widgets/floating_logo.dart';
+import '../../widgets/elegant_error_display.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/auth/auth_guard_mixin.dart';
 import '../../widgets/circle_progress_painter.dart';
 import '../../widgets/layout_bg_type.dart';
 import '../../widgets/training_portrait_layout.dart';
@@ -15,12 +18,16 @@ import '../../widgets/training_setup_dialog.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
-
 import 'package:flutter_sound/flutter_sound.dart';
 import 'dart:io' show Platform;
 
-// 新增：导入音频会话相关包（如果可用）
-// import 'package:audio_session/audio_session.dart';
+// 导入领域实体
+import '../../domain/entities/checkin_training/checkin_training_history_item.dart';
+import '../../domain/entities/checkin_training/checkin_training_result.dart';
+import '../../domain/entities/checkin_training/checkin_training_session_config.dart';
+
+// 导入 ViewModel
+import 'checkin_training_viewmodel.dart';
 
 class CheckinTrainingPage extends StatefulWidget {
   final String trainingId;
@@ -31,10 +38,8 @@ class CheckinTrainingPage extends StatefulWidget {
   State<CheckinTrainingPage> createState() => _CheckinTrainingPageState();
 }
 
-class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerProviderStateMixin, WidgetsBindingObserver {
-  Map<String, dynamic>? currentResult;
-  int totalRounds = 1;
-  int roundDuration = 60; // 单位：秒（修改为秒）
+class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerProviderStateMixin, WidgetsBindingObserver, AuthGuardMixin {
+  // 移除本地状态管理，改为从 ViewModel 获取
   int currentRound = 1;
   int countdown = 0; // 秒
   int counter = 0;
@@ -48,6 +53,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   int _lastBounceTime = 0;
   bool showResultOverlay = false;
   bool _isSetupDialogOpen = false;
+  
   // 1. 在State中添加controller
   DraggableScrollableController? _portraitController;
   DraggableScrollableController? _landscapeController;
@@ -58,46 +64,24 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   // 背景切换相关
   LayoutBgType bgType = LayoutBgType.color;
   late AnimationController _videoFadeController;
-  late VideoPlayerController _videoController;
+  
+  // 新增：动画状态管理
+  bool _isAnimating = false;
+  Timer? _animationDebounceTimer;
+  
+  // 🎯 双默认视频控制器：横屏和竖屏各一个
+  VideoPlayerController? _portraitDefaultVideoController;
+  VideoPlayerController? _landscapeDefaultVideoController;
+  
+  // 🎯 当前使用的视频控制器（可能是默认的或远程的）
+  VideoPlayerController? _videoController;
   bool _videoReady = false;
+  
   CameraController? _cameraController;
-  Future<void>? _cameraInitFuture;
   bool _cameraPermissionGranted = false; // 新增：相机权限状态
   bool _isInitializingCamera = false; // 新增：相机初始化状态
 
-  // 视频配置相关
-  String? _portraitVideoUrl; // 竖屏视频URL
-  String? _landscapeVideoUrl; // 横屏视频URL
-  bool _isLoadingVideoConfig = false; // 视频配置加载状态
-  String? _videoConfigError; // 视频配置错误
-
-  // 历史排名数据 - 从API获取
-  List<Map<String, dynamic>> history = [];
-  
-  // 历史数据加载状态
-  bool _isLoadingHistory = false;
-  String? _historyError;
-
-  // 临时结果 - 存储每个round的数据
-  // tmpResult = [
-  //   {"roundNumber": 1, "counts": 19, "date": "May 19, 2025",timestamp: 1716393600000,roundDuration: 60},
-  //   {"roundNumber": 2, "counts": 18, "date": "May 13, 2025",timestamp: 1716393600000,roundDuration: 60},
-  //   {"roundNumber": 3, "counts": 15, "date": "May 13, 2025",timestamp: 1716393600000,roundDuration: 60},
-  // ];
-  List<Map<String, dynamic>> tmpResult = [];
-  
-  // 最终结果 - 用于API请求
-  // finalResult= {
-  //   "productId": widget.productId,
-  //   "trainingId": widget.trainingId,
-  //   "totalRounds": totalRounds,
-  //   "roundDuration": roundDuration,
-  //   "date": DateTime.now().toIso8601String(),
-  //   "maxCounts": 0
-  // };
-  Map<String, dynamic> finalResult = {};
-  
-  // API请求状态
+  // 🎯 新增：提交结果状态管理
   bool _isSubmittingResult = false;
   
   // 声音检测相关 - 使用权限管理器
@@ -111,55 +95,27 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     WidgetsBinding.instance.addObserver(this);
     
     try {
-      bounceController = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 180),
-        lowerBound: 1.0,
-        upperBound: 1.18,
-      );
-      bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
-      pageController = PageController();
-      _portraitController = DraggableScrollableController();
-      _landscapeController = DraggableScrollableController();
-    
-      // 安全初始化视频控制器 - 使用默认视频，后续会根据配置更新
-      _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
-        ..setLooping(true)
-        ..setVolume(0.0)
-        ..initialize().then((_) {
-          if (mounted) {
-            setState(() {
-              _videoReady = true;
-            });
-            _videoController.play();
-          }
-        }).catchError((e) {
-          print('❌ Video initialization error: $e');
-        });
-        
-      _videoFadeController = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 500),
-        value: 1.0,
-      );
-      
-      // 初始化finalResult
-      finalResult = {
-        "productId": widget.productId,
-        "trainingId": widget.trainingId,
-        "totalRounds": totalRounds,
-        "roundDuration": roundDuration,
-        "timestamp": DateTime.now().millisecondsSinceEpoch,
-        "maxCounts": 0
-      };
-      
-      // 🎯 初始化权限管理器
+      _initializeControllers();
+      _initializeVideoController();
       _initializePermissionManager();
       
-      // 🎯 加载历史训练数据和视频配置（不依赖权限，优先加载）
+      // 加载历史训练数据和视频配置
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (mounted) {
-          await _loadTrainingDataAndVideoConfig();
+          // 通过 ViewModel 加载数据
+          final viewModel = context.read<CheckinTrainingViewModel>();
+          
+          // 检查是否有缓存数据，如果有则取消清理定时器
+          if (viewModel.hasCachedData) {
+            viewModel.cancelCleanup();
+          } else {
+            // 加载训练数据
+            await viewModel.loadTrainingDataAndVideoConfig(
+              widget.trainingId,
+              productId: widget.productId,
+              limit: 20,
+            );
+          }
         }
       });
       
@@ -172,50 +128,87 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     }
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final orientation = MediaQuery.of(context).orientation;
-    if (orientation == Orientation.portrait && _portraitController == null) {
-      _portraitController = DraggableScrollableController();
-    }
-    if (orientation == Orientation.landscape && _landscapeController == null) {
-      _landscapeController = DraggableScrollableController();
-    }
+  /// 初始化所有控制器
+  void _initializeControllers() {
+    bounceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+      lowerBound: 1.0,
+      upperBound: 1.18,
+    );
+    bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
+    pageController = PageController();
+    _portraitController = DraggableScrollableController();
+    _landscapeController = DraggableScrollableController();
     
-    // 监听屏幕方向变化，重新初始化视频
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _videoReady && !_isLoadingVideoConfig) {
-        _onOrientationChanged();
-      }
-    });
+    _videoFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+      value: 1.0,
+    );
   }
 
-  @override
-  void dispose() {
-    // 🎯 Apple-level Resource Cleanup
-    // 立即停止所有动画和定时器
-    _stopAllAnimationsAndTimers();
+  /// 🎯 初始化双默认视频控制器
+  void _initializeVideoController() {
+    // 🎯 初始化竖屏默认视频控制器
+    _portraitDefaultVideoController = VideoPlayerController.asset('assets/video/video1.mp4')
+      ..setLooping(true)
+      ..setVolume(0.0);
     
-    // 🎯 移除应用生命周期监听
-    WidgetsBinding.instance.removeObserver(this);
+    _portraitDefaultVideoController!.initialize().then((_) {
+      if (mounted) {
+        print('✅ Portrait default video controller initialized');
+        _setDefaultVideoController();
+      }
+    }).catchError((e) {
+      print('❌ Portrait default video initialization error: $e');
+    });
     
-    // 🎯 清理权限管理器
-    _permissionManager?.dispose();
-    _permissionManager = null;
+    // 🎯 初始化横屏默认视频控制器
+    _landscapeDefaultVideoController = VideoPlayerController.asset('assets/video/video2.mp4')
+      ..setLooping(true)
+      ..setVolume(0.0);
     
-    // 释放所有控制器资源
-    bounceController.dispose();
-    pageController.dispose();
-    _portraitController?.dispose();
-    _landscapeController?.dispose();
-    _videoController.dispose();
-    _videoFadeController.dispose();
-    _cameraController?.stopImageStream();
-    _cameraController?.dispose();
+    _landscapeDefaultVideoController!.initialize().then((_) {
+      if (mounted) {
+        print('✅ Landscape default video controller initialized');
+        _setDefaultVideoController();
+      }
+    }).catchError((e) {
+      print('❌ Landscape default video initialization error: $e');
+    });
+  }
+  
+  /// 🎯 根据当前屏幕方向设置默认视频控制器
+  void _setDefaultVideoController() {
+    if (!mounted) return;
     
-    print('🎯 All resources cleaned up successfully');
-    super.dispose();
+    final orientation = MediaQuery.of(context).orientation;
+    // 🎯 直接获取目标控制器引用，不创建额外变量
+    final targetController = orientation == Orientation.portrait 
+        ? _portraitDefaultVideoController 
+        : _landscapeDefaultVideoController;
+    
+    // 只有当目标控制器已初始化且与当前控制器不同时才切换
+    if (targetController != null && 
+        targetController.value.isInitialized && 
+        _videoController != targetController) {
+      
+      // 停止当前视频
+      if (_videoController?.value.isPlaying == true) {
+        _videoController!.pause();
+      }
+      
+      // 切换到默认视频控制器
+      _videoController = targetController;
+      _videoReady = true;
+      
+      // 开始播放
+      _videoController!.play();
+      
+      print('🎯 Switched to ${orientation == Orientation.portrait ? 'portrait' : 'landscape'} default video');
+      setState(() {});
+    }
   }
 
   /// 🎯 初始化权限管理器
@@ -273,6 +266,111 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final orientation = MediaQuery.of(context).orientation;
+    if (orientation == Orientation.portrait && _portraitController == null) {
+      _portraitController = DraggableScrollableController();
+    }
+    if (orientation == Orientation.landscape && _landscapeController == null) {
+      _landscapeController = DraggableScrollableController();
+    }
+    
+    // 监听屏幕方向变化，重新初始化视频
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _videoReady) {
+        _onOrientationChanged();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // 🎯 Apple-level Resource Cleanup
+    // 立即停止所有动画和定时器
+    _stopAllAnimationsAndTimers();
+    
+    // 🎯 移除应用生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
+    
+    // 🎯 清理权限管理器
+    _permissionManager?.dispose();
+    _permissionManager = null;
+    
+    // 🎯 释放所有控制器资源
+    bounceController.dispose();
+    pageController.dispose();
+    _portraitController?.dispose();
+    _landscapeController?.dispose();
+    _videoFadeController.dispose();
+    _cameraController?.stopImageStream();
+    _cameraController?.dispose();
+    
+        // 🎯 释放视频控制器资源
+    _disposeVideoControllers();
+    
+    // 智能延迟清理：延迟清理数据以提升用户体验
+    try {
+      if (mounted) {
+        final viewModel = context.read<CheckinTrainingViewModel>();
+        viewModel.scheduleCleanup();
+      }
+    } catch (e) {
+      print('Warning: Error scheduling ViewModel cleanup: $e');
+    }
+    
+    print('🎯 All resources cleaned up successfully');
+    super.dispose();
+  }
+  
+
+  
+  /// 🎯 释放所有视频控制器资源
+  void _disposeVideoControllers() {
+    try {
+      // 停止当前视频控制器
+      if (_videoController?.value.isPlaying == true) {
+        _videoController!.pause();
+      }
+      
+      // 释放当前视频控制器（如果不是默认控制器）
+      if (_videoController != null && 
+          _videoController != _portraitDefaultVideoController && 
+          _videoController != _landscapeDefaultVideoController) {
+        _videoController!.dispose();
+        _videoController = null;
+      }
+      
+      // 🎯 释放竖屏默认视频控制器
+      if (_portraitDefaultVideoController != null) {
+        if (_portraitDefaultVideoController!.value.isPlaying) {
+          _portraitDefaultVideoController!.pause();
+        }
+        _portraitDefaultVideoController!.dispose();
+        _portraitDefaultVideoController = null;
+        print('🎯 Portrait default video controller disposed');
+      }
+      
+      // 🎯 释放横屏默认视频控制器
+      if (_landscapeDefaultVideoController != null) {
+        if (_landscapeDefaultVideoController!.value.isPlaying) {
+          _landscapeDefaultVideoController!.pause();
+        }
+        _landscapeDefaultVideoController!.dispose();
+        _landscapeDefaultVideoController = null;
+        print('🎯 Landscape default video controller disposed');
+      }
+      
+      // 🎯 重置视频状态
+      _videoReady = false;
+      
+      print('🎯 All video controllers disposed successfully');
+    } catch (e) {
+      print('❌ Error disposing video controllers: $e');
+    }
+  }
+
   /// 🎯 新增：应用生命周期状态变化处理
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -298,15 +396,23 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     _isAnimating = false;
     
     // 停止视频播放
-    if (_videoController.value.isPlaying) {
-      _videoController.pause();
+    if (_videoController?.value.isPlaying == true) {
+      _videoController!.pause();
     }
     
-    // 停止相机流
-    try {
-      _cameraController?.stopImageStream();
-    } catch (e) {
-      // 忽略相机停止错误
+    // 🎯 停止相机流并释放资源
+    if (_cameraController != null) {
+      try {
+        if (_cameraController!.value.isInitialized) {
+          _cameraController!.stopImageStream();
+        }
+        _cameraController!.dispose();
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+        _isInitializingCamera = false;
+      } catch (e) {
+        print('Warning: Error disposing camera controller: $e');
+      }
     }
     
     // 停止音频检测
@@ -329,7 +435,16 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       showPreCountdown = false;
     });
     
-    print('🎯 Training reset completed with stream audio detection cleanup');
+    // 🎯 关键修复：重置PageController回到第一页，确保ROUND显示正确
+    if (pageController.hasClients) {
+      pageController.animateToPage(
+        0, // 回到第一页
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+    
+    print('🎯 Training reset completed with stream audio detection cleanup and page reset');
     _startPreCountdown();
   }
 
@@ -359,10 +474,22 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     });
 
     try {
+      // 🎯 先释放旧的相机控制器，防止内存泄漏
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing old camera controller: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
+
       // 检查可用相机
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        _showCameraErrorDialog('No cameras available on this device.');
+        _showCameraErrorDialog();
         return false;
       }
 
@@ -382,32 +509,48 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 初始化相机（这会触发iOS权限弹窗）
       await _cameraController!.initialize();
       
-      // 启动图像流以保持相机活跃
+      // 🎯 启动图像流以保持相机活跃
       await _cameraController!.startImageStream((image) {
-        // 保持摄像头活跃
+        // 保持摄像头活跃，但不处理图像数据
       });
 
-      setState(() {
-        _cameraPermissionGranted = true;
-        _isInitializingCamera = false;
-      });
+      if (mounted) {
+        setState(() {
+          _cameraPermissionGranted = true;
+          _isInitializingCamera = false;
+        });
+      }
 
       return true;
     } catch (e) {
       print('iOS Camera initialization error: $e');
-      setState(() {
-        _isInitializingCamera = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isInitializingCamera = false;
+        });
+      }
+      
+      // 🎯 出错时清理相机控制器
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing camera controller after error: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
       
       if (e.toString().contains('permission')) {
         _showCameraPermissionDeniedDialog();
       } else {
-        _showCameraErrorDialog('Failed to initialize camera. Please try again.');
+        _showCameraErrorDialog();
       }
       
-          return false;
-        }
-      }
+      return false;
+    }
+  }
 
   /// 🍎 Apple-level Android Camera Permission Request
   Future<bool> _requestCameraPermissionForAndroid() async {
@@ -419,15 +562,29 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       return false; // 正在初始化中，避免重复请求
     }
 
-    setState(() {
-      _isInitializingCamera = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isInitializingCamera = true;
+      });
+    }
 
     try {
+      // 🎯 先释放旧的相机控制器，防止内存泄漏
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing old camera controller: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
+
       // 检查可用相机
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        _showCameraErrorDialog('No cameras available on this device.');
+        _showCameraErrorDialog();
         return false;
       }
 
@@ -447,28 +604,44 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 初始化相机（这会触发权限请求）
       await _cameraController!.initialize();
       
-      // 启动图像流以保持相机活跃
+      // 🎯 启动图像流以保持相机活跃
       await _cameraController!.startImageStream((image) {
-        // 保持摄像头活跃
+        // 保持摄像头活跃，但不处理图像数据
       });
 
-      setState(() {
-        _cameraPermissionGranted = true;
-        _isInitializingCamera = false;
-      });
+      if (mounted) {
+        setState(() {
+          _cameraPermissionGranted = true;
+          _isInitializingCamera = false;
+        });
+      }
 
-    return true;
+      return true;
     } catch (e) {
       print('Camera initialization error: $e');
-      setState(() {
-        _isInitializingCamera = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isInitializingCamera = false;
+        });
+      }
+      
+      // 🎯 出错时清理相机控制器
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing camera controller after error: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
       
       // 根据错误类型显示不同的提示
       if (e.toString().contains('permission')) {
         _showCameraPermissionDeniedDialog();
       } else {
-        _showCameraErrorDialog('Failed to initialize camera. Please try again.');
+        _showCameraErrorDialog();
       }
       
       return false;
@@ -502,16 +675,25 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   // 新增：显示相机错误对话框
-  void _showCameraErrorDialog(String message) {
+  void _showCameraErrorDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Camera Error'),
-        content: Text(message),
+        title: Text('Camera Permission Required'),
+        content: Text(
+          'To use the selfie background feature, please grant camera permission in your device settings.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // 可以在这里添加跳转到设置页面的逻辑
+            },
+            child: Text('Open Settings'),
           ),
         ],
       ),
@@ -519,13 +701,17 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   }
 
   void _showSetupDialog() async {
-    setState(() {
-      _isSetupDialogOpen = true;
-    });
+    final viewModel = context.read<CheckinTrainingViewModel>();
+    
+    if (mounted) {
+      setState(() {
+        _isSetupDialogOpen = true;
+      });
+    }
     
     final config = TrainingSetupConfig(
-      initialRounds: totalRounds,
-      initialRoundDuration: roundDuration,
+      initialRounds: viewModel.totalRounds,
+      initialRoundDuration: viewModel.roundDuration,
       maxRounds: 10,
       maxMinutes: 60,
       maxSeconds: 59,
@@ -538,35 +724,45 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       context,
       config: config,
       onClose: () {
-                setState(() {
-                  _isSetupDialogOpen = false;
-                });
+        if (mounted) {
+          setState(() {
+            _isSetupDialogOpen = false;
+          });
+        }
       },
     );
     
-    if (result != null) {
-                            setState(() {
-        totalRounds = result.rounds;
-        roundDuration = result.roundDuration;
-                              currentRound = 1;
-        countdown = roundDuration;
-                              _isSetupDialogOpen = false;
-                            });
-    } else {
-    setState(() {
-      _isSetupDialogOpen = false;
-    });
+    if (mounted && result != null) {
+      // 通过 ViewModel 更新训练配置
+      viewModel.updateTrainingConfig(
+        totalRounds: result.rounds,
+        roundDuration: result.roundDuration,
+      );
+      
+      setState(() {
+        currentRound = 1;
+        countdown = result.roundDuration;
+        _isSetupDialogOpen = false;
+      });
+    } else if (mounted) {
+      setState(() {
+        _isSetupDialogOpen = false;
+      });
     }
   }
 
   void _showSetupDialogLandscape() async {
-    setState(() {
-      _isSetupDialogOpen = true;
-    });
+    final viewModel = context.read<CheckinTrainingViewModel>();
+    
+    if (mounted) {
+      setState(() {
+        _isSetupDialogOpen = true;
+      });
+    }
     
     final config = TrainingSetupConfig(
-      initialRounds: totalRounds,
-      initialRoundDuration: roundDuration,
+      initialRounds: viewModel.totalRounds,
+      initialRoundDuration: viewModel.roundDuration,
       maxRounds: 10,
       maxMinutes: 60,
       maxSeconds: 59,
@@ -579,64 +775,80 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       context,
       config: config,
       onClose: () {
-                setState(() {
-                  _isSetupDialogOpen = false;
-                });
+        if (mounted) {
+          setState(() {
+            _isSetupDialogOpen = false;
+          });
+        }
       },
       showResultOverlay: showResultOverlay,
     );
     
-    if (result != null) {
-                                      setState(() {
-        totalRounds = result.rounds;
-        roundDuration = result.roundDuration;
-                                        currentRound = 1;
-        countdown = roundDuration;
-                                        _isSetupDialogOpen = false;
-                                      });
-    } else {
-    setState(() {
-      _isSetupDialogOpen = false;
-    });
+    if (mounted && result != null) {
+      // 通过 ViewModel 更新训练配置
+      viewModel.updateTrainingConfig(
+        totalRounds: result.rounds,
+        roundDuration: result.roundDuration,
+      );
+      
+      setState(() {
+        currentRound = 1;
+        countdown = result.roundDuration;
+        _isSetupDialogOpen = false;
+      });
+    } else if (mounted) {
+      setState(() {
+        _isSetupDialogOpen = false;
+      });
     }
   }
 
-
-
   void _startPreCountdown() {
+    final viewModel = context.read<CheckinTrainingViewModel>();
+    
     // 取消之前的Timer（如果存在）
     _preCountdownTimer?.cancel();
     
-    countdown = roundDuration;
+    countdown = viewModel.roundDuration;
     setState(() {
       showPreCountdown = true;
       preCountdown = 3;
     });
     _preCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        _preCountdownTimer = null;
+        return;
+      }
+      
       if (preCountdown > 1) {
         setState(() => preCountdown--);
       } else {
         timer.cancel();
         _preCountdownTimer = null; // 清空引用
-        setState(() {
-          showPreCountdown = false;
-        });
-        _startRound();
+        if (mounted) {
+          setState(() {
+            showPreCountdown = false;
+          });
+          _startRound();
+        }
       }
     });
   }
 
   void _startRound() {
+    final viewModel = context.read<CheckinTrainingViewModel>();
+    
     setState(() {
       isStarted = true;
       isCounting = true;
-      countdown = roundDuration; // 直接使用秒，不需要乘以60
+      countdown = viewModel.roundDuration;
       counter = 0;
     });
     
-    // 如果是第一个round，初始化tmpResult
+    // 🎯 如果是第一个round，初始化tmpResult
     if (currentRound == 1) {
-      tmpResult.clear();
+      viewModel.clearTmpResult();
     }
     
     // 🎯 Apple-level Audio Detection Integration
@@ -652,55 +864,23 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
   // 立即显示训练结果（排名为null，等待API返回）
   Future<void> _showImmediateResult() async {
-    // 找出最大counts的round
-    int maxCounts = 0;
-    for (var round in tmpResult) {
-      if (round["counts"] > maxCounts) {
-        maxCounts = round["counts"];
-      }
-    }
+    final viewModel = context.read<CheckinTrainingViewModel>();
     
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
+    // 🎯 使用ViewModel中的方法获取最大counts
+    final maxCounts = viewModel.getMaxCountsFromTmpResult();
+    // 🎯 将最大counts按一分钟标准化：counts_per_min = counts * 60 / roundDuration（保留两位小数）
+    final int roundDuration = viewModel.roundDuration;
+    final double normalizedCountsPerMinute = roundDuration > 0
+        ? double.parse(((maxCounts * 60) / roundDuration).toStringAsFixed(2))
+        : 0.0;
     
-    // 清空所有note
-    for (var e in history) {
-      e["note"] = "";
-    }
-    
-    // 立即添加结果到history，rank为null表示正在加载
-    final result = {
-      "rank": null, // 暂时为null，等待API返回
-      "date": dateStr,
-      "counts": maxCounts,
-      "note": "current",
-      "totalRounds": totalRounds,
-      "roundDuration": roundDuration,
-      "id": "temp_${DateTime.now().millisecondsSinceEpoch}", // 临时ID
-      "trainingId": widget.trainingId,
-      "productId": widget.productId,
-    };
-    
-    history.insert(0, result);
-    
-    // 排序并赋rank（除了当前结果）
-    history.sort((a, b) => b["counts"].compareTo(a["counts"]));
-    for (int i = 0; i < history.length; i++) {
-      if (history[i]["rank"] != null) { // 只更新非当前结果的rank
-        history[i]["rank"] = i + 1;
-      }
-    }
-    
-    // 把当前结果移到首位
-    final idx = history.indexWhere((e) => e["note"] == "current");
-    if (idx > 0) {
-      final current = history.removeAt(idx);
-      history.insert(0, current);
-    }
+    // 🎯 关键修改：不提交到后端，而是创建临时记录插入到历史数据的第一位
+    viewModel.createTemporaryCurrentTrainingRecord(
+      trainingId: widget.trainingId,
+      productId: widget.productId,
+      countsPerMin: normalizedCountsPerMinute,
+      maxCounts: maxCounts,
+    );
     
     setState(() {
       showResultOverlay = true;
@@ -709,355 +889,236 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     
     // 自动收起榜单
     Future.delayed(Duration(milliseconds: 50), () {
-      final orientation = MediaQuery.of(context).orientation;
-      final targetSize = orientation == Orientation.landscape ? 1.0 : 0.12;
-      final controller = orientation == Orientation.portrait ? _portraitController : _landscapeController;
-      controller?.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+      if (mounted) {
+        final orientation = MediaQuery.of(context).orientation;
+        final targetSize = orientation == Orientation.landscape ? 1.0 : 0.12;
+        final controller = orientation == Orientation.portrait ? _portraitController : _landscapeController;
+        controller?.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+      }
     });
   }
 
   // 添加round结果到临时结果列表
   void _addRoundToTmpResult(int counts) {
-    final now = DateTime.now();
+    final viewModel = context.read<CheckinTrainingViewModel>();
     
-    final roundResult = {
-      "roundNumber": currentRound,
-      "counts": counts,
-      "timestamp": now.millisecondsSinceEpoch,
-      "roundDuration": roundDuration,
-    };
-    
-    tmpResult.add(roundResult);
-    print('Added round $currentRound result: $counts counts to tmpResult');
+    // 🎯 使用ViewModel中的方法添加round结果
+    viewModel.addRoundToTmpResult(currentRound, counts);
   }
 
   // 清理临时结果数据
   void _clearTmpResult() {
-    tmpResult.clear();
-    print('Cleared tmpResult after final submission');
+    final viewModel = context.read<CheckinTrainingViewModel>();
+    
+    // 🎯 使用ViewModel中的方法清理临时结果
+    viewModel.clearTmpResult();
   }
-
-  // 获取历史训练数据和视频配置
-  Future<void> _loadTrainingDataAndVideoConfig() async {
-    if (_isLoadingHistory || _isLoadingVideoConfig) return; // 防止重复请求
-    
-    setState(() {
-      _isLoadingHistory = true;
-      _isLoadingVideoConfig = true;
-      _historyError = null;
-      _videoConfigError = null;
-    });
-
-    try {
-      print('🔄 Loading training data and video config for trainingId: ${widget.trainingId}, productId: ${widget.productId}');
-      
-      // 模拟API请求延迟
-      await Future.delayed(Duration(milliseconds: 800));
-      
-      // 模拟API返回的历史数据和视频配置
-      final apiResponse = await _getTrainingDataAndVideoConfigApi();
-      
-      if (mounted) {
-        setState(() {
-          history = apiResponse['history'];
-          _portraitVideoUrl = apiResponse['videoConfig']['portraitUrl'];
-          _landscapeVideoUrl = apiResponse['videoConfig']['landscapeUrl'];
-          _isLoadingHistory = false;
-          _isLoadingVideoConfig = false;
-        });
-        
-        // 根据当前屏幕方向初始化视频
-        await _initializeVideoBasedOnOrientation();
-        
-        print('✅ Training data and video config loaded successfully: ${history.length} records');
-      }
-    } catch (e) {
-      print('❌ Error loading training data and video config: $e');
-      if (mounted) {
-        setState(() {
-          _historyError = e.toString();
-          _videoConfigError = e.toString();
-          _isLoadingHistory = false;
-          _isLoadingVideoConfig = false;
-        });
-        
-        // 使用默认视频配置
-        await _initializeDefaultVideo();
-      }
-    }
-  }
-
-
-
-  // 模拟获取历史数据和视频配置的API请求
-  Future<Map<String, dynamic>> _getTrainingDataAndVideoConfigApi() async {
-    // 模拟网络请求
-    await Future.delayed(Duration(milliseconds: 500));
-    
-    // 根据trainingId和productId返回不同的模拟数据
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    
-    // 模拟历史数据
-    final mockHistoryData = [
-      {
-        "id": "662553355",
-        "rank": 1,
-        "timestamp": now.subtract(Duration(days: 2)).millisecondsSinceEpoch,
-        "counts": 25,
-        "note": "",
-      },
-      {
-        "id": "662553356",
-        "rank": 2,
-        "timestamp": now.subtract(Duration(days: 5)).millisecondsSinceEpoch,
-        "counts": 22,
-        "note": "",
-      },
-      {
-        "id": "662553357",
-        "rank": 3,
-        "timestamp": now.subtract(Duration(days: 8)).millisecondsSinceEpoch,
-        "counts": 19,
-        "note": "",
-      },
-      {
-        "id": "662553358",
-        "rank": 4,
-        "timestamp": now.subtract(Duration(days: 12)).millisecondsSinceEpoch,
-        "counts": 18,
-        "note": "",
-      },
-      {
-        "id": "662553359",
-        "rank": 5,
-        "timestamp": now.subtract(Duration(days: 15)).millisecondsSinceEpoch,
-        "counts": 16,
-        "note": "",
-      },
-    ];
-    
-    // 模拟视频配置数据
-    final mockVideoConfig = {
-      "portraitUrl": "https://example.com/videos/training_portrait.mp4", // 远程竖屏视频URL
-      "landscapeUrl": "https://example.com/videos/training_landscape.mp4", // 远程横屏视频URL
-    };
-    
-    // 转换为UI显示格式
-    final historyData = mockHistoryData.map((item) {
-      final date = DateTime.fromMillisecondsSinceEpoch(item["timestamp"] as int);
-      final dateStr = "${months[date.month - 1]} ${date.day}, ${date.year}";
-      
-      return {
-        "rank": item["rank"],
-        "date": dateStr,
-        "counts": item["counts"],
-        "note": item["note"],
-        "id": item["id"],
-      };
-    }).toList();
-    
-    // 返回历史数据和视频配置
-    return {
-      "history": historyData,
-      "videoConfig": mockVideoConfig,
-    };
-  }
-
-
 
   // 刷新历史数据
   Future<void> _refreshHistory() async {
-    if (_isLoadingHistory) return;
-    await _loadTrainingDataAndVideoConfig();
+    final viewModel = context.read<CheckinTrainingViewModel>();
+    
+    // 重新加载训练数据
+    await viewModel.loadTrainingDataAndVideoConfig(
+      widget.trainingId,
+      productId: widget.productId,
+      limit: 20,
+    );
   }
 
-  // 根据屏幕方向初始化视频
+  /// 🎯 根据屏幕方向初始化视频 - 先播放默认视频，异步加载远程视频
   Future<void> _initializeVideoBasedOnOrientation() async {
     try {
       final orientation = MediaQuery.of(context).orientation;
+      final viewModel = context.read<CheckinTrainingViewModel>();
       String? videoUrl;
       
       if (orientation == Orientation.portrait) {
-        videoUrl = _portraitVideoUrl;
+        videoUrl = viewModel.portraitVideoUrl;
         print('📱 Using portrait video URL: $videoUrl');
       } else {
-        videoUrl = _landscapeVideoUrl;
+        videoUrl = viewModel.landscapeVideoUrl;
         print('🖥️ Using landscape video URL: $videoUrl');
       }
       
-      // 如果远程URL可用，尝试使用远程视频
+      // 🎯 先确保默认视频正在播放
+      _setDefaultVideoController();
+      
+      // 🎯 如果远程URL可用，异步尝试加载远程视频
       if (videoUrl != null && videoUrl.isNotEmpty && videoUrl != 'null') {
-        await _initializeRemoteVideo(videoUrl);
+        print('🌐 Starting async remote video loading: $videoUrl');
+        _initializeRemoteVideoAsync(videoUrl);
       } else {
-        // 使用默认本地视频
-        await _initializeDefaultVideo();
+        print('📁 No remote video URL, keeping default video');
       }
     } catch (e) {
       print('❌ Error initializing video based on orientation: $e');
-      await _initializeDefaultVideo();
+      // 出错时确保默认视频播放
+      _setDefaultVideoController();
     }
   }
 
-  // 初始化远程视频
-  Future<void> _initializeRemoteVideo(String videoUrl) async {
+  /// 🎯 异步初始化远程视频 - 不阻塞默认视频播放
+  void _initializeRemoteVideoAsync(String videoUrl) async {
+    VideoPlayerController? remoteController;
+    
     try {
-      print('🌐 Initializing remote video: $videoUrl');
-      
-      // 停止当前视频
-      if (_videoController.value.isPlaying) {
-        await _videoController.pause();
-      }
-      
-      // 释放当前控制器
-      await _videoController.dispose();
+      print('🌐 Starting async remote video initialization: $videoUrl');
       
       // 创建新的远程视频控制器
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
+      remoteController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
         ..setLooping(true)
         ..setVolume(0.0);
       
-      // 初始化远程视频
-      await _videoController.initialize();
+      // 异步初始化远程视频
+      await remoteController.initialize();
       
       if (mounted) {
-    setState(() {
-          _videoReady = true;
-        });
-        _videoController.play();
-        print('✅ Remote video initialized successfully');
+        print('✅ Remote video initialized successfully, switching from default video');
+        
+        // 停止默认视频
+        if (_videoController?.value.isPlaying == true) {
+          _videoController!.pause();
+        }
+        
+        // 切换到远程视频
+        _videoController = remoteController;
+        _videoReady = true;
+        
+        // 开始播放远程视频
+        _videoController!.play();
+        
+        setState(() {});
+        print('🎯 Successfully switched to remote video');
+        
+        // 🎯 重要：将 remoteController 设为 null，避免重复释放
+        remoteController = null;
+      } else {
+        // 组件已销毁，释放远程视频控制器
+        _disposeController(remoteController);
       }
     } catch (e) {
       print('❌ Error initializing remote video: $e');
-      // 远程视频失败，回退到默认视频
-      await _initializeDefaultVideo();
+      // 远程视频失败，保持默认视频播放
+      print('🔄 Keeping default video due to remote video failure');
+      
+      // 🎯 确保释放失败的远程视频控制器
+      if (remoteController != null) {
+        _disposeController(remoteController);
+      }
+    }
+  }
+  
+  /// 🎯 安全释放视频控制器
+  void _disposeController(VideoPlayerController? controller) {
+    if (controller == null) return;
+    
+    try {
+      if (controller.value.isPlaying) {
+        controller.pause();
+      }
+      controller.dispose();
+      print('🎯 Video controller disposed successfully');
+    } catch (e) {
+      print('❌ Error disposing failed video controller: $e');
     }
   }
 
-  // 初始化默认本地视频
+  /// 🎯 初始化默认本地视频 - 使用预加载的默认视频控制器
   Future<void> _initializeDefaultVideo() async {
     try {
-      print('📁 Initializing default local video');
+      print('📁 Switching to default video');
       
-      final orientation = MediaQuery.of(context).orientation;
-      String defaultVideoPath;
-      
-      if (orientation == Orientation.portrait) {
-        defaultVideoPath = 'assets/video/video1.mp4'; // 竖屏默认视频
-        print('📱 Using default portrait video: $defaultVideoPath');
-      } else {
-        defaultVideoPath = 'assets/video/video2.mp4'; // 横屏默认视频
-        print('🖥️ Using default landscape video: $defaultVideoPath');
-      }
-      
-      // 停止当前视频
-      if (_videoController.value.isPlaying) {
-        await _videoController.pause();
-      }
-      
-      // 释放当前控制器
-      await _videoController.dispose();
-      
-      // 创建新的本地视频控制器
-      _videoController = VideoPlayerController.asset(defaultVideoPath)
-        ..setLooping(true)
-        ..setVolume(0.0);
-      
-      // 初始化本地视频
-      await _videoController.initialize();
+      // 🎯 直接使用预加载的默认视频控制器
+      _setDefaultVideoController();
       
       if (mounted) {
-        setState(() {
-          _videoReady = true;
-        });
-        _videoController.play();
-        print('✅ Default local video initialized successfully');
+        setState(() {});
+        print('✅ Default video activated successfully');
       }
     } catch (e) {
-      print('❌ Error initializing default video: $e');
-      // 如果连默认视频都失败，尝试使用video1.mp4作为最后的回退
-      try {
-        await _videoController.dispose();
-        _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
-          ..setLooping(true)
-          ..setVolume(0.0);
-        await _videoController.initialize();
-        if (mounted) {
-          setState(() {
-            _videoReady = true;
-          });
-          _videoController.play();
-          print('✅ Fallback video initialized successfully');
-        }
-      } catch (fallbackError) {
-        print('❌ Error initializing fallback video: $fallbackError');
-      }
-    }
-  }
-
-  // 屏幕方向改变时重新初始化视频
-  void _onOrientationChanged() {
-    if (_videoReady) {
-      _initializeVideoBasedOnOrientation();
-    }
-  }
-
-
-
-  // 提交最终结果到后端
-  Future<void> _submitFinalResult() async {
-    if (_isSubmittingResult) return; // 防止重复提交
-    
-    setState(() {
-      _isSubmittingResult = true;
-    });
-
-    try {
-      // 找出最大counts的round
-      int maxCounts = 0;
-      
-      for (var round in tmpResult) {
-        if (round["counts"] > maxCounts) {
-          maxCounts = round["counts"];
-        }
-      }
-      
-      // 更新finalResult
-      finalResult["productId"] = widget.productId;
-      finalResult["trainingId"] = widget.trainingId;
-      finalResult["totalRounds"] = totalRounds;
-      finalResult["roundDuration"] = roundDuration;
-      finalResult["maxCounts"] = maxCounts;
-      finalResult["timestamp"] = DateTime.now().millisecondsSinceEpoch;
-      
-      print('Submitting final result: $finalResult');
-      
-      // 模拟API请求
-      final apiResult = await _submitTrainingResult(finalResult);
-      
+      print('❌ Error activating default video: $e');
+      // 出错时尝试重新设置默认视频
       if (mounted) {
-        setState(() {
-          // 更新当前结果的rank和ID
-          final currentIdx = history.indexWhere((e) => e["note"] == "current");
-          if (currentIdx >= 0) {
-            history[currentIdx]["rank"] = apiResult["rank"];
-            history[currentIdx]["id"] = apiResult["id"]; // 更新为真实的ID
-          }
-          
-          _isSubmittingResult = false;
-        });
+        _setDefaultVideoController();
+      }
+    }
+  }
+
+  /// 🎯 屏幕方向改变时重新初始化视频
+  void _onOrientationChanged() {
+    // 🎯 检查当前是否在播放远程视频
+    final isPlayingRemoteVideo = _videoController != _portraitDefaultVideoController && 
+                                 _videoController != _landscapeDefaultVideoController;
+    
+    if (isPlayingRemoteVideo) {
+      print('🎯 Currently playing remote video, not switching to default video');
+      // 🎯 如果正在播放远程视频，只尝试加载对应方向的远程视频
+      if (mounted) {
+        _initializeVideoBasedOnOrientation();
+      }
+    } else {
+      // 🎯 如果播放的是默认视频，先切换到对应方向的默认视频
+      _setDefaultVideoController();
+      
+      // 🎯 然后异步加载远程视频（如果可用）
+      if (mounted) {
+        _initializeVideoBasedOnOrientation();
+      }
+    }
+  }
+
+  /// 提交最终结果到后端
+  Future<void> _submitFinalResult() async {
+    if (_isSubmittingResult) return;
+    
+    try {
+      setState(() {
+        _isSubmittingResult = true;
+      });
+
+      final viewModel = context.read<CheckinTrainingViewModel>();
+      
+      // 🎯 使用ViewModel中的方法获取最大counts
+      final maxCounts = viewModel.getMaxCountsFromTmpResult();
+      // 🎯 将最大counts按一分钟标准化：counts_per_min = counts * 60 / roundDuration（保留两位小数）
+      final int roundDuration = viewModel.roundDuration;
+      final double normalizedCountsPerMinute = roundDuration > 0
+          ? double.parse(((maxCounts * 60) / roundDuration).toStringAsFixed(2))
+          : 0.0;
+      
+      // 创建训练结果实体
+      final trainingResult = CheckinTrainingResult.create(
+        trainingId: widget.trainingId,
+        productId: widget.productId,
+        countsPerMin: normalizedCountsPerMinute,
+        totalSeconds: viewModel.totalRounds * viewModel.roundDuration,
+        counts: maxCounts,
+      );
+      
+      print('Submitting training result: $trainingResult');
+      
+      // 🎯 关键修改：使用返回的提交结果，而不是重新请求历史数据
+      final response = await viewModel.submitTrainingResult(trainingResult);
+      
+      if (mounted && response != null) {
+        // ✅ 提交成功，数据已经在ViewModel中更新，无需重新请求
+        print('✅ Training result submitted successfully with rank: ${response.rank}');
         
         // 清理临时结果数据
         _clearTmpResult();
         
-        // 可选：重新加载历史数据以确保数据一致性
-        // await _loadTrainingDataAndVideoConfig();
+        // 🎯 不再需要调用refreshHistory，因为数据已经在ViewModel中更新
+        // await viewModel.refreshHistory(widget.trainingId, productId: widget.productId);
       }
     } catch (e) {
       print('Error submitting result: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit result: $e')),
+        );
+      }
+    } finally {
       if (mounted) {
         setState(() {
           _isSubmittingResult = false;
@@ -1066,33 +1127,18 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     }
   }
 
-  // 模拟API请求
-  Future<Map<String, dynamic>> _submitTrainingResult(Map<String, dynamic> result) async {
-    // 模拟网络延迟
-    await Future.delayed(Duration(milliseconds: 1500));
-
-    // 模拟进行API请求，返回结果
-    final apiRespondData =  {
-      "id": "662553355",
-      "rank": 1, // 这里应该是从后端返回的实际排名
-      "totalRounds": result["totalRounds"],
-      "roundDuration": result["roundDuration"],
-    };
-    
-    // 模拟返回的排名数据
-    return apiRespondData;
-  }
-
   // 🎯 Apple-level Enhanced Countdown with Audio Detection
   void _tick() async {
-    if (!isCounting) return;
+    if (!isCounting || !mounted) return;
     if (countdown > 0) {
       await Future.delayed(const Duration(seconds: 1));
       if (!mounted) return;
       setState(() {
         countdown--;
       });
-      _tick();
+      if (mounted) {
+        _tick();
+      }
     } else {
       if (!mounted) return;
       
@@ -1102,12 +1148,17 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       // 当前round结束，记录结果到tmpResult
       _addRoundToTmpResult(counter);
       
-      if (currentRound < totalRounds) {
+      final viewModel = context.read<CheckinTrainingViewModel>();
+      if (currentRound < viewModel.totalRounds) {
         setState(() {
           currentRound++;
         });
         pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
-        Future.delayed(const Duration(milliseconds: 600), _startPreCountdown);
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted) {
+            _startPreCountdown();
+          }
+        });
       } else {
         // 所有round结束，立即显示结果，然后异步提交
         await _showImmediateResult();
@@ -1119,10 +1170,6 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
   void _onStartPressed() {
     _startPreCountdown();
   }
-
-  // 新增：动画状态管理
-  bool _isAnimating = false;
-  Timer? _animationDebounceTimer;
 
   void _onCountPressed() {
     if (!isCounting || !mounted) return;
@@ -1207,6 +1254,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
       });
     }
   }
+
   // 背景色 绿色 0xFF00FF7F #00FF7F
   // 绿色 0xFF34C759 #34C759
   // 蓝色 0xFF007AFF  #007AFF
@@ -1237,13 +1285,96 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
   @override
   Widget build(BuildContext context) {
+    // 从 ViewModel 获取数据
+    final viewModel = context.watch<CheckinTrainingViewModel>();
+
+    // 🎯 优先检查加载状态和错误状态，避免不必要的资源创建
+    if (viewModel.isLoading) {
+      return Scaffold(
+        body: Stack(
+          children: [
+            Center(
+              child: CircularProgressIndicator(),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 16,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: AppColors.primary,
+                    size: 26,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  splashRadius: 22,
+                  tooltip: 'Back',
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (viewModel.error != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // 错误显示组件
+            Center(
+              child: ElegantErrorDisplay(
+                error: viewModel.error ?? 'An unknown error occurred',
+                onRetry: () {
+                  viewModel.clearError();
+                  _refreshHistory();
+                },
+              ),
+            ),
+            // 返回按钮
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 16,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: AppColors.primary,
+                    size: 26,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  splashRadius: 22,
+                  tooltip: 'Back',
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 🎯 只有在没有错误和加载状态时才创建主内容
     final double diameter = MediaQuery.of(context).size.width * 3 / 4;
     final orientation = MediaQuery.of(context).orientation;
     final bool isPortrait = orientation == Orientation.portrait;
     final DraggableScrollableController controller =
         isPortrait ? _portraitController! : _landscapeController!;
 
-    final Widget videoWidget = _videoReady
+    // 🎯 视频组件：优先显示默认视频，避免黑屏
+    final Widget videoWidget = _videoReady && _videoController != null
         ? FadeTransition(
             opacity: _videoFadeController,
             child: Container(
@@ -1252,14 +1383,21 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
               child: FittedBox(
                 fit: BoxFit.cover,
                 child: SizedBox(
-                  width: _videoController.value.size.width,
-                  height: _videoController.value.size.height,
-                  child: VideoPlayer(_videoController),
+                  width: _videoController!.value.size.width,
+                  height: _videoController!.value.size.height,
+                  child: VideoPlayer(_videoController!),
                 ),
               ),
             ),
           )
-        : Container(color: Colors.black);
+        : Container(
+            color: Colors.black,
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: AppColors.primary,
+              ),
+            ),
+          );
 
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized && _cameraPermissionGranted)
         ? LayoutBuilder(
@@ -1335,7 +1473,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
 
     final Widget mainContent = isPortrait
         ? TrainingPortraitLayout(
-            totalRounds: totalRounds,
+            totalRounds: viewModel.totalRounds,
             currentRound: currentRound,
             counter: counter,
             countdown: countdown,
@@ -1354,9 +1492,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             selfieWidget: selfieWidget,
             diameter: diameter,
             formatTime: _formatTime,
-            roundDuration: roundDuration, // 新增
+            roundDuration: viewModel.roundDuration,
             showResultOverlay: showResultOverlay,
-            history: history,
+            history: _convertHistoryToMapList(viewModel.history),
             draggableController: controller,
             buildHistoryRanking: _buildHistoryRanking,
             onResultOverlayTap: () {
@@ -1371,10 +1509,10 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
               Navigator.pop(context);
             },
             onResultSetup: _showSetupDialog,
-            isSubmittingResult: _isSubmittingResult, // 新增
+            isSubmittingResult: viewModel.isSubmitting,
           )
         : TrainingLandscapeLayout(
-            totalRounds: totalRounds,
+            totalRounds: viewModel.totalRounds,
             currentRound: currentRound,
             counter: counter,
             countdown: countdown,
@@ -1392,9 +1530,9 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
             selfieWidget: selfieWidget,
             diameter: diameter,
             formatTime: _formatTime,
-            roundDuration: roundDuration, // 新增
+            roundDuration: viewModel.roundDuration,
             showResultOverlay: showResultOverlay,
-            history: history,
+            history: _convertHistoryToMapList(viewModel.history),
             draggableController: controller,
             buildHistoryRanking: _buildHistoryRanking,
             onResultOverlayTap: () {
@@ -1409,7 +1547,7 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
               Navigator.pop(context);
             },
             onResultSetup: _showSetupDialog,
-            isSubmittingResult: _isSubmittingResult, // 新增
+            isSubmittingResult: viewModel.isSubmitting,
           );
 
     return Scaffold(
@@ -1417,14 +1555,28 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
     );
   }
 
+  /// 将领域实体转换为布局组件期望的Map格式
+  List<Map<String, dynamic>> _convertHistoryToMapList(List<CheckinTrainingHistoryItem> history) {
+    return history.map((item) => {
+      'rank': item.rank,
+      'date': item.displayDate,
+      'counts': item.counts,
+      'countsPerMin': item.countsPerMin,
+      'note': item.note ?? '',
+      'additionalData': item,
+    }).toList();
+  }
+
   Widget _buildHistoryRanking(ScrollController scrollController) {
-    // 将原始数据转换为通用组件的数据格式
-    final rankingItems = history.map((e) => HistoryRankingItem(
-      rank: e["rank"],
-      date: e["date"] ?? "",
-      counts: e["counts"] ?? 0,
-      note: e["note"],
-      additionalData: e,
+    final viewModel = context.read<CheckinTrainingViewModel>();
+    
+    // 将领域实体转换为通用组件的数据格式
+    final rankingItems = viewModel.history.map((e) => HistoryRankingItem(
+      rank: e.rank,
+      date: e.displayDate,
+      countsPerMin: e.countsPerMin,
+      note: e.note ?? "",
+      additionalData: e.toMap(), // 转换为Map格式
     )).toList();
 
     return HistoryRankingWidget(
@@ -1522,12 +1674,14 @@ class _CheckinTrainingPageState extends State<CheckinTrainingPage> with TickerPr
         }
         
         Navigator.of(context).pop();
-        setState(() {
-          bgType = type;
-        });
-        if (type == LayoutBgType.video && _videoReady) {
-          _videoController.play();
-          _videoFadeController.forward();
+        if (mounted) {
+          setState(() {
+            bgType = type;
+          });
+          if (type == LayoutBgType.video && _videoReady && _videoController != null) {
+            _videoController!.play();
+            _videoFadeController.forward();
+          }
         }
       },
       child: Column(

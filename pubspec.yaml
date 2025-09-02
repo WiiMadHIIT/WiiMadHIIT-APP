@@ -46,6 +46,8 @@ dependencies:
   app_settings: ^5.1.1
   audio_session: ^0.2.2
   path_provider: ^2.1.2
+  url_launcher: ^6.2.5
+  flutter_secure_storage: ^9.0.0
 
 dev_dependencies:
   flutter_test:
@@ -57,9 +59,20 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/wiimadhiit-w-red.png"
+  min_sdk_android: 21
+  adaptive_icon_foreground: "assets/icons/wiimadhiit-w-red.png"
+  adaptive_icon_background: "#161616"
+  adaptive_icon_monochrome: "assets/icons/wiimadhiit-w-red.png"
+  
 
 # The following section is specific to Flutter packages.
 flutter:
@@ -111,6 +124,7 @@ flutter:
     - assets/video/video2.mp4
     - assets/video/video3.mp4
     - assets/video/video_bonus1.mp4
+    - assets/video/projection_tutorials_mac.mp4
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

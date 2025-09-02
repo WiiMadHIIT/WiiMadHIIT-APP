@@ -1,8 +1,8 @@
 import '../api/checkin_training_api.dart';
 import '../models/checkin_training_api_model.dart';
-import '../../domain/entities/checkin_training/training_result.dart';
-import '../../domain/entities/checkin_training/training_history_item.dart';
-import '../../domain/entities/checkin_training/training_session_config.dart';
+import '../../domain/entities/checkin_training/checkin_training_result.dart';
+import '../../domain/entities/checkin_training/checkin_training_history_item.dart';
+import '../../domain/entities/checkin_training/checkin_training_session_config.dart';
 
 /// 训练仓库接口
 abstract class CheckinTrainingRepository {
@@ -13,23 +13,10 @@ abstract class CheckinTrainingRepository {
     int? limit,
   });
 
-  /// 获取训练历史数据
-  Future<List<TrainingHistoryItem>> getTrainingHistory(
-    String trainingId, {
-    String? productId,
-    int? limit,
-  });
-
   /// 提交训练结果
   Future<CheckinTrainingSubmitResponseApiModel> submitTrainingResult(
-    TrainingResult result,
+    CheckinTrainingResult result,
   );
-
-  /// 获取视频配置
-  Future<Map<String, dynamic>> getVideoConfig(
-    String trainingId, {
-    String? productId,
-  });
 }
 
 /// 训练仓库实现
@@ -66,26 +53,8 @@ class CheckinTrainingRepositoryImpl implements CheckinTrainingRepository {
   }
 
   @override
-  Future<List<TrainingHistoryItem>> getTrainingHistory(
-    String trainingId, {
-    String? productId,
-    int? limit,
-  }) async {
-    try {
-      final result = await getTrainingDataAndVideoConfig(
-        trainingId,
-        productId: productId,
-        limit: limit,
-      );
-      return result['history'] as List<TrainingHistoryItem>;
-    } catch (e) {
-      throw Exception('Failed to get training history: $e');
-    }
-  }
-
-  @override
   Future<CheckinTrainingSubmitResponseApiModel> submitTrainingResult(
-    TrainingResult result,
+    CheckinTrainingResult result,
   ) async {
     try {
       final apiModel = _mapToTrainingResultApiModel(result);
@@ -95,60 +64,44 @@ class CheckinTrainingRepositoryImpl implements CheckinTrainingRepository {
     }
   }
 
-  @override
-  Future<Map<String, dynamic>> getVideoConfig(
-    String trainingId, {
-    String? productId,
-  }) async {
-    try {
-      return await _checkinTrainingApi.getVideoConfig(
-        trainingId,
-        productId: productId,
-      );
-    } catch (e) {
-      throw Exception('Failed to get video config: $e');
-    }
-  }
-
   /// 映射API模型到业务实体
-  TrainingHistoryItem _mapToTrainingHistoryItem(
+  CheckinTrainingHistoryItem _mapToTrainingHistoryItem(
     CheckinTrainingHistoryApiModel apiModel,
   ) {
-    return TrainingHistoryItem(
+    return CheckinTrainingHistoryItem(
       id: apiModel.id,
       rank: apiModel.rank,
       counts: apiModel.counts,
+      countsPerMin: apiModel.countsPerMin,
       timestamp: apiModel.timestamp,
-      note: apiModel.note,
+      note: null, // note字段不从后端获取，可以为null
     );
   }
 
   /// 映射业务实体到API模型
   CheckinTrainingResultApiModel _mapToTrainingResultApiModel(
-    TrainingResult result,
+    CheckinTrainingResult result,
   ) {
     return CheckinTrainingResultApiModel(
       trainingId: result.trainingId,
       productId: result.productId,
-      totalRounds: result.totalRounds,
-      roundDuration: result.roundDuration,
-      maxCounts: result.maxCounts,
-      timestamp: result.timestamp,
+      countsPerMin: result.countsPerMin,
+      totalSeconds: result.totalSeconds, // 直接使用totalSeconds
     );
   }
 
   /// 映射API模型到业务实体
-  TrainingResult _mapToTrainingResult(
+  CheckinTrainingResult _mapToTrainingResult(
     CheckinTrainingResultApiModel apiModel,
   ) {
-    return TrainingResult(
+    return CheckinTrainingResult(
       id: '', // API模型中没有id字段，需要从响应中获取
       trainingId: apiModel.trainingId,
       productId: apiModel.productId,
-      totalRounds: apiModel.totalRounds,
-      roundDuration: apiModel.roundDuration,
-      maxCounts: apiModel.maxCounts,
-      timestamp: apiModel.timestamp,
+      countsPerMin: apiModel.countsPerMin,
+      totalSeconds: apiModel.totalSeconds,
+      counts: 0, // 从countsPerMin和totalSeconds计算counts
+      timestamp: DateTime.now().millisecondsSinceEpoch,
     );
   }
 } 

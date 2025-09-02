@@ -11,6 +11,8 @@ import '../../domain/usecases/get_training_product_usecase.dart';
 import '../../data/repository/training_repository.dart';
 import '../../data/api/training_api.dart';
 import 'training_list_viewmodel.dart';
+import '../../widgets/training_error_content.dart';
+import '../../widgets/training_loading_content.dart';
 import 'dart:ui';
 
 class TrainingListPage extends StatelessWidget {
@@ -54,6 +56,9 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
   VideoPlayerController? _videoController;
   bool _isVideoPlaying = false;
   bool _isVideoInitialized = false;
+  
+  // ViewModel 引用
+  TrainingListViewModel? _viewModel;
 
   @override
   void initState() {
@@ -71,24 +76,61 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
     ));
     _animationController.forward();
     
-    // 监听数据变化，初始化视频
+    // 在第一个帧渲染后智能加载训练产品数据
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final viewModel = context.read<TrainingListViewModel>();
-      if (viewModel.hasData && viewModel.pageConfig != null) {
+      _viewModel = context.read<TrainingListViewModel>();
+      
+      // 检查是否有缓存数据，如果有则取消清理定时器
+      if (_viewModel!.hasCachedData) {
+        _viewModel!.cancelCleanup();
+        // 如果有缓存数据，初始化视频
+        if (_viewModel!.hasData && _viewModel!.pageConfig != null) {
+          _initializeVideo();
+        }
+      } else {
+        // 如果没有缓存数据，需要重新加载
+        final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        final productId = args?['productId'] as String? ?? '';
+        if (productId.isNotEmpty) {
+          _viewModel!.loadTrainingProduct(productId);
+        }
+      }
+      
+      // 添加监听器，当数据加载完成后重新初始化视频
+      _viewModel!.addListener(_onViewModelChanged);
+    });
+  }
+
+  // ViewModel 变化监听器
+  void _onViewModelChanged() {
+    if (mounted && _viewModel != null) {
+      if (_viewModel!.hasData && _viewModel!.pageConfig != null && !_isVideoInitialized) {
         _initializeVideo();
       }
-    });
-    
-    // 添加监听器，当数据加载完成后重新初始化视频
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final viewModel = context.read<TrainingListViewModel>();
-      viewModel.addListener(() {
-        if (viewModel.hasData && viewModel.pageConfig != null && !_isVideoInitialized) {
-      _initializeVideo();
-        }
-      });
+    }
+  }
+  
+  // 视频状态变化监听器
+  void _onVideoStateChanged() {
+    if (mounted && _videoController != null) {
+      setState(() {
+        // 同步视频播放状态
+        _isVideoPlaying = _videoController!.value.isPlaying;
       });
     }
+  }
+  
+  // 释放视频控制器
+  void _disposeVideoController() {
+    if (_videoController != null) {
+      _videoController!.removeListener(_onVideoStateChanged);
+      _videoController!.pause();
+      _videoController!.dispose();
+      _videoController = null;
+      _isVideoInitialized = false;
+      _isVideoPlaying = false;
+    }
+  }
 
   void _initializeVideo() {
     final viewModel = context.read<TrainingListViewModel>();
@@ -96,22 +138,18 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
     
     if (pageConfig == null) return;
     
-    // 使用新的获取器方法，自动处理回退逻辑
-    final videoUrl = pageConfig.displayVideoUrl;
-    
+    // 只有在有自定义视频时才尝试加载网络视频
     if (pageConfig.hasCustomVideo) {
+      final videoUrl = pageConfig.displayVideoUrl;
+      
+      // 先释放之前的视频控制器
+      _disposeVideoController();
+      
       // 网络视频
       _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
         ..setLooping(true)
         ..setVolume(0.0)
-        ..addListener(() {
-          if (mounted) {
-            setState(() {
-              // 同步视频播放状态
-              _isVideoPlaying = _videoController!.value.isPlaying;
-            });
-          }
-        })
+        ..addListener(_onVideoStateChanged)
         ..initialize().then((_) {
           if (mounted) {
             setState(() {
@@ -119,13 +157,22 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
             });
           }
         }).catchError((error) {
-          // 网络视频加载失败，回退到本地视频
-          print('Network video failed, falling back to local video: $error');
-          _initializeLocalVideo();
+          // 网络视频加载失败，不加载本地视频，直接设置为未初始化状态
+          print('Network video failed, not loading local video: $error');
+          if (mounted) {
+            setState(() {
+              _isVideoInitialized = false;
+            });
+          }
         });
     } else {
-      // 本地视频
-      _initializeLocalVideo();
+      // 没有自定义视频时，不加载任何视频
+      print('No custom video configured, skipping video initialization');
+      if (mounted) {
+        setState(() {
+          _isVideoInitialized = false;
+        });
+      }
     }
   }
 
@@ -133,9 +180,22 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
 
   @override
   void dispose() {
+    // 释放动画控制器
     _animationController.dispose();
-    _videoController?.pause();
-    _videoController?.dispose();
+    
+    // 释放视频控制器
+    _disposeVideoController();
+    
+    // 移除 ViewModel 监听器
+    if (_viewModel != null) {
+      _viewModel!.removeListener(_onViewModelChanged);
+      
+      // 智能延迟清理：延迟清理数据以提升用户体验
+      _viewModel!.scheduleCleanup();
+      
+      _viewModel = null;
+    }
+    
     super.dispose();
   }
 
@@ -143,194 +203,134 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
   Widget build(BuildContext context) {
     return Consumer<TrainingListViewModel>(
       builder: (context, viewModel, child) {
-        // 显示加载状态
-        if (viewModel.isLoading) {
-          return Scaffold(
-            backgroundColor: const Color(0xFFF8F9FA),
-            appBar: AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              iconTheme: const IconThemeData(color: Colors.black),
-            ),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading training data...',
-                    style: AppTextStyles.titleLarge.copyWith(
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        // 显示错误状态
-        if (viewModel.hasError) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          iconTheme: const IconThemeData(color: Colors.black),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Colors.grey[400],
-              ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Failed to load training data',
-                    style: AppTextStyles.titleLarge.copyWith(
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    viewModel.error ?? 'Unknown error occurred',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: Colors.grey[500],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => viewModel.refresh(viewModel.trainingProduct?.productId ?? ''),
-                    child: Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        // 显示无数据状态
-        if (!viewModel.hasData || !viewModel.hasAvailableTrainings) {
-          return Scaffold(
-            backgroundColor: const Color(0xFFF8F9FA),
-            appBar: AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              iconTheme: const IconThemeData(color: Colors.black),
-            ),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.fitness_center,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
-              const SizedBox(height: 16),
-              Text(
-                'No training data available',
-                style: AppTextStyles.titleLarge.copyWith(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8F9FA),
+          body: CustomScrollView(
+            slivers: [
+              // SliverAppBar 始终可见，提供一致的导航体验
+              SliverAppBar(
+                expandedHeight: 280,
+                pinned: true,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                flexibleSpace: FlexibleSpaceBar(
+                  background: _buildVideoSection(viewModel.pageConfig),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                    'Please check back later',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: Colors.grey[500],
+              
+              // 内容区域：根据状态显示不同内容
+              if (viewModel.isLoading)
+                // 加载状态
+                SliverToBoxAdapter(
+                  child: TrainingListLoadingContent(),
+                )
+              else if (viewModel.hasError)
+                // 错误状态
+                SliverToBoxAdapter(
+                                  child: TrainingListErrorContent(
+                  onRetry: () {
+                    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+                    final productId = args?['productId'] as String? ?? '';
+                    if (productId.isNotEmpty) {
+                      viewModel.loadTrainingProduct(productId);
+                    }
+                  },
                 ),
-              ),
+                )
+              else if (!viewModel.hasData || !viewModel.hasAvailableTrainings)
+                // 无数据状态
+                SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.fitness_center,
+                            size: 64,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No training data available',
+                            style: AppTextStyles.titleLarge.copyWith(
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Please check back later',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
+                // 正常数据状态
+                // 项目列表标题
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          viewModel.pageConfig!.pageTitle,
+                          style: AppTextStyles.headlineLarge.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          viewModel.pageConfig!.pageSubtitle,
+                          style: AppTextStyles.bodyLarge.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // 训练项目列表
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        return _TrainingCard(
+                          training: viewModel.displayTrainings[index],
+                          levelColor: _getLevelColorInt(viewModel.displayTrainings[index].level),
+                          onTap: () => _onTrainingTap(viewModel.displayTrainings[index]),
+                        );
+                      },
+                      childCount: viewModel.displayTrainings.length,
+                    ),
+                  ),
+                ),
+
+                // 底部间距
+                SliverToBoxAdapter(
+                  child: SizedBox(height: 100),
+                ),
+              ],
             ],
           ),
-        ),
-      );
-    }
-
-        // 显示主要内容
-        final pageConfig = viewModel.pageConfig!;
-        final trainings = viewModel.displayTrainings;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: CustomScrollView(
-        slivers: [
-          // 顶部视频介绍区域
-          SliverAppBar(
-            expandedHeight: 280,
-            pinned: true,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
-                  background: _buildVideoSection(pageConfig),
-            ),
-          ),
-          
-          // 项目列表标题
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                        pageConfig.pageTitle,
-                    style: AppTextStyles.headlineLarge.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                        pageConfig.pageSubtitle,
-                    style: AppTextStyles.bodyLarge.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 训练项目列表
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return _TrainingCard(
-                        training: trainings[index],
-                        levelColor: _getLevelColor(trainings[index].level),
-                        onTap: () => _onTrainingTap(trainings[index]),
-                  );
-                },
-                    childCount: trainings.length,
-              ),
-            ),
-          ),
-
-          // 底部间距
-          SliverToBoxAdapter(
-            child: SizedBox(height: 100),
-          ),
-        ],
-      ),
         );
       },
     );
   }
 
-  Widget _buildVideoSection(TrainingPageConfig pageConfig) {
+
+
+  Widget _buildVideoSection(TrainingPageConfig? pageConfig) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -363,9 +363,9 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
                     child: Stack(
                       children: [
                         // 根据 hasCustomThumbnail 决定使用网络图片还是本地图片
-                        pageConfig.hasCustomThumbnail
+                        pageConfig?.hasCustomThumbnail == true
                             ? Image.network(
-                                pageConfig.displayThumbnailUrl,
+                                pageConfig!.displayThumbnailUrl,
                                 fit: BoxFit.cover,
                                 width: double.infinity,
                                 height: double.infinity,
@@ -384,12 +384,23 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
                                   );
                                 },
                               )
-                            : Image.asset(
-                                pageConfig.displayThumbnailUrl,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                              ),
+                            : pageConfig != null
+                                ? Image.asset(
+                                    pageConfig.displayThumbnailUrl,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                  )
+                                : Container(
+                                    color: Colors.black,
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.videocam_off,
+                                        color: Colors.white.withOpacity(0.6),
+                                        size: 48,
+                                      ),
+                                    ),
+                                  ),
                         // 颜色滤镜覆盖层
                         Container(
                           decoration: BoxDecoration(
@@ -529,29 +540,6 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
     );
   }
 
-
-
-  void _initializeLocalVideo() {
-    _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
-        ..setLooping(true)
-        ..setVolume(0.0)
-        ..addListener(() {
-          if (mounted) {
-            setState(() {
-              // 同步视频播放状态
-              _isVideoPlaying = _videoController!.value.isPlaying;
-            });
-          }
-        })
-        ..initialize().then((_) {
-          if (mounted) {
-            setState(() {
-              _isVideoInitialized = true;
-            });
-          }
-        });
-  }
-
   // 共享的播放/暂停控制方法
   void _toggleVideo() {
     if (_videoController == null || !_isVideoInitialized) return;
@@ -614,24 +602,14 @@ class _TrainingListPageContentState extends State<_TrainingListPageContent> with
     );
   }
 
-  // 难度等级到颜色的映射
-  Color _getLevelColor(String level) {
-    switch (level.toLowerCase()) {
-      case 'beginner':
-        return Colors.green;
-      case 'intermediate':
-        return Colors.orange;
-      case 'advanced':
-        return Colors.red;
-      case 'expert':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
+  // 难度等级到颜色的映射（整型星级）
+  Color _getLevelColorInt(int level) {
+    if (level <= 2) return Colors.green;
+    if (level <= 4) return Colors.orange;
+    if (level <= 7) return Colors.red;
+    return Colors.purple;
   }
 }
-
-
 
 // 训练卡片组件
 class _TrainingCard extends StatelessWidget {
@@ -691,23 +669,7 @@ class _TrainingCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: levelColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              training.level,
-                              style: AppTextStyles.labelSmall.copyWith(
-                                color: levelColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                          _LevelStars(level: training.level, color: levelColor),
                         ],
                       ),
                       
@@ -723,12 +685,7 @@ class _TrainingCard extends StatelessWidget {
                             color: levelColor,
                           ),
                           const SizedBox(width: 12),
-                          _InfoChip(
-                            icon: Icons.check_circle,
-                            label: '${training.completionRate.toStringAsFixed(1)}%',
-                            subtitle: 'Success',
-                            color: levelColor,
-                          ),
+                          // 移除完成率展示
                         ],
                       ),
                       
@@ -781,6 +738,45 @@ class _TrainingCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LevelStars extends StatelessWidget {
+  final int level; // 1-10
+  final Color color;
+
+  const _LevelStars({required this.level, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final int clamped = level.clamp(1, 10);
+    final int fullStars = clamped >= 5 ? 5 : clamped; // 显示最多5个星图标
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int i = 0; i < 5; i++)
+            Icon(
+              i < fullStars ? Icons.star : Icons.star_border,
+              size: 14,
+              color: color,
+            ),
+          const SizedBox(width: 6),
+          Text(
+            'Lv $clamped',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }

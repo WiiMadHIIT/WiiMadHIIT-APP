@@ -5,7 +5,7 @@ import '../models/training_rule_api_model.dart';
 class TrainingRuleApi {
   final Dio _dio = DioClient().dio;
 
-  Future<TrainingRuleApiModel> fetchTrainingRule_REAL(String trainingId, String productId) async {
+  Future<TrainingRuleApiModel> fetchTrainingRule(String trainingId, String productId) async {
     final response = await _dio.get('/api/checkin/rules/$trainingId', queryParameters: {
       'productId': productId,
     });
@@ -18,7 +18,7 @@ class TrainingRuleApi {
 
   /// 获取模拟训练规则（临时使用）
   /// 参考 CheckinServiceImpl.java 中的 createMockTrainingRule
-  Future<TrainingRuleApiModel> fetchTrainingRule(String trainingId, String productId) async {
+  Future<TrainingRuleApiModel> fetchTrainingRule_MOCK(String trainingId, String productId) async {
     // 模拟网络延迟
     await Future.delayed(const Duration(milliseconds: 500));
     
@@ -59,43 +59,15 @@ class TrainingRuleApi {
       ),
     ];
 
-    final tutorialSteps = [
-      TutorialStepApiModel(
-        number: 1,
-        title: "Enable Voice",
-        description: "Turn on voice guidance in app settings",
-      ),
-      TutorialStepApiModel(
-        number: 2,
-        title: "Test Microphone",
-        description: "Speak clearly to test voice recognition",
-      ),
-      TutorialStepApiModel(
-        number: 3,
-        title: "Start Training",
-        description: "Begin your voice-guided workout",
-      ),
-    ];
-
-    final videoInfo = VideoInfoApiModel(
-      videoUrl: "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video3.mp4",
-      title: "Voice Training Tutorial",
-    );
-
-    final projectionTutorial = ProjectionTutorialApiModel(
-      videoInfo: videoInfo,
-      tutorialSteps: tutorialSteps,
-    );
-
     final trainingConfig = TrainingConfigApiModel(
       nextPageRoute: "/checkin_training_voice",
+      isActivated: true,
     );
 
     return TrainingRuleApiModel(
       trainingId: trainingId,
       productId: productId,
       trainingRules: trainingRules,
-      projectionTutorial: projectionTutorial,
       trainingConfig: trainingConfig,
     );
   }
@@ -123,43 +95,15 @@ class TrainingRuleApi {
       ),
     ];
 
-    final tutorialSteps = [
-      TutorialStepApiModel(
-        number: 1,
-        title: "HIIT Preparation",
-        description: "Prepare for high-intensity interval training",
-      ),
-      TutorialStepApiModel(
-        number: 2,
-        title: "Safety First",
-        description: "Check your surroundings for safe HIIT movements",
-      ),
-      TutorialStepApiModel(
-        number: 3,
-        title: "Start HIIT",
-        description: "Begin your high-intensity workout immediately",
-      ),
-    ];
-
-    final videoInfo = VideoInfoApiModel(
-      videoUrl: "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video1.mp4",
-      title: "HIIT Training Tutorial",
-    );
-
-    final projectionTutorial = ProjectionTutorialApiModel(
-      videoInfo: videoInfo,
-      tutorialSteps: tutorialSteps,
-    );
-
     final trainingConfig = TrainingConfigApiModel(
       nextPageRoute: "/checkin_training",
+      isActivated: true,
     );
 
     return TrainingRuleApiModel(
       trainingId: trainingId,
       productId: productId,
       trainingRules: trainingRules,
-      projectionTutorial: projectionTutorial,
       trainingConfig: trainingConfig,
     );
   }
@@ -187,43 +131,15 @@ class TrainingRuleApi {
       ),
     ];
 
-    final tutorialSteps = [
-      TutorialStepApiModel(
-        number: 1,
-        title: "Yoga Preparation",
-        description: "Set up your yoga space and mat",
-      ),
-      TutorialStepApiModel(
-        number: 2,
-        title: "Mindful Breathing",
-        description: "Take deep breaths to center yourself",
-      ),
-      TutorialStepApiModel(
-        number: 3,
-        title: "Begin Yoga",
-        description: "Start your yoga session with mindfulness",
-      ),
-    ];
-
-    final videoInfo = VideoInfoApiModel(
-      videoUrl: "https://cdn.jsdelivr.net/gh/WiiMadHIIT/hiit-cdn@main/video/video2.mp4",
-      title: "Yoga Training Tutorial",
-    );
-
-    final projectionTutorial = ProjectionTutorialApiModel(
-      videoInfo: videoInfo,
-      tutorialSteps: tutorialSteps,
-    );
-
     final trainingConfig = TrainingConfigApiModel(
       nextPageRoute: "/checkin_countdown",
+      isActivated: false, // 设置为false来测试未激活状态
     );
 
     return TrainingRuleApiModel(
       trainingId: trainingId,
       productId: productId,
       trainingRules: trainingRules,
-      projectionTutorial: projectionTutorial,
       trainingConfig: trainingConfig,
     );
   }

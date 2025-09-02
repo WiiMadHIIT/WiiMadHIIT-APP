@@ -62,7 +62,7 @@ Future<void> _loadTrainingDataAndVideoConfig() async {
 - 方向适配：自动根据屏幕方向切换视频
 
 **API需求：**
-- **接口**: `GET /api/voice-training/data`
+- **接口**: `GET /api/training/voice/data`
 - **参数**: 
   - `trainingId` (训练ID)
   - `productId` (产品ID，可选)

@@ -33,14 +33,12 @@ class TrainingPageConfigApiModel {
   final String pageSubtitle;
   final String? videoUrl;
   final String? thumbnailUrl;
-  final String? lastUpdated;
 
   TrainingPageConfigApiModel({
     required this.pageTitle,
     required this.pageSubtitle,
     this.videoUrl,
     this.thumbnailUrl,
-    this.lastUpdated,
   });
 
   factory TrainingPageConfigApiModel.fromJson(Map<String, dynamic> json) {
@@ -49,7 +47,6 @@ class TrainingPageConfigApiModel {
       pageSubtitle: json['pageSubtitle'] ?? '',
       videoUrl: json['videoUrl'],
       thumbnailUrl: json['thumbnailUrl'],
-      lastUpdated: json['lastUpdated'],
     );
   }
 
@@ -59,7 +56,6 @@ class TrainingPageConfigApiModel {
       'pageSubtitle': pageSubtitle,
       'videoUrl': videoUrl,
       'thumbnailUrl': thumbnailUrl,
-      'lastUpdated': lastUpdated,
     };
   }
 }
@@ -67,10 +63,9 @@ class TrainingPageConfigApiModel {
 class TrainingItemApiModel {
   final String id;
   final String name;
-  final String level;
+  final int level;
   final String description;
   final int participantCount;
-  final double completionRate;
   final String status;
 
   TrainingItemApiModel({
@@ -79,7 +74,6 @@ class TrainingItemApiModel {
     required this.level,
     required this.description,
     required this.participantCount,
-    required this.completionRate,
     required this.status,
   });
 
@@ -87,10 +81,9 @@ class TrainingItemApiModel {
     return TrainingItemApiModel(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
-      level: json['level'] ?? '',
+      level: (json['level'] ?? 0) is int ? (json['level'] ?? 0) : int.tryParse((json['level'] ?? '0').toString()) ?? 0,
       description: json['description'] ?? '',
       participantCount: json['participantCount'] ?? 0,
-      completionRate: (json['completionRate'] ?? 0.0).toDouble(),
       status: json['status'] ?? 'ACTIVE',
     );
   }
@@ -102,7 +95,6 @@ class TrainingItemApiModel {
       'level': level,
       'description': description,
       'participantCount': participantCount,
-      'completionRate': completionRate,
       'status': status,
     };
   }

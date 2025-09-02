@@ -1,234 +1,581 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/floating_logo.dart';
+import '../../widgets/challenge_rules_sheet.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:video_player/video_player.dart';
 import '../../routes/app_routes.dart';
+import 'challenge_details_viewmodel.dart';
+import '../../domain/entities/challenge_details/challenge_details.dart';
+import '../../domain/entities/challenge_details/playoff_match.dart';
+import '../../domain/entities/challenge_details/game_tracker_post.dart';
+import '../../domain/entities/challenge_details/preseason_record.dart';
+import '../../domain/usecases/get_challenge_details_usecase.dart';
+import '../../data/repository/challenge_details_repository.dart';
+import '../../data/api/challenge_details_api.dart';
+import '../../domain/services/challenge_details_service.dart';
 
-// 1. 定义playoff数据结构
-enum PlayoffStage { round32, round8, round4, semi, finalMatch }
+// 定义playoff阶段枚举
+enum PlayoffStage { round32, round16, round8, round4, semi, finalMatch }
 
-const Map<PlayoffStage, String> playoffStageNames = {
-  PlayoffStage.round32: '1/32 PLAYOFF',
-  PlayoffStage.round8: '1/8 FINALS',
-  PlayoffStage.round4: '1/4 FINALS',
-  PlayoffStage.semi: 'SEMI FINAL',
-  PlayoffStage.finalMatch: 'FINAL',
-};
-
-class PlayoffMatch {
-  final String? avatar1;
-  final String? name1;
-  final String? avatar2;
-  final String? name2;
-  final int? score1;
-  final int? score2;
-  final bool finished;
-  PlayoffMatch({
-    this.avatar1,
-    this.name1,
-    this.avatar2,
-    this.name2,
-    this.score1,
-    this.score2,
-    this.finished = false,
-  });
+// 季后赛阶段名称映射
+Map<PlayoffStage, String> getPlayoffStageNames(Map<String, String>? stages) {
+  if (stages == null) {
+    return {
+      PlayoffStage.round32: '1/32 PLAYOFF',
+      PlayoffStage.round16: '1/16 FINALS',
+      PlayoffStage.round8: '1/8 FINALS',
+      PlayoffStage.round4: '1/4 FINALS',
+      PlayoffStage.semi: 'SEMI FINAL',
+      PlayoffStage.finalMatch: 'FINAL',
+    };
+  }
+  
+  return {
+    PlayoffStage.round32: stages['round32'] ?? '1/32 PLAYOFF',
+    PlayoffStage.round16: stages['round16'] ?? '1/16 FINALS',
+    PlayoffStage.round8: stages['round8'] ?? '1/8 FINALS',
+    PlayoffStage.round4: stages['round4'] ?? '1/4 FINALS',
+    PlayoffStage.semi: stages['semi'] ?? 'SEMI FINAL',
+    PlayoffStage.finalMatch: stages['finalMatch'] ?? 'FINAL',
+  };
 }
 
-final Map<PlayoffStage, List<PlayoffMatch>> playoffData = {
-  PlayoffStage.round8: [
-    PlayoffMatch(
-      avatar1: 'https://randomuser.me/api/portraits/men/1.jpg',
-      name1: 'Karateboxarwjs',
-      avatar2: 'https://randomuser.me/api/portraits/men/2.jpg',
-      name2: 'JaylenF',
-      score1: 45,
-      score2: 41,
-      finished: true,
-    ),
-    PlayoffMatch(
-      avatar1: 'https://randomuser.me/api/portraits/men/3.jpg',
-      name1: 'Ein_gelo',
-      avatar2: null,
-      name2: null,
-      score1: 40,
-      score2: 35,
-      finished: true,
-    ),
-    PlayoffMatch(),
-    PlayoffMatch(),
-  ],
-  PlayoffStage.round4: [
-    PlayoffMatch(), PlayoffMatch()
-  ],
-  PlayoffStage.semi: [
-    PlayoffMatch()
-  ],
-  PlayoffStage.finalMatch: [
-    PlayoffMatch()
-  ],
-  PlayoffStage.round32: [
-    PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(),
-    PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(), PlayoffMatch(),
-  ],
-};
-
-class ChallengeDetailsPage extends StatefulWidget {
+/// 挑战详情页面，包含规则卡片、功能入口、Tab页面等
+class ChallengeDetailsPage extends StatelessWidget {
   const ChallengeDetailsPage({Key? key}) : super(key: key);
 
   @override
-  State<ChallengeDetailsPage> createState() => ChallengeDetailsPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => ChallengeDetailsViewModel(
+        getChallengeBasicUseCase: GetChallengeBasicUseCase(
+          ChallengeDetailsRepository(
+            ChallengeDetailsApi(),
+          ),
+        ),
+        getChallengePlayoffsUseCase: GetChallengePlayoffsUseCase(
+          ChallengeDetailsRepository(
+            ChallengeDetailsApi(),
+          ),
+        ),
+        getChallengePreseasonUseCase: GetChallengePreseasonUseCase(
+          ChallengeDetailsRepository(
+            ChallengeDetailsApi(),
+          ),
+        ),
+        challengeDetailsService: ChallengeDetailsService(),
+      ),
+      child: const _ChallengeDetailsPageContent(),
+    );
+  }
+
+  /// 从路由参数获取挑战ID
+  String _getChallengeId(BuildContext context) {
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    return args?['challengeId'] as String? ?? 'default';
+  }
 }
 
-class ChallengeDetailsPageState extends State<ChallengeDetailsPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+class _ChallengeDetailsPageContent extends StatefulWidget {
+  const _ChallengeDetailsPageContent({Key? key}) : super(key: key);
+
+  @override
+  State<_ChallengeDetailsPageContent> createState() => _ChallengeDetailsPageContentState();
+}
+
+class _ChallengeDetailsPageContentState extends State<_ChallengeDetailsPageContent> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
-  // 已不再需要ProfileFunctionGridState相关逻辑
+  
+  // ViewModel 引用
+  ChallengeDetailsViewModel? _viewModel;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this); // 3个Tab
+    _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addObserver(this);
+    
+    // 添加Tab切换监听器，实现按需加载
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+        final challengeId = args?['challengeId'] as String? ?? 'default';
+        
+        // 根据Tab索引按需加载数据
+        switch (_tabController.index) {
+          case 1: // Preseason Tab
+            if (_viewModel?.preseasonData == null && !(_viewModel?.isPreseasonLoading ?? false)) {
+              _viewModel?.loadChallengePreseason(challengeId);
+            }
+            break;
+          case 2: // Playoffs Tab
+            if (_viewModel?.playoffData == null && !(_viewModel?.isPlayoffsLoading ?? false)) {
+              _viewModel?.loadChallengePlayoffs(challengeId);
+            }
+            break;
+        }
+      }
+    });
+    
+    // 加载挑战详情数据
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final challengeId = args?['challengeId'] as String? ?? 'default';
+      _viewModel = Provider.of<ChallengeDetailsViewModel>(context, listen: false);
+      
+      // 检查是否有缓存数据，如果有则取消清理定时器
+      if (_viewModel!.hasCachedData) {
+        _viewModel!.cancelCleanup();
+      } else {
+        // 只加载基础数据，其他数据按需加载
+        _viewModel!.loadChallengeBasic(challengeId);
+      }
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     WidgetsBinding.instance.removeObserver(this);
+    
+    // 智能延迟清理：延迟清理数据以提升用户体验
+    if (_viewModel != null) {
+      _viewModel!.scheduleCleanup();
+    }
+    
     super.dispose();
   }
 
-  // 已不再需要ProfileFunctionGridState相关逻辑
+  Widget _buildFallbackBackground() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.blue[400]!,
+            Colors.purple[600]!,
+            Colors.orange[500]!,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.sports_esports,
+              size: 80,
+              color: Colors.white.withOpacity(0.8),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Challenge Ready!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final double bottomPadding = MediaQuery.of(context).padding.bottom;
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) => [
-          SliverAppBar(
-            expandedHeight: 320,
-            pinned: true,
-            stretch: true,
+    return Consumer<ChallengeDetailsViewModel>(
+      builder: (context, viewModel, child) {
+        // 显示加载状态（只检查基础数据加载）
+        if (viewModel.isBasicLoading) {
+          return Scaffold(
             backgroundColor: Colors.white,
-            elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
-              stretchModes: const [
-                StretchMode.zoomBackground,
-                StretchMode.blurBackground,
-                StretchMode.fadeTitle,
-              ],
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // 背景大图
-                  Image.asset(
-                    'assets/images/player_cover.png',
-                    fit: BoxFit.cover,
-                  ),
-                  // 渐变遮罩
-                  Container(
+            body: Stack(
+              children: [
+                const Center(child: CircularProgressIndicator()),
+                // 左上角返回按钮
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 8,
+                  left: 16,
+                  child: Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.35),
-                          Colors.transparent,
-                          Colors.white.withOpacity(0.85),
-                        ],
-                        stops: [0, 0.5, 1],
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.black87,
+                        size: 22,
                       ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      splashRadius: 20,
+                      tooltip: 'Back',
                     ),
                   ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _RuleCard(),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // 显示错误状态（只检查基础数据错误）
+        if (viewModel.basicError != null) {
+          // 打印错误到控制台而不是显示给用户
+          print('Challenge details error: ${viewModel.basicError}');
+          
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Stack(
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Something went wrong',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Please try again later',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+                          final challengeId = args?['challengeId'] as String? ?? 'default';
+                          // 重新加载基础数据
+                          viewModel.loadChallengeBasic(challengeId);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+                // 左上角返回按钮
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 8,
+                  left: 16,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.black87,
+                        size: 22,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      splashRadius: 20,
+                      tooltip: 'Back',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // 获取数据源
+        final challengeBasic = viewModel.challengeBasic;
+        final playoffData = viewModel.playoffData;
+        final preseasonData = viewModel.preseasonData;
+        final gameTracker = viewModel.gameTracker;
+        final rules = viewModel.rules;
+        final challengeName = viewModel.challengeName;
+        final backgroundImage = viewModel.backgroundImage;
+        final videoUrl = viewModel.videoUrl;
+
+        // 如果没有基础数据，显示空状态
+        if (challengeBasic == null) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Stack(
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.sports_esports_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Oops! Challenge went MIA',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Maybe it\'s taking a coffee break?',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 左上角返回按钮
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 8,
+                  left: 16,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.black87,
+                        size: 22,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      splashRadius: 20,
+                      tooltip: 'Back',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final double bottomPadding = MediaQuery.of(context).padding.bottom;
+        return Scaffold(
+          backgroundColor: Colors.white,
+          body: NestedScrollView(
+            headerSliverBuilder: (context, innerBoxIsScrolled) => [
+              SliverAppBar(
+                expandedHeight: 320,
+                pinned: true,
+                stretch: true,
+                backgroundColor: Colors.white,
+                elevation: 0,
+                flexibleSpace: FlexibleSpaceBar(
+                  stretchModes: const [
+                    StretchMode.zoomBackground,
+                    StretchMode.blurBackground,
+                    StretchMode.fadeTitle,
+                  ],
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // 背景大图
+                      backgroundImage.isNotEmpty && backgroundImage != 'null'
+                        ? Image.network(
+                            backgroundImage,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              // 远程图片加载失败时显示本地备用图片
+                              return _buildFallbackBackground();
+                            },
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey[200],
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    value: loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : _buildFallbackBackground(),
+                      // 渐变遮罩
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.35),
+                              Colors.transparent,
+                              Colors.white.withOpacity(0.85),
+                            ],
+                            stops: const [0, 0.5, 1],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: _RuleCard(
+                          rules: rules,
+                          challengeName: challengeName,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 5)),
+              SliverToBoxAdapter(child: _FeatureEntryCard(
+                videoUrl: videoUrl,
+                onVideo: () {
+                  if (videoUrl.isNotEmpty && videoUrl != 'null') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => _FullScreenVideoPage(videoUrl: videoUrl)),
+                    );
+                  } else {
+                    // 没有视频时的幽默提示
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('🎬 Video still in production!'),
+                        backgroundColor: Colors.orange,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+                onJoin: () {
+                  // 获取挑战ID
+                  final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+                  final challengeId = args?['challengeId'] as String? ?? 'default';
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.challengeRule,
+                    arguments: {'challengeId': challengeId},
+                  );
+                },
+              )),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _TabBarDelegate(
+                  TabBar(
+                    controller: _tabController,
+                    indicatorColor: AppColors.primary,
+                    indicatorWeight: 3,
+                    labelColor: AppColors.primary,
+                    unselectedLabelColor: Colors.grey[500],
+                    labelStyle: AppTextStyles.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                    unselectedLabelStyle: AppTextStyles.titleMedium,
+                    tabs: const [
+                      Tab(text: 'Game Tracker'),
+                      Tab(text: 'Preseason'),
+                      Tab(text: 'Playoffs'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            body: Padding(
+              padding: EdgeInsets.only(bottom: bottomPadding),
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _GameTrackerTab(posts: gameTracker?.posts ?? []),
+                  _PreseasonRecordList(
+                    preseason: preseasonData,
+                    isLoading: viewModel.isPreseasonLoading,
+                    onLoadMore: () {
+                      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+                      final challengeId = args?['challengeId'] as String? ?? 'default';
+                      _viewModel?.loadChallengePreseasonNextPage(challengeId);
+                    },
+                  ),
+                  _PlayoffBracket(
+                    playoffs: playoffData,
+                    isLoading: viewModel.isPlayoffsLoading,
                   ),
                 ],
               ),
             ),
           ),
-          SliverToBoxAdapter(child: SizedBox(height: 5)),
-          SliverToBoxAdapter(child: _FeatureEntryCard(
-            onVideo: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const _FullScreenVideoPage()),
-              );
-            },
-            onJoin: () {
-              // 获取id参数并跳转
-              final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-              final id = args != null ? args['challengeId'] : null;
-              if (id != null) {
-                Navigator.pushNamed(
-                  context,
-                  AppRoutes.challengeRule,
-                  arguments: {'challengeId': id},
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Challenge id not found.')),
-                );
-              }
-            },
-          )),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _TabBarDelegate(
-              TabBar(
-                controller: _tabController,
-                indicatorColor: AppColors.primary,
-                indicatorWeight: 3,
-                labelColor: AppColors.primary,
-                unselectedLabelColor: Colors.grey[500],
-                labelStyle: AppTextStyles.titleMedium.copyWith(fontWeight: FontWeight.bold),
-                unselectedLabelStyle: AppTextStyles.titleMedium,
-                tabs: const [
-                  Tab(text: 'Game Tracker'),
-                  Tab(text: 'Preseason'),
-                  Tab(text: 'Playoffs'),
-                ],
-              ),
-            ),
-          ),
-        ],
-        body: Padding(
-          padding: EdgeInsets.only(bottom: bottomPadding),
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _GameTrackerTab(),
-              _PreseasonRecordList(),
-              _PlayoffBracket(),
-            ],
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 class _RuleCard extends StatelessWidget {
+  final ChallengeRules? rules;
+  final String? challengeName;
   final VoidCallback? onMore;
-  const _RuleCard({this.onMore});
-
-  final List<String> _rules = const [
-    '1. Complete the daily workout to earn points.',
-    '2. Rankings are based on total points.',
-    '3. Top 3 will receive exclusive rewards!',
-  ];
+  
+  const _RuleCard({
+    this.rules, 
+    this.challengeName,
+    this.onMore,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // 检查是否有规则数据
+    final hasRules = rules != null && rules!.title.isNotEmpty;
+    final hasChallengeName = challengeName != null && challengeName!.isNotEmpty;
+    
     return Align(
       alignment: Alignment.bottomCenter,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 24),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16), // 更紧凑
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.96),
           borderRadius: const BorderRadius.only(
@@ -249,57 +596,99 @@ class _RuleCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.rule, color: Theme.of(context).primaryColor, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'Challenge Rules',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ) ?? const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6), // 更紧凑
-            ..._rules.map((r) => Padding(
-                  padding: const EdgeInsets.only(bottom: 2), // 更紧凑
-                  child: Text(
-                    r,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[800], height: 1.35),
-                  ),
-                )),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: onMore ?? () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Challenge Details'),
-                      content: const Text(
-                        'Here you can provide a more detailed description of the challenge rules, scoring, rewards, and any other information participants should know.\n\nYou can also add links, images, or FAQs as needed.'
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Close'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).primaryColor,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                  padding: EdgeInsets.zero, // 紧凑
-                  minimumSize: const Size(0, 32), // 紧凑
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap, // 紧凑
-                ),
-                child: const Text('Learn More'),
+            // 挑战名称显示
+            if (hasChallengeName) ...[
+              Text(
+                challengeName!,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                  fontSize: 20,
+                ) ?? const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
+              const SizedBox(height: 8),
+            ] else ...[
+              Text(
+                'Mystery Challenge',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[600],
+                  fontSize: 20,
+                ) ?? const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+            ],
+            
+            // 规则部分
+            if (hasRules) ...[
+              Text(
+                rules!.details,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey[800], 
+                  height: 1.35,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: onMore ?? () {
+                    showChallengeRulesSheet(
+                      context: context,
+                      rules: rules!,
+                      challengeName: challengeName ?? 'Challenge',
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).primaryColor,
+                    textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Learn More'),
+                ),
+              ),
+            ] else ...[
+              // 没有规则时的幽默提示
+              Row(
+                children: [
+                  Icon(Icons.rule, color: Colors.grey[400], size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Rules? What Rules?',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[600],
+                        ) ?? const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Just wing it! 🎯',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey[600], 
+                  height: 1.35,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Rules coming soon...',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -308,13 +697,17 @@ class _RuleCard extends StatelessWidget {
 }
 
 class _FeatureEntryCard extends StatelessWidget {
+  final String? videoUrl;
   final VoidCallback? onVideo;
   final VoidCallback? onJoin;
-  const _FeatureEntryCard({this.onVideo, this.onJoin});
+  
+  const _FeatureEntryCard({this.videoUrl, this.onVideo, this.onJoin});
 
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).primaryColor;
+    final hasVideo = videoUrl != null && videoUrl!.isNotEmpty && videoUrl != 'null';
+    
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
       elevation: 0,
@@ -334,18 +727,24 @@ class _FeatureEntryCard extends StatelessWidget {
                     padding: MaterialStateProperty.all(const EdgeInsets.symmetric(horizontal: 0)),
                     elevation: MaterialStateProperty.all(0),
                     backgroundColor: MaterialStateProperty.resolveWith((states) {
-                      return null;
+                      return hasVideo ? null : Colors.grey[400];
                     }),
                     foregroundColor: MaterialStateProperty.all(Colors.white),
                     overlayColor: MaterialStateProperty.all(primary.withOpacity(0.08)),
                   ),
                   child: Ink(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [primary, primary.withOpacity(0.7)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      gradient: hasVideo 
+                        ? LinearGradient(
+                            colors: [primary, primary.withOpacity(0.7)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : LinearGradient(
+                            colors: [Colors.grey[400]!, Colors.grey[400]!],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Container(
@@ -354,12 +753,17 @@ class _FeatureEntryCard extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.play_circle_fill, size: 20, color: Colors.white),
-                          SizedBox(width: 7),
+                        children: [
+                          Icon(
+                            hasVideo ? Icons.play_circle_fill : Icons.play_circle_outline, 
+                            size: 20, 
+                            color: Colors.white
+                          ),
+                          const SizedBox(width: 7),
                           Flexible(
-                            child: Text('Video Intro',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                            child: Text(
+                              hasVideo ? 'Video Intro' : 'Coming Soon',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -390,9 +794,9 @@ class _FeatureEntryCard extends StatelessWidget {
                     children: [
                       Icon(Icons.emoji_events, size: 18, color: primary),
                       const SizedBox(width: 7),
-                      Flexible(
+                      const Flexible(
                         child: Text('Join Now',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: primary),
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -409,14 +813,109 @@ class _FeatureEntryCard extends StatelessWidget {
 }
 
 class _PreseasonRecordList extends StatelessWidget {
+  final PreseasonData? preseason;
+  final bool isLoading;
+  final VoidCallback? onLoadMore;
+  
+  const _PreseasonRecordList({
+    this.preseason,
+    this.isLoading = false,
+    this.onLoadMore,
+  });
+
   @override
   Widget build(BuildContext context) {
-    final records = [
-      {'index': 1, 'name': 'HIIT 7-Day Challenge', 'rank': '2nd'},
-      {'index': 2, 'name': 'Yoga Masters Cup', 'rank': '1st'},
-    ];
-    // 公告内容
-    final String notice = 'Preseason is for warm-up and fun! Results here do not affect the official playoffs. Enjoy and challenge yourself!';
+    // 显示加载状态
+    if (isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 创意加载动画
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Colors.orange[400]!, Colors.orange[600]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.sports_score,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // 幽默的加载文案
+            Text(
+              'Warming up the stats... 🔥',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Our servers are doing jumping jacks',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.orange[400]!),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    if (preseason == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.sports_score_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No preseason data yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The season hasn\'t started!',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     return Column(
       children: [
         Padding(
@@ -436,7 +935,7 @@ class _PreseasonRecordList extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: Text(
-              notice,
+              'Preseason is warming up! 🔥',  // 简化显示，公告信息现在在基础信息中
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.black87,
                     fontWeight: FontWeight.w500,
@@ -447,23 +946,112 @@ class _PreseasonRecordList extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            key: const PageStorageKey('preseasonList'),
-            padding: const EdgeInsets.only(top: 0),
-            itemCount: records.length,
-            itemBuilder: (context, i) {
-              final r = records[i];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: ListTile(
-                  leading: CircleAvatar(child: Text('${r['index']}')),
-                  title: Text(r['name'].toString(), style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
-                  trailing: Text(r['rank'].toString(), style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary)),
+          child: preseason!.records.isNotEmpty 
+            ? ListView.builder(
+                key: const PageStorageKey('preseasonList'),
+                padding: const EdgeInsets.only(top: 0),
+                itemCount: preseason!.records.length + (preseason!.pagination.currentPage < preseason!.pagination.totalPages ? 1 : 0),
+                itemBuilder: (context, i) {
+                  // 如果是最后一项且还有更多页，显示加载更多按钮
+                  if (i == preseason!.records.length && preseason!.pagination.currentPage < preseason!.pagination.totalPages) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                      child: Center(
+                        child: isLoading 
+                          ? Column(
+                              children: [
+                                SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Loading more records... 📊',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ElevatedButton(
+                              onPressed: onLoadMore,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text('Load More'),
+                            ),
+                      ),
+                    );
+                  }
+                  
+                  final record = preseason!.records[i];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    child: ListTile(
+                      leading: CircleAvatar(child: Text('${record.index}')),
+                      title: Text(record.name, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
+                      trailing: RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: record.rank,
+                              style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary),
+                            ),
+                            TextSpan(
+                              text: '  [${record.counts}]',
+                              style: AppTextStyles.labelMedium.copyWith(
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              )
+            : Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.emoji_events_outlined,
+                      size: 48,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No records yet',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Be the first to make history! 🏆',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
                 ),
-              );
-            },
-          ),
+              ),
         ),
       ],
     );
@@ -494,7 +1082,10 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 }
 
 class _FullScreenVideoPage extends StatefulWidget {
-  const _FullScreenVideoPage({Key? key}) : super(key: key);
+  final String videoUrl;
+  
+  const _FullScreenVideoPage({required this.videoUrl});
+  
   @override
   State<_FullScreenVideoPage> createState() => _FullScreenVideoPageState();
 }
@@ -506,9 +1097,11 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.asset('assets/video/video1.mp4')
+    _controller = VideoPlayerController.network(widget.videoUrl)
       ..initialize().then((_) {
         setState(() => _isInitialized = true);
+        // 确保音量设置为最大值（有声音）
+        _controller.setVolume(1.0);
         _controller.play();
       });
   }
@@ -548,8 +1141,15 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
   }
 }
 
-// 3. 新增_PlayoffBracket组件
 class _PlayoffBracket extends StatefulWidget {
+  final PlayoffData? playoffs;
+  final bool isLoading;
+  
+  const _PlayoffBracket({
+    this.playoffs,
+    this.isLoading = false,
+  });
+  
   @override
   State<_PlayoffBracket> createState() => _PlayoffBracketState();
 }
@@ -559,9 +1159,125 @@ class _PlayoffBracketState extends State<_PlayoffBracket> {
 
   @override
   Widget build(BuildContext context) {
-    final matches = playoffData[_selectedStage] ?? [];
+    // 显示加载状态
+    if (widget.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 创意加载动画
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Colors.purple[400]!, Colors.purple[600]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.emoji_events,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // 幽默的加载文案
+            Text(
+              'Setting up the bracket... 🏆',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The tournament gods are working overtime',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.purple[400]!),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    if (widget.playoffs == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.sports_esports_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Playoffs not ready yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Still in regular season! 📅',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    final stageNames = getPlayoffStageNames(widget.playoffs!.stages);
+    final matches = widget.playoffs!.matches;
+    
+    // 根据选择的阶段获取对应的比赛数据
+    List<PlayoffMatch> stageMatches = [];
+    switch (_selectedStage) {
+      case PlayoffStage.round32:
+        stageMatches = matches['round32'] ?? [];
+        break;
+      case PlayoffStage.round16:
+        stageMatches = matches['round16'] ?? [];
+        break;
+      case PlayoffStage.round8:
+        stageMatches = matches['round8'] ?? [];
+        break;
+      case PlayoffStage.round4:
+        stageMatches = matches['round4'] ?? [];
+        break;
+      case PlayoffStage.semi:
+        stageMatches = matches['semi'] ?? [];
+        break;
+      case PlayoffStage.finalMatch:
+        stageMatches = matches['finalMatch'] ?? [];
+        break;
+    }
+    
     return Container(
-      color: const Color(0xFFF7F8FA), // 苹果风浅灰背景
+      color: const Color(0xFFF7F8FA),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -586,7 +1302,7 @@ class _PlayoffBracketState extends State<_PlayoffBracket> {
                           border: selected ? Border.all(color: Theme.of(context).primaryColor, width: 2) : null,
                         ),
                         child: Text(
-                          playoffStageNames[stage]!,
+                          stageNames[stage]!,
                           style: TextStyle(
                             color: selected ? Colors.white : Colors.black87,
                             fontWeight: selected ? FontWeight.bold : FontWeight.normal,
@@ -605,11 +1321,11 @@ class _PlayoffBracketState extends State<_PlayoffBracket> {
           Expanded(
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-              itemCount: matches.length,
+              itemCount: stageMatches.length,
               separatorBuilder: (_, __) => const SizedBox(height: 14),
               itemBuilder: (context, i) {
-                final m = matches[i];
-                return _PlayoffMatchCard(match: m);
+                final match = stageMatches[i];
+                return _PlayoffMatchCard(match: match);
               },
             ),
           ),
@@ -621,6 +1337,7 @@ class _PlayoffBracketState extends State<_PlayoffBracket> {
 
 class _PlayoffMatchCard extends StatelessWidget {
   final PlayoffMatch match;
+  
   const _PlayoffMatchCard({required this.match});
 
   @override
@@ -636,6 +1353,7 @@ class _PlayoffMatchCard extends StatelessWidget {
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     );
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
@@ -685,10 +1403,10 @@ class _PlayoffMatchCard extends StatelessWidget {
                 ],
                 border: Border.all(color: Colors.white, width: 2),
               ),
-              child: Center(
+              child: const Center(
                 child: Text(
                   'VS',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -719,13 +1437,21 @@ class _PlayoffUserCell extends StatelessWidget {
   final bool isWinner;
   final int? score;
   final bool alignRight;
-  const _PlayoffUserCell({this.avatar, this.name, this.isWinner = false, this.score, this.alignRight = false});
+  
+  const _PlayoffUserCell({
+    this.avatar, 
+    this.name, 
+    this.isWinner = false, 
+    this.score, 
+    this.alignRight = false
+  });
 
   @override
   Widget build(BuildContext context) {
     if (name == null) {
       return const SizedBox(width: 100);
     }
+    
     return Row(
       mainAxisAlignment: alignRight ? MainAxisAlignment.end : MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.max,
@@ -800,60 +1526,59 @@ class _PlayoffUserCell extends StatelessWidget {
 }
 
 class _GameTrackerTab extends StatelessWidget {
+  final List<GameTrackerPost>? posts;
+  
+  const _GameTrackerTab({this.posts});
+
   @override
   Widget build(BuildContext context) {
-    // 伪数据
-    final List<Map<String, dynamic>> posts = [
-      {
-        'announcement': '🏆 Congratulations!\nYou are the WINNER of the 10 SEC MAX Challenge!',
-        'image': 'assets/images/player_cover.png',
-        'desc': 'Share your achievement with friends and stay tuned for the next challenge!',
-        'time': DateTime.now().subtract(const Duration(hours: 1)),
-      },
-      {
-        'announcement': '🔥 New Record!\nYou hit 50 punches in 10 seconds!',
-        'image': 'assets/images/avatar_default.png',
-        'desc': 'Keep pushing your limits and break more records!',
-        'time': DateTime.now().subtract(const Duration(hours: 3, minutes: 20)),
-      },
-      {
-        'announcement': '🎉 Challenge Completed!\nYou finished all daily tasks.',
-        'image': 'assets/images/player_cover.png',
-        'desc': 'Great job! Don’t forget to check out the next event.',
-        'time': DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-      },
-      {
-        'announcement': '🎉 Challenge Completed!\nYou finished all daily tasks.',
-        'image': null,
-        'desc': 'Great job! Don’t forget to check out the next event.',
-        'time': DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-      },
-      {
-        'announcement': '🎉 Challenge Completed!\nYou finished all daily tasks.',
-        'image': null,
-        'desc': null,
-        'time': DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-      },
-      {
-        'announcement': null,
-        'image': 'assets/images/player_cover.png',
-        'desc': null,
-        'time': DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-      }
-    ];
+    if (posts == null || posts!.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.track_changes_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No game updates yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The game is still loading... 🎮',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     // 按时间倒序
-    posts.sort((a, b) => (b['time'] as DateTime).compareTo(a['time'] as DateTime));
+    final sortedPosts = List<GameTrackerPost>.from(posts!)
+      ..sort((a, b) => b.timestep.compareTo(a.timestep));
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: posts.map((post) => Padding(
+        children: sortedPosts.map((post) => Padding(
           padding: const EdgeInsets.only(bottom: 24),
           child: _GameTrackerCard(
-            announcement: post['announcement'],
-            imageAsset: post['image'],
-            desc: post['desc'],
-            time: post['time'],
+            announcement: post.announcement,
+            imageUrl: post.image,
+            desc: post.desc,
+            timestep: post.timestep,
           ),
         )).toList(),
       ),
@@ -863,24 +1588,26 @@ class _GameTrackerTab extends StatelessWidget {
 
 class _GameTrackerCard extends StatelessWidget {
   final String? announcement;
-  final String? imageAsset;
+  final String? imageUrl;
   final String? desc;
-  final DateTime? time;
+  final int timestep;
+  
   const _GameTrackerCard({
     this.announcement,
-    this.imageAsset,
+    this.imageUrl,
     this.desc,
-    this.time,
+    required this.timestep,
   });
 
-  String _formatTime(DateTime t) {
+  String _formatTime(int timestamp) {
     final now = DateTime.now();
-    final diff = now.difference(t);
+    final time = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final diff = now.difference(time);
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
     if (diff.inHours < 24) return '${diff.inHours} hr ago';
     if (diff.inDays == 1) return 'Yesterday';
-    return '${t.year}/${t.month.toString().padLeft(2, '0')}/${t.day.toString().padLeft(2, '0')}';
+    return '${time.year}/${time.month.toString().padLeft(2, '0')}/${time.day.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -888,24 +1615,22 @@ class _GameTrackerCard extends StatelessWidget {
     final List<Widget> children = [];
 
     // 时间
-    if (time != null) {
-      children.add(Row(
-        children: [
-          Icon(Icons.access_time, color: Colors.grey[500], size: 18),
-          const SizedBox(width: 6),
-          Text(
-            _formatTime(time!),
-            style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500, letterSpacing: 0.2),
-          ),
-        ],
-      ));
-      if (imageAsset != null || announcement != null || desc != null) {
-        children.add(const SizedBox(height: 10));
-      }
+    children.add(Row(
+      children: [
+        Icon(Icons.access_time, color: Colors.grey[500], size: 18),
+        const SizedBox(width: 6),
+        Text(
+          _formatTime(timestep),
+          style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500, letterSpacing: 0.2),
+        ),
+      ],
+    ));
+    if (imageUrl != null || announcement != null || desc != null) {
+      children.add(const SizedBox(height: 10));
     }
 
     // 图片
-    if (imageAsset != null) {
+    if (imageUrl != null) {
       children.add(
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -914,9 +1639,26 @@ class _GameTrackerCard extends StatelessWidget {
             child: Container(
               color: Colors.white,
               alignment: Alignment.center,
-              child: Image.asset(
-                imageAsset!,
+              child: Image.network(
+                imageUrl!,
                 fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  // 远程图片加载失败时显示本地备用图片
+                  return Image.asset(
+                    'assets/images/player_cover.png',
+                    fit: BoxFit.contain,
+                  );
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -975,4 +1717,4 @@ class _GameTrackerCard extends StatelessWidget {
       ),
     );
   }
-}
+} 

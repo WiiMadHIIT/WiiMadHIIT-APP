@@ -1,17 +1,14 @@
 import '../entities/training_rule.dart';
-import '../entities/projection_tutorial.dart';
 import '../entities/training_config.dart';
 
 class TrainingRuleService {
   /// 验证训练规则数据的完整性
   bool validateTrainingRuleData({
     required List<TrainingRule> trainingRules,
-    required ProjectionTutorial projectionTutorial,
     required TrainingConfig trainingConfig,
   }) {
-    return trainingRules.isNotEmpty &&
-           projectionTutorial.hasTutorialSteps &&
-           trainingConfig.isValid;
+    // 允许trainingRules为空，只要trainingConfig有效即可
+    return trainingConfig.isValid;
   }
 
   /// 获取排序后的训练规则
@@ -31,6 +28,21 @@ class TrainingRuleService {
     return config.isValid && config.isRouteValid;
   }
 
+  /// 验证训练是否可以开始
+  bool canStartTraining(TrainingConfig config) {
+    return config.canStartTraining;
+  }
+
+  /// 获取训练激活状态信息
+  Map<String, dynamic> getTrainingActivationInfo(TrainingConfig config) {
+    return {
+      'isActivated': config.isActivated,
+      'canStart': config.canStartTraining,
+      'statusText': config.activationStatusText,
+      'isValid': config.isValid,
+    };
+  }
+
   /// 获取训练规则统计信息
   Map<String, dynamic> getTrainingRuleStatistics(List<TrainingRule> rules) {
     final validRules = getValidTrainingRules(rules);
@@ -43,25 +55,6 @@ class TrainingRuleService {
       'hasRules': validRules.isNotEmpty,
       'firstRule': sortedRules.isNotEmpty ? sortedRules.first : null,
       'lastRule': sortedRules.isNotEmpty ? sortedRules.last : null,
-    };
-  }
-
-  /// 验证投影教程的完整性
-  bool validateProjectionTutorial(ProjectionTutorial tutorial) {
-    return tutorial.hasVideo && tutorial.hasTutorialSteps;
-  }
-
-  /// 获取教程步骤统计信息
-  Map<String, dynamic> getTutorialStepStatistics(ProjectionTutorial tutorial) {
-    final sortedSteps = tutorial.sortedSteps;
-    
-    return {
-      'totalSteps': tutorial.stepCount,
-      'sortedSteps': sortedSteps,
-      'hasSteps': tutorial.hasTutorialSteps,
-      'firstStep': tutorial.firstStep,
-      'lastStep': tutorial.lastStep,
-      'hasVideo': tutorial.hasVideo,
     };
   }
 

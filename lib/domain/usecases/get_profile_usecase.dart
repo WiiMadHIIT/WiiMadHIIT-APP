@@ -9,4 +9,24 @@ class GetProfileUseCase {
   Future<Profile> execute() {
     return repository.getProfile();
   }
+
+  // 新增：获取激活分页
+  Future<ActivatePage> executeFetchActivate({int page = 1, int size = 10}) {
+    return repository.getActivatePage(page: page, size: size);
+  }
+
+  // 新增：获取打卡分页
+  Future<CheckinPage> executeFetchCheckins({int page = 1, int size = 10}) {
+    return repository.getCheckinPage(page: page, size: size);
+  }
+
+  // 新增：获取挑战分页
+  Future<ChallengePage> executeFetchChallenges({int page = 1, int size = 10}) {
+    return repository.getChallengePage(page: page, size: size);
+  }
+
+  // 新增：删除用户账号
+  Future<bool> executeDeleteAccount() {
+    return repository.deleteAccount();
+  }
 }

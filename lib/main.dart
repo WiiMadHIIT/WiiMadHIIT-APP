@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_icons.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_text_styles.dart';
+import 'core/page_visibility_manager.dart';
+import 'core/auth/auth_state_manager.dart';
 import 'presentation/profile/profile_page.dart';
+import 'presentation/profile/profile_viewmodel.dart';
 import 'presentation/challenge/challenge_page.dart';
 import 'presentation/home/home_page.dart';
 import 'presentation/bonus/bonus_page.dart';
@@ -43,6 +47,9 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   final GlobalKey<ProfilePageState> _profilePageKey = GlobalKey<ProfilePageState>();
+  
+  // 统一认证状态管理器
+  late final AuthStateManager _authManager = AuthStateManager();
 
   late final List<Widget> _pages;
 
@@ -68,14 +75,26 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
       BonusPage(),
       ProfilePage(key: _profilePageKey),
     ];
+    
+    // 初始化认证状态管理器
+    _authManager.initialize();
+    
+    // 监听认证状态变化，同步Tab状态
+    _authManager.addListener(_onAuthStateChanged);
   }
-
-
 
   @override
   void dispose() {
+    _authManager.removeListener(_onAuthStateChanged);
     _animationController.dispose();
     super.dispose();
+  }
+
+  /// 认证状态变化回调
+  void _onAuthStateChanged() {
+    // 大厂级别：简化逻辑，认证状态变化时无需特殊处理
+    // Tab认证状态会在需要时自动检查
+    print('🔐 MainTabPage: 认证状态变化，无需特殊处理');
   }
 
   @override
@@ -106,41 +125,6 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
       animation: _fadeAnimation,
       builder: (context, child) {
         return Container(
-          // decoration: BoxDecoration(
-          //   // Wiimad激活时用渐变，其它tab用透明色
-          //   gradient: isWiimadActive
-          //       ? LinearGradient(
-          //           begin: Alignment.topLeft,
-          //           end: Alignment.bottomRight,
-          //           colors: [
-          //             Colors.black.withOpacity(0.95),
-          //             AppColors.primary.withOpacity(0.1),
-          //             Colors.black.withOpacity(0.9),
-          //           ],
-          //           stops: [0, 0.5, 1],
-          //         )
-          //       : null,
-          //   color: isProfileActive
-          //       ? Colors.transparent
-          //       : (isWiimadActive ? Colors.white.withOpacity(0): Colors.transparent),
-          //   border: Border(
-          //     top: BorderSide(
-          //       color: isWiimadActive
-          //           ? AppColors.primary.withOpacity(0)
-          //           : Colors.grey.withOpacity(0),
-          //       width: 0.5,
-          //     ),
-          //   ),
-          //   boxShadow: [
-          //     BoxShadow(
-          //       color: isWiimadActive
-          //           ? AppColors.primary.withOpacity(0.2)
-          //           : AppColors.shadow,
-          //       blurRadius: isWiimadActive ? 20 : 12,
-          //       offset: const Offset(0, -2),
-          //     ),
-          //   ],
-          // ),
           child: ClipRRect(
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(20),
@@ -164,16 +148,8 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
                   backgroundColor: Colors.transparent,
                   currentIndex: _currentIndex,
                   onTap: (index) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                    
-                    // 当切换到Profile页面时，重置滑动提示
-                    if (index == 4) {
-                      Future.delayed(const Duration(milliseconds: 100), () {
-                        _profilePageKey.currentState?.resetScrollHint();
-                      });
-                    }
+                    // 🎯 页面切换逻辑
+                    _handlePageChange(index);
                   },
                   selectedItemColor: isWiimadActive 
                       ? AppColors.primary 
@@ -259,6 +235,45 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
       },
     );
   }
+
+  /// 🎯 处理页面切换逻辑
+  void _handlePageChange(int newIndex) async {
+    final int previousIndex = _currentIndex;
+    
+    // 大厂级别：Profile页面需要认证检查
+    if (newIndex == 4) { // Profile tab
+      final isAuthenticated = await _authManager.checkPageAuth(AppRoutes.profile);
+      if (!isAuthenticated) {
+        // 未认证，跳转登录页面
+        print('🔐 MainTabPage: Profile页面需要认证，跳转登录页面');
+        Navigator.of(context).pushNamed(AppRoutes.login);
+        return; // 阻止Tab切换
+      }
+    }
+    
+    // 认证通过或不需要认证，正常切换Tab
+    // 使用页面可见性管理器通知页面切换
+    final visibilityManager = PageVisibilityManager();
+    visibilityManager.setPageVisibility(previousIndex, false); // 页面隐藏
+    visibilityManager.setPageVisibility(newIndex, true);       // 页面显示
+    
+    setState(() {
+      _currentIndex = newIndex;
+    });
+    
+    // 大厂级别：当切换到Profile页面时，智能刷新数据
+    if (newIndex == 4) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        // 重置滑动提示
+        _profilePageKey.currentState?.resetScrollHint();
+        
+        // 大厂级别：调用ProfilePage的内部方法进行智能刷新
+        _profilePageKey.currentState?.smartRefreshProfileData();
+      });
+    }
+  }
+
+
 }
 
 // 自适应 Tab Icon 组件

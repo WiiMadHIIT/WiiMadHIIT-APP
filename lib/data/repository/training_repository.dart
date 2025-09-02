@@ -22,7 +22,6 @@ class TrainingRepository {
           pageSubtitle: apiModel.pageConfig.pageSubtitle,
           videoUrl: apiModel.pageConfig.videoUrl,
           thumbnailUrl: apiModel.pageConfig.thumbnailUrl,
-          lastUpdated: apiModel.pageConfig.lastUpdated,
         ),
         trainings: apiModel.trainings.map((training) => TrainingItem(
           id: training.id,
@@ -30,7 +29,6 @@ class TrainingRepository {
           level: training.level,
           description: training.description,
           participantCount: training.participantCount,
-          completionRate: training.completionRate,
           status: training.status,
         )).toList(),
       );

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import '../../domain/entities/training_product.dart';
 import '../../domain/entities/training_item.dart';
 import '../../domain/usecases/get_training_product_usecase.dart';
@@ -13,15 +14,19 @@ class TrainingListViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   String _searchQuery = '';
-  String _selectedLevel = '';
+  int _selectedLevel = 0;
   String? _productId;
+  
+  // 延迟清理相关
+  Timer? _cleanupTimer;
+  static const Duration _cleanupDelay = Duration(seconds: 30); // 30秒后清理
 
   // Getters
   TrainingProduct? get trainingProduct => _trainingProduct;
   bool get isLoading => _isLoading;
   String? get error => _error;
   String get searchQuery => _searchQuery;
-  String get selectedLevel => _selectedLevel;
+  int get selectedLevel => _selectedLevel;
   String? get productId => _productId;
   
   // 计算属性
@@ -40,15 +45,13 @@ class TrainingListViewModel extends ChangeNotifier {
       trainings = trainings.where((training) => 
         training.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
         training.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        training.level.toLowerCase().contains(_searchQuery.toLowerCase())
+        training.level.toString().contains(_searchQuery)
       ).toList();
     }
     
     // 应用难度等级筛选
-    if (_selectedLevel.isNotEmpty) {
-      trainings = trainings.where((training) => 
-        training.level.toLowerCase() == _selectedLevel.toLowerCase()
-      ).toList();
+    if (_selectedLevel > 0) {
+      trainings = trainings.where((training) => training.level == _selectedLevel).toList();
     }
     
     return trainings;
@@ -64,7 +67,6 @@ class TrainingListViewModel extends ChangeNotifier {
     return {
       'totalCount': _trainingProduct!.trainingCount,
       'activeCount': _trainingProduct!.activeTrainingCount,
-      'averageCompletionRate': _trainingProduct!.averageCompletionRate,
       'totalParticipantCount': _trainingProduct!.totalParticipantCount,
     };
   }
@@ -98,7 +100,7 @@ class TrainingListViewModel extends ChangeNotifier {
   }
 
   /// 筛选训练项目（按难度等级）
-  void filterByLevel(String level) {
+  void filterByLevel(int level) {
     _selectedLevel = level;
     notifyListeners();
   }
@@ -106,7 +108,7 @@ class TrainingListViewModel extends ChangeNotifier {
   /// 清除筛选条件
   void clearFilters() {
     _searchQuery = '';
-    _selectedLevel = '';
+    _selectedLevel = 0;
     notifyListeners();
   }
 
@@ -174,5 +176,48 @@ class TrainingListViewModel extends ChangeNotifier {
   void _clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  /// 智能延迟清理：延迟清理数据以提升用户体验
+  void scheduleCleanup() {
+    // 取消之前的清理定时器
+    _cleanupTimer?.cancel();
+    
+    // 设置新的延迟清理定时器
+    _cleanupTimer = Timer(_cleanupDelay, () {
+      _cleanupData();
+    });
+  }
+
+  /// 立即清理数据
+  void _cleanupData() {
+    _trainingProduct = null;
+    _error = null;
+    _isLoading = false;
+    _searchQuery = '';
+    _selectedLevel = 0;
+    _productId = null;
+    notifyListeners();
+  }
+
+  /// 取消延迟清理（当用户重新访问页面时）
+  void cancelCleanup() {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+  }
+
+  /// 检查是否有缓存数据
+  bool get hasCachedData => _trainingProduct != null;
+
+  @override
+  void dispose() {
+    // 取消定时器
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    
+    // 立即清理数据
+    _cleanupData();
+    
+    super.dispose();
   }
 } 

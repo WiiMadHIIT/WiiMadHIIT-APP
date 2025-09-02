@@ -18,9 +18,9 @@ class CheckinService {
     ).toList();
   }
 
-  /// 获取有自定义图标的产品
+  /// 获取有自定义图标的产品（已不使用远程图标，返回空）
   List<CheckinProduct> getProductsWithCustomIcons(List<CheckinProduct> products) {
-    return products.where((product) => product.hasCustomIcon).toList();
+    return const [];
   }
 
   /// 获取有自定义视频的产品
@@ -42,7 +42,7 @@ class CheckinService {
   Map<String, int> getProductStatistics(List<CheckinProduct> products) {
     return {
       'total': products.length,
-      'withCustomIcons': getProductsWithCustomIcons(products).length,
+      'withCustomIcons': 0,
       'withCustomVideos': getProductsWithCustomVideos(products).length,
       'needingFallback': getProductsNeedingLocalFallback(products).length,
     };

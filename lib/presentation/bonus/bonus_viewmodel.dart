@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/bonus_activity.dart';
 import '../../domain/usecases/get_bonus_activities_usecase.dart';
-import '../../domain/usecases/claim_bonus_usecase.dart';
 import '../../domain/services/bonus_service.dart';
+import '../../data/repository/bonus_repository.dart';
 
 class BonusViewModel extends ChangeNotifier {
   final GetBonusActivitiesUseCase getBonusActivitiesUseCase;
-  final ClaimBonusUseCase claimBonusUseCase;
   final BonusService bonusService;
 
   List<BonusActivity> _activities = [];
@@ -15,6 +14,13 @@ class BonusViewModel extends ChangeNotifier {
   bool _isLoading = false;
   int _currentIndex = 0;
   String _userRegion = 'US'; // 默认用户地区，后续可从用户配置获取
+  
+  // 分页相关状态
+  int _currentPage = 1;
+  int _pageSize = 10;
+  int _total = 0;
+  bool _hasNextPage = false;
+  bool _hasPreviousPage = false;
 
   // Getters
   List<BonusActivity> get activities => _activities;
@@ -24,25 +30,61 @@ class BonusViewModel extends ChangeNotifier {
   int get currentIndex => _currentIndex;
   bool get hasActivities => _activities.isNotEmpty;
   bool get hasError => _error != null;
+  
+  // 分页相关 Getters
+  int get currentPage => _currentPage;
+  int get pageSize => _pageSize;
+  int get total => _total;
+  bool get hasNextPage => _hasNextPage;
+  bool get hasPreviousPage => _hasPreviousPage;
+  int get totalPages => (_total / _pageSize).ceil();
 
   BonusViewModel({
     required this.getBonusActivitiesUseCase,
-    required this.claimBonusUseCase,
     required this.bonusService,
   });
 
-  /// 加载奖励活动列表
-  Future<void> loadBonusActivities() async {
+  /// 加载奖励活动列表（分页）
+  Future<void> loadBonusActivities({
+    int page = 1,
+    int size = 10,
+    bool append = false,
+  }) async {
     _setLoading(true);
-    _clearError();
 
     try {
-      final activities = await getBonusActivitiesUseCase.execute();
-      _activities = activities;
-      _filteredActivities = activities;
+      final pageData = await getBonusActivitiesUseCase.execute(page: page, size: size);
+      
+      if (append && page > 1) {
+        // 追加模式：将新数据追加到现有列表
+        _activities.addAll(pageData.activities);
+        _filteredActivities.addAll(pageData.activities);
+      } else {
+        // 替换模式：替换现有数据
+        _activities = pageData.activities;
+        _filteredActivities = pageData.activities;
+      }
+      
+      // 更新分页信息
+      _currentPage = pageData.currentPage;
+      _pageSize = pageData.pageSize;
+      _total = pageData.total;
+      _hasNextPage = pageData.hasNextPage;
+      _hasPreviousPage = pageData.hasPreviousPage;
+      
       _notifyListeners();
     } catch (e) {
-      _setError(e.toString());
+      // 如果加载失败，设置为空列表，不显示错误
+      print('❌ Error loading bonus activities: $e');
+      if (!append) {
+        _activities = [];
+        _filteredActivities = [];
+        _currentPage = 1;
+        _total = 0;
+        _hasNextPage = false;
+        _hasPreviousPage = false;
+      }
+      _notifyListeners();
     } finally {
       _setLoading(false);
     }
@@ -64,94 +106,49 @@ class BonusViewModel extends ChangeNotifier {
     return null;
   }
 
-  /// 领取奖励
-  Future<void> claimBonus(String activityId) async {
-    try {
-      final result = await claimBonusUseCase.execute(activityId);
-      
-      // 更新本地活动状态
-      final index = _activities.indexWhere((activity) => activity.id == activityId);
-      if (index != -1) {
-        // 这里需要重新加载数据来获取最新的状态
-        await loadBonusActivities();
-      }
-      
-      _notifyListeners();
-    } catch (e) {
-      _setError('Failed to claim bonus: $e');
-    }
-  }
 
-  /// 按分类过滤活动
-  void filterByCategory(String category) {
-    if (category.isEmpty) {
-      _filteredActivities = _activities;
-    } else {
-      _filteredActivities = bonusService.filterByCategory(_activities, category);
-    }
-    _currentIndex = 0; // 重置索引
-    _notifyListeners();
-  }
-
-  /// 按难度过滤活动
-  void filterByDifficulty(String difficulty) {
-    if (difficulty.isEmpty) {
-      _filteredActivities = _activities;
-    } else {
-      _filteredActivities = bonusService.filterByDifficulty(_activities, difficulty);
-    }
-    _currentIndex = 0; // 重置索引
-    _notifyListeners();
-  }
-
-  /// 只显示可用活动
-  void showAvailableOnly() {
-    _filteredActivities = bonusService.filterAvailableActivities(_activities, _userRegion);
-    _currentIndex = 0; // 重置索引
-    _notifyListeners();
-  }
-
-  /// 显示所有活动
-  void showAllActivities() {
-    _filteredActivities = _activities;
-    _currentIndex = 0; // 重置索引
-    _notifyListeners();
-  }
-
-  /// 获取活动统计信息
-  Map<String, dynamic> getActivityStats() {
-    return bonusService.getActivityStats(_activities);
-  }
-
-  /// 检查用户是否符合活动资格
-  bool isUserEligible(BonusActivity activity) {
-    return bonusService.isUserEligible(activity, _userRegion);
-  }
-
-  /// 设置用户地区
-  void setUserRegion(String region) {
-    _userRegion = region;
-    _notifyListeners();
-  }
 
   /// 刷新数据
   Future<void> refresh() async {
-    await loadBonusActivities();
+    await loadBonusActivities(page: 1, size: _pageSize);
+  }
+
+  /// 加载下一页
+  Future<void> loadNextPage() async {
+    if (_hasNextPage && !_isLoading) {
+      await loadBonusActivities(
+        page: _currentPage + 1,
+        size: _pageSize,
+        append: true,
+      );
+    }
+  }
+
+  /// 加载上一页
+  Future<void> loadPreviousPage() async {
+    if (_hasPreviousPage && !_isLoading) {
+      await loadBonusActivities(
+        page: _currentPage - 1,
+        size: _pageSize,
+        append: false,
+      );
+    }
+  }
+
+  /// 跳转到指定页
+  Future<void> goToPage(int page) async {
+    if (page >= 1 && page <= totalPages && !_isLoading) {
+      await loadBonusActivities(
+        page: page,
+        size: _pageSize,
+        append: false,
+      );
+    }
   }
 
   // Private methods
   void _setLoading(bool loading) {
     _isLoading = loading;
-    notifyListeners();
-  }
-
-  void _setError(String error) {
-    _error = error;
-    notifyListeners();
-  }
-
-  void _clearError() {
-    _error = null;
     notifyListeners();
   }
 

@@ -1,6 +1,5 @@
 import '../../data/repository/training_rule_repository.dart';
 import '../entities/training_rule.dart';
-import '../entities/projection_tutorial.dart';
 import '../entities/training_config.dart';
 import '../services/training_rule_service.dart';
 
@@ -20,13 +19,11 @@ class GetTrainingRuleUseCase {
     final data = await _repository.getTrainingRule(trainingId, productId);
     
     final trainingRules = data['trainingRules'] as List<TrainingRule>;
-    final projectionTutorial = data['projectionTutorial'] as ProjectionTutorial;
     final trainingConfig = data['trainingConfig'] as TrainingConfig;
 
     // 验证数据完整性
     if (!_service.validateTrainingRuleData(
       trainingRules: trainingRules,
-      projectionTutorial: projectionTutorial,
       trainingConfig: trainingConfig,
     )) {
       throw Exception('Invalid training rule data');
@@ -34,16 +31,13 @@ class GetTrainingRuleUseCase {
 
     // 获取统计信息
     final ruleStatistics = _service.getTrainingRuleStatistics(trainingRules);
-    final tutorialStatistics = _service.getTutorialStepStatistics(projectionTutorial);
 
     return {
       'trainingId': data['trainingId'],
       'productId': data['productId'],
       'trainingRules': trainingRules,
-      'projectionTutorial': projectionTutorial,
       'trainingConfig': trainingConfig,
       'ruleStatistics': ruleStatistics,
-      'tutorialStatistics': tutorialStatistics,
       'isValid': true,
     };
   }
@@ -52,12 +46,7 @@ class GetTrainingRuleUseCase {
   Map<String, dynamic> getTrainingRuleStatistics(List<TrainingRule> rules) {
     return _service.getTrainingRuleStatistics(rules);
   }
-
-  /// 获取教程步骤统计信息
-  Map<String, dynamic> getTutorialStepStatistics(ProjectionTutorial tutorial) {
-    return _service.getTutorialStepStatistics(tutorial);
-  }
-
+  
   /// 验证训练配置
   bool validateTrainingConfig(TrainingConfig config) {
     return _service.validateTrainingConfig(config);

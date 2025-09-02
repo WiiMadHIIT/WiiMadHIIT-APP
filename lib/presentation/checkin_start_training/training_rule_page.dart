@@ -4,12 +4,14 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/auth/auth_guard_mixin.dart';
 import 'dart:ui';
 import 'dart:math';
 import '../../routes/app_routes.dart';
 import '../../widgets/projection_tutorial_sheet.dart';
+import '../../widgets/training_error_content.dart';
+import '../../widgets/training_loading_content.dart';
 import '../../domain/entities/training_rule.dart';
-import '../../domain/entities/projection_tutorial.dart';
 import '../../domain/entities/training_config.dart';
 import 'training_rule_viewmodel.dart';
 
@@ -49,13 +51,19 @@ class _TrainingRulePageContent extends StatefulWidget {
 }
 
 class _TrainingRulePageContentState extends State<_TrainingRulePageContent> 
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AuthGuardMixin {
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   
   bool _isProjectionTutorialVisible = false;
+  
+  // ViewModel 引用
+  TrainingRuleViewModel? _viewModel;
+  
+  // 异步操作取消标志
+  bool _mounted = true;
 
   @override
   void initState() {
@@ -89,11 +97,20 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
     
     _startAnimations();
     
-    // 加载训练规则数据
+    // 在第一个帧渲染后智能加载训练规则数据
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final viewModel = Provider.of<TrainingRuleViewModel>(context, listen: false);
-      if (widget.trainingId != null && widget.productId != null) {
-        viewModel.loadTrainingRule(widget.trainingId!, widget.productId!);
+      if (_mounted) {
+        _viewModel = Provider.of<TrainingRuleViewModel>(context, listen: false);
+        
+        // 检查是否有缓存数据，如果有则取消清理定时器
+        if (_viewModel!.hasCachedData) {
+          _viewModel!.cancelCleanup();
+        } else {
+          // 如果没有缓存数据，需要重新加载
+          if (widget.trainingId != null && widget.productId != null) {
+            _viewModel!.loadTrainingRule(widget.trainingId!, widget.productId!);
+          }
+        }
       }
     });
   }
@@ -145,16 +162,35 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
   }
 
   void _startAnimations() async {
+    // 检查组件是否仍然挂载
+    if (!_mounted) return;
+    
     await Future.delayed(const Duration(milliseconds: 200));
+    if (!_mounted) return;
     _fadeController.forward();
+    
     await Future.delayed(const Duration(milliseconds: 300));
+    if (!_mounted) return;
     _slideController.forward();
   }
 
   @override
   void dispose() {
+    // 标记组件已销毁
+    _mounted = false;
+    
+    // 释放动画控制器
     _fadeController.dispose();
     _slideController.dispose();
+    
+    // 智能延迟清理：延迟清理数据以提升用户体验
+    if (_viewModel != null) {
+      _viewModel!.scheduleCleanup();
+    }
+    
+    // 清理 ViewModel 引用
+    _viewModel = null;
+    
     super.dispose();
   }
 
@@ -164,17 +200,6 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
       backgroundColor: const Color(0xFFF8F9FA),
       body: Consumer<TrainingRuleViewModel>(
         builder: (context, viewModel, child) {
-          // 显示加载状态
-          if (viewModel.isLoading) {
-            return _buildLoadingState();
-          }
-
-          // 显示错误状态
-          if (viewModel.hasError) {
-            return _buildErrorState(viewModel);
-          }
-
-          // 显示数据状态
           return LayoutBuilder(
             builder: (context, constraints) {
               final double horizontalPad = constraints.maxWidth < 600 ? 16 : 48;
@@ -189,6 +214,7 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
               
               return CustomScrollView(
                 slivers: [
+                  // SliverAppBar 始终可见，提供一致的导航体验
                   SliverAppBar(
                     expandedHeight: 180,
                     pinned: true,
@@ -199,6 +225,7 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
                       background: _buildHeaderBackground(),
                     ),
                   ),
+                  // 内容区域：根据状态显示不同内容
                   SliverToBoxAdapter(
                     child: SlideTransition(
                       position: _slideAnimation,
@@ -211,13 +238,29 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (viewModel.hasTrainingRules)
-                                  _buildTrainingRulesCard(cardPad, cardRadius, viewModel),
-                                if (viewModel.hasTrainingRules) SizedBox(height: cardGap),
-                                if (viewModel.hasProjectionTutorial)
-                                  _buildProjectionTutorialCard(cardPad, cardRadius, viewModel),
-                                if (viewModel.hasProjectionTutorial) SizedBox(height: sectionGap),
-                                _buildStartTrainingButton(buttonHeight, buttonRadius, viewModel),
+                                // 根据状态显示不同内容
+                                if (viewModel.isLoading)
+                                  TrainingRuleLoadingContent()
+                                else if (viewModel.hasError)
+                                  TrainingRuleErrorContent(
+                                    onRetry: () {
+                                      if (widget.trainingId != null && widget.productId != null) {
+                                        viewModel.loadTrainingRule(
+                                          widget.trainingId!, 
+                                          widget.productId!
+                                        );
+                                      }
+                                    },
+                                  )
+                                else ...[
+                                  // 正常数据状态
+                                  if (viewModel.hasTrainingRules)
+                                    _buildTrainingRulesCard(cardPad, cardRadius, viewModel),
+                                  if (viewModel.hasTrainingRules) SizedBox(height: cardGap),
+                                  _buildProjectionTutorialCard(cardPad, cardRadius),
+                                  SizedBox(height: sectionGap),
+                                  _buildStartTrainingButton(buttonHeight, buttonRadius, viewModel),
+                                ],
                               ],
                             ),
                           ),
@@ -452,7 +495,7 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
     );
   }
 
-  Widget _buildProjectionTutorialCard(double pad, double radius, TrainingRuleViewModel viewModel) {
+  Widget _buildProjectionTutorialCard(double pad, double radius) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -476,7 +519,7 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(radius),
-          onTap: () => _showProjectionTutorial(viewModel),
+          onTap: () => _showProjectionTutorial(),
           child: Padding(
             padding: EdgeInsets.all(pad),
             child: Row(
@@ -533,6 +576,9 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
   }
 
   Widget _buildStartTrainingButton(double height, double radius, TrainingRuleViewModel viewModel) {
+    final bool canStart = viewModel.canStartTraining;
+    final bool isActivated = viewModel.isActivated;
+    
     return Container(
       width: double.infinity,
       height: height,
@@ -540,17 +586,26 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
+          colors: canStart ? [
             AppColors.primary,
             AppColors.primary.withOpacity(0.8),
+          ] : [
+            Colors.grey[400]!,
+            Colors.grey[500]!,
           ],
         ),
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: [
+        boxShadow: canStart ? [
           BoxShadow(
             color: AppColors.primary.withOpacity(0.22),
             blurRadius: 12,
             offset: const Offset(0, 6),
+          ),
+        ] : [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -564,21 +619,38 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.play_arrow,
+                  canStart ? Icons.play_arrow : Icons.lock,
                   color: Colors.white,
                   size: height * 0.42,
                 ),
                 SizedBox(width: height * 0.18),
                 Flexible(
-                  child: Text(
-                    'Start Training',
-                    style: AppTextStyles.titleLarge.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: height * 0.38,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        canStart ? 'Start Training' : 'Training Not Available',
+                        style: AppTextStyles.titleLarge.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: height * 0.38,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (!isActivated) ...[
+                        SizedBox(height: 2),
+                        Text(
+                          'Please activate training first',
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: height * 0.25,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -589,7 +661,7 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
     );
   }
 
-  void _showProjectionTutorial(TrainingRuleViewModel viewModel) {
+  void _showProjectionTutorial() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -601,6 +673,12 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
 
 
   void _startTraining(TrainingRuleViewModel viewModel) {
+    // 检查训练是否已激活
+    if (!viewModel.canStartTraining) {
+      _showActivationDialog(viewModel);
+      return;
+    }
+    
     // 显示确认对话框
     showDialog(
       context: context,
@@ -752,94 +830,121 @@ class _TrainingRulePageContentState extends State<_TrainingRulePageContent>
     );
   }
 
-  /// 构建加载状态
-  Widget _buildLoadingState() {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Loading training rules...',
-              style: AppTextStyles.bodyLarge.copyWith(
-                color: Colors.grey[600],
+  /// 显示训练未激活对话框
+  void _showActivationDialog(TrainingRuleViewModel viewModel) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: 320,
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
               ),
-            ),
-          ],
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 顶部图标区域
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.orange,
+                      Colors.orange.withOpacity(0.8),
+                    ],
+                  ),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.lock,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Training Not Activated',
+                      style: AppTextStyles.headlineSmall.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // 内容区域
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'This beast mode workout is locked! 🔒\n\nHead to your Profile to activate this training and unleash your inner athlete! 💪',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: Colors.grey[700],
+                          height: 1.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // 按钮区域
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'OK',
+                            style: AppTextStyles.labelLarge.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// 构建错误状态
-  Widget _buildErrorState(TrainingRuleViewModel viewModel) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: Stack(
-        children: [
-          // 返回按钮
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 8,
-            child: _buildBackButton(),
-          ),
-          // 错误内容
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Failed to load training rules',
-                    style: AppTextStyles.titleMedium.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[700],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    viewModel.error ?? 'Unknown error occurred',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => viewModel.refresh(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      'Retry',
-                      style: AppTextStyles.labelLarge.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 }

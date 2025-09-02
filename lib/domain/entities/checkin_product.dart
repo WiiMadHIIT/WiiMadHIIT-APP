@@ -4,27 +4,20 @@ class CheckinProduct {
   final String id;
   final String name;
   final String description;
-  final String? iconUrl;    // 可选，null表示使用随机图标
   final String? videoUrl;   // 可选，null表示使用本地默认视频
 
   CheckinProduct({
     required this.id,
     required this.name,
     required this.description,
-    required this.iconUrl,
     required this.videoUrl,
   });
 
   // 固定的路由名称
   String get routeName => "/training_list";
 
-  // 智能图标选择：优先使用API图标，否则使用随机图标
-  String get displayIcon {
-    if (iconUrl != null && iconUrl!.isNotEmpty) {
-      return iconUrl!; // 使用API提供的图标
-    }
-    return randomIcon; // 使用随机图标
-  }
+  // 智能图标选择：使用随机图标（不再使用远程iconUrl）
+  String get displayIcon => randomIcon;
 
   // 随机生成图标的方法 - 使用通用图标，避免运动属性冲突
   String get randomIcon {
@@ -57,14 +50,14 @@ class CheckinProduct {
     return "assets/video/video1.mp4"; // 使用本地默认视频
   }
 
-  // 业务规则：检查是否有自定义图标
-  bool get hasCustomIcon => iconUrl != null && iconUrl!.isNotEmpty;
+  // 不再支持自定义远程图标
+  bool get hasCustomIcon => false;
 
   // 业务规则：检查是否有自定义视频
   bool get hasCustomVideo => videoUrl != null && videoUrl!.isNotEmpty;
 
   // 业务规则：检查是否需要回退到本地资源
-  bool get needsLocalFallback => !hasCustomIcon || !hasCustomVideo;
+  bool get needsLocalFallback => !hasCustomVideo;
 
   // 业务规则：获取产品显示名称（可扩展为多语言支持）
   String get displayName => name;

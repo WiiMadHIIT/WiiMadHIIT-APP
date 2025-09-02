@@ -8,14 +8,16 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'dart:math';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
-import 'package:infinite_carousel/infinite_carousel.dart';
 import '../../widgets/floating_logo.dart';
+import '../../widgets/elegant_refresh_button.dart';
+
 import '../../routes/app_routes.dart';
 import '../../domain/entities/checkin_product.dart';
 import '../../domain/services/checkin_service.dart';
 import '../../domain/usecases/get_checkin_products_usecase.dart';
 import '../../data/api/checkin_api.dart';
 import '../../data/repository/checkin_repository.dart';
+import '../../core/page_visibility_manager.dart';
 import 'checkin_viewmodel.dart';
 
 // 移除旧的ProductCheckin类，使用CheckinProduct实体
@@ -31,7 +33,7 @@ class CheckinPage extends StatelessWidget {
           CheckinRepository(CheckinApi()),
           CheckinService(),
         ),
-      )..loadCheckinProducts(),
+      )..loadCheckinProducts(page: 1, size: 10), // Initial load with pagination
       child: const _CheckinPageContent(),
     );
   }
@@ -44,112 +46,331 @@ class _CheckinPageContent extends StatefulWidget {
   State<_CheckinPageContent> createState() => _CheckinPageContentState();
 }
 
-class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTickerProviderStateMixin {
-  late VideoPlayerController _controller;
-  VideoPlayerController? _nextController;
-  late InfiniteScrollController _carouselController;
+class _CheckinPageContentState extends State<_CheckinPageContent> 
+    with SingleTickerProviderStateMixin, PageVisibilityMixin {
   late final PageController _pageController = PageController(viewportFraction: 0.78);
   late final AnimationController _videoSwitchAnim;
   bool _isSwitchingVideo = false;
-  List<VideoPlayerController> _videoControllers = [];
+  
+  // 🎯 核心优化：使用 Map 管理控制器，只保留必要的
+  final Map<int, VideoPlayerController> _videoControllers = {};
+  int _currentIndex = 0;
+  static const int _preloadRange = 2; // 前后各预加载2个
+  
+  // 🎯 共享的默认视频控制器，避免重复创建
+  VideoPlayerController? _defaultVideoController;
+
+  @override
+  int get pageIndex => 2; // Checkin页面的索引
+
+  @override
+  void restoreVideoPlayback() {
+    super.restoreVideoPlayback();
+    print('🎯 CheckinPage: Restoring video playback for index $lastVideoIndex');
+    
+    // 恢复播放对应索引的视频
+    final controller = _videoControllers[lastVideoIndex];
+    if (controller != null && controller.value.isInitialized) {
+      controller.play();
+      print('🎯 CheckinPage: Resumed video playback for index $lastVideoIndex');
+    } else if (_defaultVideoController != null && _defaultVideoController!.value.isInitialized) {
+      _defaultVideoController!.play();
+      print('🎯 CheckinPage: Resumed default video playback');
+    }
+  }
+
+  @override
+  void pauseVideoAndSaveState() {
+    super.pauseVideoAndSaveState();
+    print('🎯 CheckinPage: Pausing video and saving state');
+    
+    // 暂停所有视频
+    _videoControllers.forEach((index, controller) {
+      if (controller.value.isInitialized) {
+        controller.pause();
+        print('🎯 CheckinPage: Paused video for index $index');
+      }
+    });
+    
+    // 暂停默认视频
+    if (_defaultVideoController != null && _defaultVideoController!.value.isInitialized) {
+      _defaultVideoController!.pause();
+      print('🎯 CheckinPage: Paused default video');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _carouselController = InfiniteScrollController(initialItem: 0);
     _videoSwitchAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
   }
 
-  // 初始化视频控制器
-  void _initializeVideoControllers(List<CheckinProduct> products) {
-    // 清理旧的控制器
-    for (final controller in _videoControllers) {
-      controller.dispose();
+  /// 🎯 核心方法：智能管理视频控制器
+  void _manageVideoControllers(List<CheckinProduct> products, int currentIndex) {
+    // 🎯 安全检查：确保索引不超出范围
+    if (products.isEmpty || currentIndex < 0 || currentIndex >= products.length) {
+      return;
     }
     
-    _videoControllers = List.generate(products.length, (i) {
-      final product = products[i];
-      VideoPlayerController controller;
+    final Set<int> neededIndices = _getNeededIndices(currentIndex, products.length);
+    final Set<int> currentIndices = _videoControllers.keys.toSet();
+    
+    // 释放不需要的控制器（超出前后2页范围的）
+    for (final index in currentIndices) {
+      if (!neededIndices.contains(index)) {
+        _disposeController(index);
+      }
+    }
+    
+    // 初始化需要的控制器（只初始化未加载的）
+    for (final index in neededIndices) {
+      if (!_videoControllers.containsKey(index) && index < products.length) {
+        _initializeController(index, products[index]);
+      }
+    }
+  }
+  
+  /// 计算需要预加载的索引范围
+  Set<int> _getNeededIndices(int currentIndex, int totalCount) {
+    final Set<int> indices = {currentIndex};
+    
+    // 🎯 安全检查：确保totalCount有效
+    if (totalCount <= 0) return indices;
+    
+    // 前后各预加载_preloadRange个
+    for (int i = 1; i <= _preloadRange; i++) {
+      if (currentIndex - i >= 0) indices.add(currentIndex - i);
+      if (currentIndex + i < totalCount) indices.add(currentIndex + i);
+    }
+    
+    return indices;
+  }
+  
+  /// 释放指定索引的控制器
+  void _disposeController(int index) {
+    final controller = _videoControllers.remove(index);
+    if (controller != null) {
+      // 🎯 如果是共享的默认视频控制器，不暂停也不释放，让它继续播放
+      if (controller == _defaultVideoController) {
+        print('🎯 Keeping default video playing (not paused, not disposed)');
+      } else {
+        // 🎯 其他控制器正常释放
+        controller.pause();
+        controller.dispose();
+        print('🎯 Disposed video controller for index: $index');
+      }
+    }
+  }
+  
+  /// 初始化单个视频控制器
+  void _initializeController(int index, CheckinProduct product) {
+    if (_videoControllers.containsKey(index)) return;
+    
+    // 🎯 先创建占位控制器，显示默认视频
+    _createPlaceholderController(index);
+    
+    try {
+      // 🎯 只有网络视频存在且URL有效时才尝试加载
+      if (product.hasCustomVideo && product.videoUrl != null && product.videoUrl!.isNotEmpty) {
+        print('🎯 Attempting to load network video for index: $index');
+        
+        // 网络视频优先
+        final controller = VideoPlayerController.networkUrl(Uri.parse(product.videoUrl!));
+        controller.setLooping(true);
+        controller.setVolume(0);
+        
+        controller.initialize().then((_) {
+          if (mounted) {
+            print('✅ Network video loaded successfully for index: $index');
+            // 🎯 只有网络视频加载成功才替换占位控制器
+            _replacePlaceholderWithRealController(index, controller);
+            if (index == _currentIndex) {
+              controller.play();
+              print('🎯 After replacement: controller.isPlaying=${controller.value.isPlaying}');
+            }
+            setState(() {});
+          }
+        }).catchError((error) {
+          print('❌ Network video initialization failed for index $index: $error');
+          // 🎯 网络视频失败，保持使用默认视频，不替换
+          print('🔄 Keeping default video for index: $index due to network failure');
+        });
+      } else {
+        // 🎯 没有网络视频或URL无效，保持使用默认视频
+        print('🎯 No network video available for index: $index, keeping default video');
+        // 不需要做任何替换，继续使用默认视频
+      }
       
-      // 优先使用网络视频URL，失败时回退到本地视频
-      if (product.hasCustomVideo) {
-        controller = VideoPlayerController.networkUrl(Uri.parse(product.videoUrl!))
+      print('✅ Initialization process completed for index: $index');
+      
+    } catch (e) {
+      print('❌ Error in initialization process for index $index: $e');
+      // 🎯 发生异常时，保持使用默认视频
+      print('🔄 Keeping default video for index: $index due to error');
+    }
+  }
+  
+  /// 🎯 创建占位控制器，显示默认视频
+  void _createPlaceholderController(int index) {
+    // 确保默认视频控制器已初始化
+    if (_defaultVideoController == null) {
+      _defaultVideoController = VideoPlayerController.asset('assets/video/video1.mp4')
         ..setLooping(true)
         ..setVolume(0);
-        
-      controller.initialize().then((_) {
-        if (i == 0) {
-          controller.play();
-        }
-        if (mounted) setState(() {});
-        }).catchError((error) {
-          // 网络视频加载失败，回退到本地视频
-          print('Network video failed for ${product.name}, falling back to local video: $error');
-          _initializeLocalVideoController(i);
-      });
-      } else {
-        // 直接使用本地视频
-        controller = _initializeLocalVideoController(i);
-      }
       
-      return controller;
-    });
-  }
-
-  // 初始化本地视频控制器
-  VideoPlayerController _initializeLocalVideoController(int index) {
-    final controller = VideoPlayerController.asset('assets/video/video1.mp4')
-      ..setLooping(true)
-      ..setVolume(0);
-    
-    controller.initialize().then((_) {
-      if (index == 0) {
-        controller.play();
+      _defaultVideoController!.initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          // 🎯 默认视频初始化成功后，如果是当前页则开始播放
+          if (index == _currentIndex) {
+            _defaultVideoController!.play();
+            print('🎯 Started playing default video for current index: $index');
+          }
+        }
+      });
+    } else {
+      // 🎯 如果默认视频控制器已存在且已初始化，立即播放
+      if (_defaultVideoController!.value.isInitialized && index == _currentIndex) {
+        _defaultVideoController!.play();
+        print('🎯 Started playing existing default video for current index: $index');
       }
-      if (mounted) setState(() {});
-    });
+    }
     
-    return controller;
+    // 使用默认视频控制器作为占位
+    _videoControllers[index] = _defaultVideoController!;
+    print('🎯 Created placeholder controller for index: $index using default video');
+  }
+  
+  /// 🎯 用真实控制器替换占位控制器
+  void _replacePlaceholderWithRealController(int index, VideoPlayerController realController) {
+    final oldController = _videoControllers[index];
+    
+    // 如果旧控制器是占位控制器，不需要释放（因为它是共享的）
+    if (oldController == _defaultVideoController) {
+      // 🎯 不暂停默认视频，让它继续播放供其他索引使用
+      print('🔄 Keeping default video playing for other indices');
+    } else {
+      oldController?.pause();
+      oldController?.dispose();
+    }
+    
+    _videoControllers[index] = realController;
+    print('🔄 Replaced placeholder with real controller for index: $index');
   }
 
   @override
   void dispose() {
-    for (final c in _videoControllers) {
-      c.dispose();
+    // 🎯 清理所有控制器
+    _videoControllers.values.forEach((controller) {
+      // 跳过共享的默认视频控制器，避免重复释放
+      if (controller != _defaultVideoController) {
+        controller.pause();
+        controller.dispose();
+      }
+    });
+    _videoControllers.clear();
+    
+    // 🎯 释放共享的默认视频控制器
+    if (_defaultVideoController != null) {
+      _defaultVideoController!.pause();
+      _defaultVideoController!.dispose();
+      _defaultVideoController = null;
     }
+    
     _pageController.dispose();
+    _videoSwitchAnim.dispose();
     super.dispose();
   }
 
   void _onProductTap(CheckinProduct product) {
-    // 使用统一的路由系统
-    if (product.routeName == "/training_list" || product.routeName == "/trainingList") {
-      Navigator.pushNamed(
+    Navigator.pushNamed(
         context,
         AppRoutes.trainingList,
         arguments: {'productId': product.id},
-      );
-    } else {
-      Navigator.pushNamed(context, product.routeName);
-    }
+    );
   }
 
+  /// 优化的页面切换处理
   void _onPageChanged(int index) {
     final viewModel = context.read<CheckinViewModel>();
     viewModel.updateCurrentIndex(index);
     
-    for (int i = 0; i < _videoControllers.length; i++) {
-      if (i == index) {
-        _videoControllers[i].play();
-      } else {
-        _videoControllers[i].pause();
+    // 更新当前索引
+    _currentIndex = index;
+    
+    // 🎯 更新页面可见性管理器中的视频索引
+    updateCurrentVideoIndex(index);
+    
+    // 🎯 检查是否是刷新按钮页面（最后一个页面）
+    final bool isRefreshPage = index == viewModel.products.length;
+    
+    if (isRefreshPage) {
+      // 🎯 刷新按钮页面：使用默认视频
+      _ensureDefaultVideoPlaying();
+    } else {
+      // 🎯 正常产品页面：管理视频控制器
+      if (viewModel.products.isNotEmpty && index < viewModel.products.length) {
+        _manageVideoControllers(viewModel.products, index);
       }
+    }
+    
+    // 播放当前视频，暂停其他视频
+    _videoControllers.forEach((controllerIndex, controller) {
+      if (controllerIndex == index) {
+        // 🎯 当前页面：确保播放
+        if (controller.value.isInitialized) {
+          controller.play();
+          print('🎯 Playing real video for index: $index');
+          print('🎯 Video controller state: isPlaying=${controller.value.isPlaying}, isInitialized=${controller.value.isInitialized}');
+        } else if (controller == _defaultVideoController) {
+          // 🎯 如果是默认视频控制器且未初始化，确保播放
+          if (_defaultVideoController!.value.isInitialized) {
+            _defaultVideoController!.play();
+            print('🎯 Playing default video for index: $index');
+          }
+        }
+      } else {
+        // 🎯 其他页面：暂停非默认视频，保持默认视频播放
+        if (controller != _defaultVideoController) {
+          controller.pause();
+          print('🎯 Paused video for index: $controllerIndex (not current)');
+        }
+      }
+    });
+  }
+  
+  /// 🎯 确保默认视频播放（用于刷新按钮页面或无产品数据时）
+  void _ensureDefaultVideoPlaying() {
+    // 确保默认视频控制器已初始化
+    if (_defaultVideoController == null) {
+      _defaultVideoController = VideoPlayerController.asset('assets/video/video1.mp4')
+        ..setLooping(true)
+        ..setVolume(0);
+      
+      _defaultVideoController!.initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          // 开始播放默认视频
+          _defaultVideoController!.play();
+          print('🎯 Started playing default video');
+        }
+      });
+    } else if (_defaultVideoController!.value.isInitialized) {
+      // 如果默认视频已初始化，直接播放
+      _defaultVideoController!.play();
+      print('🎯 Playing existing default video');
+    }
+    
+    // 将默认视频控制器分配给当前索引（如果有的话）
+    if (_currentIndex >= 0) {
+      _videoControllers[_currentIndex] = _defaultVideoController!;
     }
   }
 
+  /// 优化的视频背景栈
   Widget _buildVideoStack(List<CheckinProduct> products) {
     return AnimatedBuilder(
       animation: _pageController,
@@ -160,58 +381,65 @@ class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTic
             : viewModel.currentIndex.toDouble();
 
         List<Widget> stack = [];
-        bool hasInitialized = false;
-        for (int i = 0; i < products.length; i++) {
-          // 只渲染前后1页，提升性能
-          if ((i - page).abs() > 1.2) continue;
+        
+        // 🎯 计算总页面数（包括刷新按钮页面）
+        final int totalPages = products.length + 1;
+        
+        // 🎯 只渲染当前页和前后2页的视频
+        for (int i = 0; i < totalPages; i++) {
+          if ((i - page).abs() > 2.2) continue;
+          
           final offset = (i - page) * MediaQuery.of(context).size.height;
           final opacity = (1.0 - (i - page).abs()).clamp(0.0, 1.0);
-
-          if (i < _videoControllers.length && _videoControllers[i].value.isInitialized) {
-            hasInitialized = true;
-          }
-
-          stack.add(
-            Positioned.fill(
-              child: Transform.translate(
-                offset: Offset(0, offset),
-                child: Opacity(
-                  opacity: opacity,
-                  child: i < _videoControllers.length && _videoControllers[i].value.isInitialized
-                      ? FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _videoControllers[i].value.size.width,
-                            height: _videoControllers[i].value.size.height,
-                            child: VideoPlayer(_videoControllers[i]),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          );
-        }
-        // 如果所有视频都没初始化，显示默认视频
-        if (!hasInitialized) {
-          stack.add(
-            Positioned.fill(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: 1, // 这里用1防止报错
-                  height: 1,
-                  child: VideoPlayer(
-                    VideoPlayerController.asset('assets/video/video1.mp4')
-                      ..setLooping(true)
-                      ..setVolume(0)
-                      ..initialize(),
+          
+          final controller = _videoControllers[i];
+          if (controller != null && controller.value.isInitialized) {
+            stack.add(
+              Positioned.fill(
+                child: Transform.translate(
+                  offset: Offset(0, offset),
+                  child: Opacity(
+                    opacity: opacity,
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: controller.value.size.width,
+                        height: controller.value.size.height,
+                        child: VideoPlayer(controller),
+                      ),
+                    ),
                   ),
                 ),
               ),
+            );
+          }
+        }
+        
+        // 🎯 如果当前是刷新按钮页面且没有视频，显示默认视频
+        if (stack.isEmpty || (page >= products.length && _defaultVideoController != null && _defaultVideoController!.value.isInitialized)) {
+          stack.add(
+            Positioned.fill(
+              child: _defaultVideoController != null && _defaultVideoController!.value.isInitialized
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _defaultVideoController!.value.size.width,
+                      height: _defaultVideoController!.value.size.height,
+                      child: VideoPlayer(_defaultVideoController!),
+                    ),
+                  )
+                : Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
             ),
           );
         }
+        
         return Stack(children: stack);
       },
     );
@@ -225,10 +453,19 @@ class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTic
     final double cardWidth = screenWidth * 0.78; // 78% 屏幕宽度
     final double bottomPadding = MediaQuery.of(context).padding.bottom; //safty安全区高度 
 
-        // 当产品列表更新时，重新初始化视频控制器
-        if (viewModel.products.isNotEmpty && _videoControllers.length != viewModel.products.length) {
+        // 🎯 当产品列表更新时，重新管理控制器并确保前后2页预加载
+        if (viewModel.products.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _initializeVideoControllers(viewModel.products);
+            if (mounted) {
+              _manageVideoControllers(viewModel.products, _currentIndex);
+            }
+          });
+        } else {
+          // 🎯 当没有产品数据时，确保默认视频控制器被初始化和播放
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _ensureDefaultVideoPlaying();
+            }
           });
         }
 
@@ -237,10 +474,24 @@ class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTic
       body: Stack(
         children: [
           // 全屏视频背景（TikTok风格上下滑动切换）
-              if (viewModel.products.isNotEmpty)
-          Positioned.fill(
-                  child: _buildVideoStack(viewModel.products),
-          ),
+          if (viewModel.products.isNotEmpty)
+            Positioned.fill(
+              child: _buildVideoStack(viewModel.products),
+            )
+          else
+            // 🎯 当没有产品数据时，显示默认视频
+            Positioned.fill(
+              child: _defaultVideoController != null && _defaultVideoController!.value.isInitialized
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _defaultVideoController!.value.size.width,
+                      height: _defaultVideoController!.value.size.height,
+                      child: VideoPlayer(_defaultVideoController!),
+                    ),
+                  )
+                : Container(color: Colors.black),
+            ),
 
           // 顶部状态栏毛玻璃
           Positioned(
@@ -275,30 +526,8 @@ class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTic
                   ),
                 ),
 
-              // 错误状态
-              if (viewModel.hasError)
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Error: ${viewModel.error}',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => viewModel.refresh(),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
-
           // 悬浮入口
-              if (!viewModel.isLoading && !viewModel.hasError)
+              if (!viewModel.isLoading)
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
@@ -314,30 +543,59 @@ class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTic
                               Navigator.pushNamed(context, AppRoutes.checkinboard);
                     },
                   ),
-                          if (viewModel.hasProducts) ...[
+                  // 产品卡片区域
                   SizedBox(
                     height: 200, // 推荐用固定高度，性能更优
                     child: PageView.builder(
                       controller: _pageController,
-                                itemCount: viewModel.products.length,
+                      itemCount: viewModel.products.length + 1, // 添加1个用于刷新按钮
                       physics: const PageScrollPhysics(), // 强磁吸
                       onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) {
+                        // 最后一个item显示为刷新按钮
+                        if (index == viewModel.products.length) {
+                          return AnimatedScale(
+                            scale: viewModel.currentIndex == index ? 1.0 : 0.92,
+                            duration: const Duration(milliseconds: 300),
+                            child: ElegantRefreshButton(
+                              onRefresh: () async {
+                                // 🎯 显示加载状态
+                                viewModel.refresh();
+                                
+                                // 🎯 等待数据刷新完成
+                                await Future.delayed(const Duration(milliseconds: 800));
+                                
+                                // 🎯 刷新完成后回到第一页
+                                if (mounted && _pageController.hasClients) {
+                                  _pageController.animateToPage(
+                                    0,
+                                    duration: const Duration(milliseconds: 500),
+                                    curve: Curves.easeInOut,
+                                  );
+                                }
+                              },
+                              size: 200,
+                              refreshDuration: const Duration(milliseconds: 800),
+                            ),
+                          );
+                        }
+                        
                         return AnimatedScale(
-                                    scale: viewModel.currentIndex == index ? 1.0 : 0.92,
+                          scale: viewModel.currentIndex == index ? 1.0 : 0.92,
                           duration: const Duration(milliseconds: 300),
                           child: _ProductEntry(
-                                      product: viewModel.products[index],
-                                      onTap: () => _onProductTap(viewModel.products[index]),
+                            product: viewModel.products[index],
+                            onTap: () => _onProductTap(viewModel.products[index]),
                           ),
                         );
                       },
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // 底部指示器 - 包含刷新按钮的指示点
                   AnimatedSmoothIndicator(
-                              activeIndex: viewModel.currentIndex,
-                              count: viewModel.products.length,
+                    activeIndex: viewModel.currentIndex,
+                    count: viewModel.products.length + 1, // 更新指示器数量，包含刷新按钮
                     effect: ExpandingDotsEffect(
                       dotHeight: 8,
                       dotWidth: 8,
@@ -345,30 +603,11 @@ class _CheckinPageContentState extends State<_CheckinPageContent> with SingleTic
                       dotColor: Colors.white.withOpacity(0.3),
                     ),
                   ),
-                          ],
                 ],
                 ),
               ),
             ),
           ),
-
-              // 无产品时显示激励语
-              if (!viewModel.isLoading && !viewModel.hasError && !viewModel.hasProducts)
-            Center(
-              child: Text(
-                "Stay active, stay strong!",
-                style: AppTextStyles.headlineLarge.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
         );
@@ -405,19 +644,25 @@ class _PowerfulTapEffectState extends State<PowerfulTapEffect> {
 
   Future<void> _handleTap() async {
     if (_isAnimating) return;
-    setState(() {
-      _scale = widget.pressedScale;
-      _isAnimating = true;
-    });
+    if (mounted) {
+      setState(() {
+        _scale = widget.pressedScale;
+        _isAnimating = true;
+      });
+    }
     await Future.delayed(widget.pressDuration);
-    setState(() {
-      _scale = 1.0;
-    });
+    if (mounted) {
+      setState(() {
+        _scale = 1.0;
+      });
+    }
     await Future.delayed(widget.reboundDuration);
-    widget.onTap();
-    setState(() {
-      _isAnimating = false;
-    });
+    if (mounted) {
+      widget.onTap();
+      setState(() {
+        _isAnimating = false;
+      });
+    }
   }
 
   @override
@@ -449,10 +694,14 @@ class _ProductEntryState extends State<_ProductEntry> {
   double _scale = 1.0;
 
   void _onTap() {
-    setState(() => _scale = 0.97);
+    if (mounted) {
+      setState(() => _scale = 0.97);
+    }
     Future.delayed(const Duration(milliseconds: 80), () {
-      setState(() => _scale = 1.0);
-      widget.onTap();
+      if (mounted) {
+        setState(() => _scale = 1.0);
+        widget.onTap();
+      }
     });
   }
 
@@ -639,10 +888,14 @@ class _AnimatedButtonState extends State<_AnimatedButton> {
   double _scale = 1.0;
 
   void _onTap() {
-    setState(() => _scale = 0.90);
+    if (mounted) {
+      setState(() => _scale = 0.90);
+    }
     Future.delayed(const Duration(milliseconds: 80), () {
-      setState(() => _scale = 1.0);
-      widget.onPressed();
+      if (mounted) {
+        setState(() => _scale = 1.0);
+        widget.onPressed();
+      }
     });
   }
 
@@ -673,10 +926,14 @@ class _CheckinboardEntryState extends State<_CheckinboardEntry> {
   double _scale = 1.0;
 
   void _onTap() {
-    setState(() => _scale = 0.97);
+    if (mounted) {
+      setState(() => _scale = 0.97);
+    }
     Future.delayed(const Duration(milliseconds: 80), () {
-      setState(() => _scale = 1.0);
-      widget.onTap();
+      if (mounted) {
+        setState(() => _scale = 1.0);
+        widget.onTap();
+      }
     });
   }
 

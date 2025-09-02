@@ -1,14 +1,26 @@
 class TrainingConfig {
   final String nextPageRoute;
+  final bool isActivated;
 
   TrainingConfig({
     required this.nextPageRoute,
+    required this.isActivated,
   });
 
   // 业务逻辑方法
   bool get isValid => nextPageRoute.isNotEmpty;
   
   String get displayRoute => nextPageRoute.trim();
+  
+  // 激活状态相关方法
+  bool get canStartTraining => isActivated && isValid;
+  
+  String get activationStatusText {
+    if (!isActivated) {
+      return 'Training not activated';
+    }
+    return 'Training ready';
+  }
   
   bool get isCountdownRoute => nextPageRoute == '/checkin_countdown';
   

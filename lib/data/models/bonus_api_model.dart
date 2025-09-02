@@ -5,16 +5,12 @@ class BonusApiModel {
   final String reward;
   final String regionLimit;
   final String videoUrl;
-  final String? thumbnailUrl;
-  final String status;
-  final String startDate;
-  final String endDate;
-  final bool isClaimed;
-  final bool isEligible;
-  final int claimCount;
-  final int maxClaimCount;
-  final String category;
-  final String difficulty;
+  final String activityName;
+  final String activityDescription;
+  final String activityCode;
+  final String activityUrl;
+  final int startTimeStep;
+  final int endTimeStep;
 
   BonusApiModel({
     required this.id,
@@ -23,16 +19,12 @@ class BonusApiModel {
     required this.reward,
     required this.regionLimit,
     required this.videoUrl,
-    this.thumbnailUrl,
-    required this.status,
-    required this.startDate,
-    required this.endDate,
-    required this.isClaimed,
-    required this.isEligible,
-    required this.claimCount,
-    required this.maxClaimCount,
-    required this.category,
-    required this.difficulty,
+    required this.activityName,
+    required this.activityDescription,
+    required this.activityCode,
+    required this.activityUrl,
+    required this.startTimeStep,
+    required this.endTimeStep,
   });
 
   factory BonusApiModel.fromJson(Map<String, dynamic> json) {
@@ -43,16 +35,12 @@ class BonusApiModel {
       reward: json['reward'] as String,
       regionLimit: json['regionLimit'] as String,
       videoUrl: json['videoUrl'] as String,
-      thumbnailUrl: json['thumbnailUrl'] as String?,
-      status: json['status'] as String,
-      startDate: json['startDate'] as String,
-      endDate: json['endDate'] as String,
-      isClaimed: json['isClaimed'] as bool,
-      isEligible: json['isEligible'] as bool,
-      claimCount: json['claimCount'] as int,
-      maxClaimCount: json['maxClaimCount'] as int,
-      category: json['category'] as String,
-      difficulty: json['difficulty'] as String,
+      activityName: json['activityName'] as String,
+      activityDescription: json['activityDescription'] as String,
+      activityCode: json['activityCode'] as String,
+      activityUrl: json['activityUrl'] as String,
+      startTimeStep: json['startTimeStep'] as int,
+      endTimeStep: json['endTimeStep'] as int,
     );
   }
 
@@ -63,24 +51,26 @@ class BonusApiModel {
     'reward': reward,
     'regionLimit': regionLimit,
     'videoUrl': videoUrl,
-    'thumbnailUrl': thumbnailUrl,
-    'status': status,
-    'startDate': startDate,
-    'endDate': endDate,
-    'isClaimed': isClaimed,
-    'isEligible': isEligible,
-    'claimCount': claimCount,
-    'maxClaimCount': maxClaimCount,
-    'category': category,
-    'difficulty': difficulty,
+    'activityName': activityName,
+    'activityDescription': activityDescription,
+    'activityCode': activityCode,
+    'activityUrl': activityUrl,
+    'startTimeStep': startTimeStep,
+    'endTimeStep': endTimeStep,
   };
 }
 
 class BonusListApiModel {
   final List<BonusApiModel> activities;
+  final int total;
+  final int currentPage;
+  final int pageSize;
 
   BonusListApiModel({
     required this.activities,
+    required this.total,
+    required this.currentPage,
+    required this.pageSize,
   });
 
   factory BonusListApiModel.fromJson(Map<String, dynamic> json) {
@@ -89,10 +79,25 @@ class BonusListApiModel {
         .map((activity) => BonusApiModel.fromJson(activity as Map<String, dynamic>))
         .toList();
     
-    return BonusListApiModel(activities: activities);
+    return BonusListApiModel(
+      activities: activities,
+      total: json['total'] as int? ?? 0,
+      currentPage: json['currentPage'] as int? ?? 1,
+      pageSize: json['pageSize'] as int? ?? 10,
+    );
   }
 
   Map<String, dynamic> toJson() => {
     'activities': activities.map((activity) => activity.toJson()).toList(),
+    'total': total,
+    'currentPage': currentPage,
+    'pageSize': pageSize,
   };
+
+  // 分页信息计算
+  int get totalPages => (total / pageSize).ceil();
+  bool get hasNextPage => currentPage < totalPages;
+  bool get hasPreviousPage => currentPage > 1;
+  int get nextPage => hasNextPage ? currentPage + 1 : currentPage;
+  int get previousPage => hasPreviousPage ? currentPage - 1 : currentPage;
 } 

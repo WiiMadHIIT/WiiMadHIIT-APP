@@ -26,41 +26,47 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
 
   // 内部伪数据
   final Map<String, dynamic> _videoInfo = {
-    "videoUrl": "assets/video/video1.mp4",
+    "videoUrl": "assets/video/projection_tutorials_mac.mp4",
     "title": "Watch Video Tutorial",
   };
 
   final List<Map<String, dynamic>> _tutorialSteps = [
     {
       "number": 1,
-      "title": "Find a Flat Surface",
-      "description": "Choose a wall or flat surface that is at least 2 meters wide and 1.5 meters tall.",
+      "title": "Open Training/Challenge Module",
+      "description": "Navigate to the training or challenge section in your app.",
       "icon": Icons.wallpaper,
     },
     {
       "number": 2,
-      "title": "Position Your Device",
-      "description": "Place your device on a stable surface, approximately 1-2 meters from the projection surface.",
+      "title": "Enable Auto-Rotate",
+      "description": "Activate screen rotation in Control Center.",
       "icon": Icons.phone_android,
     },
     {
       "number": 3,
-      "title": "Enable Projection",
-      "description": "Tap the projection button in the training interface to start casting.",
+      "title": "Start Mirroring",
+      "description": "In Control Center, select your Mac under Screen Mirroring.",
       "icon": Icons.cast_connected,
     },
     {
       "number": 4,
-      "title": "Adjust Position",
-      "description": "Use the on-screen controls to adjust the projection size and position.",
+      "title": "Rotate to Landscape",
+      "description": "Turn iPhone sideways for landscape view on both screens.",
       "icon": Icons.tune,
     },
     {
       "number": 5,
-      "title": "Start Training",
-      "description": "Once the projection is properly set up, you can begin your training session.",
+      "title": "Return to Portrait",
+      "description": "Rotate back vertically for portrait mode controls.",
       "icon": Icons.play_circle,
     },
+    {
+      "number": 6,
+      "title": "Stop Mirroring",
+      "description": "Disconnect via Control Center when finished.",
+      "icon": Icons.play_circle,
+    }
   ];
 
   @override
@@ -98,26 +104,37 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
 
   @override
   void dispose() {
-    _videoController?.dispose();
+    // 🎯 正确释放视频控制器和监听器
+    if (_videoController != null) {
+      _videoController!.removeListener(_onVideoStateChanged);
+      _videoController!.dispose();
+      _videoController = null;
+    }
+    
+    // 🎯 释放动画控制器
     _scaleController.dispose();
     _fadeController.dispose();
+    
     super.dispose();
+  }
+  
+  /// 🎯 视频状态变化监听器
+  void _onVideoStateChanged() {
+    if (mounted && _videoController != null) {
+      setState(() {
+        _isVideoPlaying = _videoController!.value.isPlaying;
+      });
+    }
   }
 
   Future<void> _initializeVideo() async {
     try {
       // 创建本地视频控制器
-      _videoController = VideoPlayerController.asset('assets/video/video1.mp4');
+      _videoController = VideoPlayerController.asset('assets/video/projection_tutorials_mac.mp4');
       await _videoController!.initialize();
       
-      // 添加监听器来更新播放状态
-      _videoController!.addListener(() {
-        if (mounted) {
-          setState(() {
-            _isVideoPlaying = _videoController!.value.isPlaying;
-          });
-        }
-      });
+      // 🎯 添加监听器来更新播放状态
+      _videoController!.addListener(_onVideoStateChanged);
       
       // 设置循环播放
       _videoController!.setLooping(true);
@@ -723,11 +740,14 @@ class _ProjectionTutorialSheetState extends State<ProjectionTutorialSheet>
                       size: 20,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      title,
-                      style: AppTextStyles.titleMedium.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: AppTextStyles.titleMedium.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -776,15 +796,21 @@ class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
   @override
   void initState() {
     super.initState();
-    // 初始化播放状态
+    // 🎯 初始化播放状态
     _isVideoPlaying = widget.videoController.value.isPlaying;
-    // 添加监听器来更新播放状态
+    // 🎯 添加监听器来更新播放状态
     widget.videoController.addListener(_onVideoStateChanged);
   }
 
   @override
   void dispose() {
-    widget.videoController.removeListener(_onVideoStateChanged);
+    // 🎯 确保移除监听器，避免内存泄漏
+    try {
+      widget.videoController.removeListener(_onVideoStateChanged);
+    } catch (e) {
+      // 忽略可能的错误，确保 dispose 正常完成
+      print('Warning: Error removing video listener: $e');
+    }
     super.dispose();
   }
 

@@ -8,10 +8,8 @@ class TrainingService {
   }
 
   /// 根据难度等级筛选训练
-  List<TrainingItem> filterTrainingsByLevel(List<TrainingItem> trainings, String level) {
-    return trainings.where((training) => 
-      training.isActive && training.level.toLowerCase() == level.toLowerCase()
-    ).toList();
+  List<TrainingItem> filterTrainingsByLevel(List<TrainingItem> trainings, int level) {
+    return trainings.where((training) => training.isActive && training.level == level).toList();
   }
 
   /// 获取热门训练项目
@@ -23,9 +21,8 @@ class TrainingService {
 
   /// 获取高完成率训练项目
   List<TrainingItem> getHighCompletionTrainings(List<TrainingItem> trainings) {
-    return trainings.where((training) => 
-      training.isActive && training.isHighCompletion
-    ).toList();
+    // 已移除完成率概念，返回空或按其他规则调整
+    return [];
   }
 
   /// 搜索训练项目
@@ -36,7 +33,7 @@ class TrainingService {
       training.isActive && 
       (training.name.toLowerCase().contains(query.toLowerCase()) ||
        training.description.toLowerCase().contains(query.toLowerCase()) ||
-       training.level.toLowerCase().contains(query.toLowerCase()))
+       training.level.toString().contains(query))
     ).toList();
   }
 
@@ -59,10 +56,9 @@ class TrainingService {
   bool _validateTrainingItem(TrainingItem training) {
     if (training.id.isEmpty) return false;
     if (training.name.isEmpty) return false;
-    if (training.level.isEmpty) return false;
+    if (training.level <= 0) return false;
     if (training.description.isEmpty) return false;
     if (training.participantCount < 0) return false;
-    if (training.completionRate < 0 || training.completionRate > 100) return false;
     if (training.status.isEmpty) return false;
     
     return true;
@@ -76,16 +72,13 @@ class TrainingService {
       return {
         'totalCount': 0,
         'activeCount': 0,
-        'averageCompletionRate': 0.0,
         'totalParticipantCount': 0,
         'popularCount': 0,
         'highCompletionCount': 0,
       };
     }
 
-    final totalCompletionRate = activeTrainings.fold<double>(
-      0.0, (sum, training) => sum + training.completionRate
-    );
+    final totalCompletionRate = 0.0; // 已移除完成率
     final totalParticipantCount = activeTrainings.fold<int>(
       0, (sum, training) => sum + training.participantCount
     );
@@ -95,10 +88,9 @@ class TrainingService {
     return {
       'totalCount': trainings.length,
       'activeCount': activeTrainings.length,
-      'averageCompletionRate': totalCompletionRate / activeTrainings.length,
       'totalParticipantCount': totalParticipantCount,
       'popularCount': popularCount,
-      'highCompletionCount': highCompletionCount,
+      'highCompletionCount': 0,
     };
   }
 } 

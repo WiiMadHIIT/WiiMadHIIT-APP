@@ -62,7 +62,7 @@ Future<void> _loadTrainingDataAndVideoConfig() async {
 - 方向适配：自动根据屏幕方向切换视频
 
 **API需求：**
-- **接口**: `GET /api/countdown-training/data`
+- **接口**: `GET /api/checkin/training/countdown/data`
 - **参数**: 
   - `trainingId` (训练ID)
   - `productId` (产品ID，可选)
@@ -165,7 +165,7 @@ void _clearTmpResult() {
 - **倒计时特有数据结构**: 使用 `daySeconds` 和 `seconds` 字段记录训练时长
 
 **API需求：**
-- **接口**: `POST /api/countdown-training/submit`
+- **接口**: `POST /api/checkin/training/countdown/submit`
 - **请求数据**:
   ```json
   {
@@ -185,6 +185,7 @@ void _clearTmpResult() {
     "data": {
       "id": "662553355",
       "rank": 1,
+      "daySeconds": 600,
       "totalRounds": 3,
       "roundDuration": 60
     }

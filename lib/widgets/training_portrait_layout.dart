@@ -233,7 +233,7 @@ class TrainingPortraitLayout extends StatelessWidget {
                 builder: (context, constraints) {
                   final double maxWidth = constraints.maxWidth;
                   final double maxHeight = constraints.maxHeight;
-                  final double iconSize = maxWidth * 0.10 + 26;
+                  final double iconSize = maxWidth * 0.05 + 12;
                   final double titleFont = maxWidth * 0.045 + 12;
                   final double infoFont = maxWidth * 0.032 + 8;
                   final double dateFont = maxWidth * 0.025 + 7;
@@ -248,8 +248,8 @@ class TrainingPortraitLayout extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.emoji_events, color: AppColors.primary, size: iconSize),
-                          SizedBox(height: maxHeight * 0.03),
+                          // Icon(Icons.emoji_events, color: AppColors.primary, size: iconSize),
+                          // SizedBox(height: maxHeight * 0.01),
                           Text('Training Complete!', style: TextStyle(fontSize: titleFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
                           SizedBox(height: maxHeight * 0.025),
                           // 显示用户在totalRounds次挑战中的最佳成绩
@@ -283,6 +283,8 @@ class TrainingPortraitLayout extends StatelessWidget {
                             Text('RANK:  ${history[0]["rank"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: AppColors.primary)),
                           ],
                           Text('COUNT:  ${history[0]["counts"]}', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text('PACE:  ${history[0]["countsPerMin"]}/min', style: TextStyle(fontSize: infoFont, fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text('(Your speed demon rating! 🚀)', style: TextStyle(fontSize: dateFont, color: Colors.white60, fontStyle: FontStyle.italic)),
                           Text('DATE:  ${history[0]["date"]}', style: TextStyle(fontSize: dateFont, color: Colors.white70)),
                           SizedBox(height: maxHeight * 0.04),
                           Row(
@@ -396,23 +398,41 @@ class TrainingPortraitLayout extends StatelessWidget {
             ),
           ),
         ),
-        // 内部白色圆
+        // 内部白色圆 - 参考elegant_refresh_button的透明效果
         Container(
           width: diameter - 24,
           height: diameter - 24,
           decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FB),
+            shape: BoxShape.circle,
+            // 🎨 苹果风格渐变背景 - 透明效果
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFFF8F9FB), Color(0xFFEDEEF2)],
+              colors: [
+                Colors.white.withOpacity(0.15),
+                Colors.white.withOpacity(0.08),
+                Colors.white.withOpacity(0.05),
+              ],
+              stops: const [0.0, 0.6, 1.0],
             ),
-            shape: BoxShape.circle,
+            // 🎨 精致的边框
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 1.5,
+            ),
+            // 🎨 苹果风格阴影
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.10),
-                blurRadius: 22,
-                offset: Offset(0, 6),
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+                spreadRadius: 0,
+              ),
+              BoxShadow(
+                color: Colors.white.withOpacity(0.05),
+                blurRadius: 1,
+                offset: const Offset(0, 1),
+                spreadRadius: 0,
               ),
             ],
           ),

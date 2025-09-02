@@ -3,51 +3,87 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../widgets/floating_logo.dart';
+import 'package:provider/provider.dart';
+import '../../data/api/checkinboard_api.dart';
+import '../../data/repository/checkinboard_repository.dart';
+import '../../domain/usecases/get_checkinboard_usecase.dart';
+import '../../domain/services/checkinboard_service.dart';
+import 'checkinboard_viewmodel.dart';
+import '../../domain/entities/checkinboard/checkinboard.dart';
 
 class CheckinboardPage extends StatelessWidget {
   CheckinboardPage({Key? key}) : super(key: key);
-
-  // 示例数据
-  final List<Map<String, dynamic>> checkinboards = [
-    {
-      'activity': 'HIIT Pro',
-      'totalCheckins': 320,
-      'topUser': {'name': 'John Doe', 'country': 'USA', 'streak': 45, 'year': 120, 'quarter': 40, 'month': 15},
-      'rankings': [
-        {'rank': 1, 'user': 'John Doe', 'country': 'USA', 'streak': 45, 'year': 120, 'quarter': 40, 'month': 15},
-        {'rank': 2, 'user': 'Alice', 'country': 'UK', 'streak': 38, 'year': 110, 'quarter': 35, 'month': 12},
-        {'rank': 3, 'user': 'Bob', 'country': 'Canada', 'streak': 30, 'year': 100, 'quarter': 30, 'month': 10},
-      ],
-    },
-    {
-      'activity': 'Yoga Flex',
-      'totalCheckins': 210,
-      'topUser': {'name': 'Emily', 'country': 'Germany', 'streak': 50, 'year': 130, 'quarter': 45, 'month': 20},
-      'rankings': [
-        {'rank': 1, 'user': 'Emily', 'country': 'Germany', 'streak': 50, 'year': 130, 'quarter': 45, 'month': 20},
-        {'rank': 2, 'user': 'Sophia', 'country': 'France', 'streak': 40, 'year': 120, 'quarter': 40, 'month': 15},
-        {'rank': 3, 'user': 'Liam', 'country': 'Italy', 'streak': 35, 'year': 110, 'quarter': 38, 'month': 13},
-      ],
-    },
-    {
-      'activity': 'Endurance Marathon',
-      'totalCheckins': 410,
-      'topUser': {'name': 'Mike', 'country': 'USA', 'streak': 60, 'year': 150, 'quarter': 50, 'month': 25},
-      'rankings': [
-        {'rank': 1, 'user': 'Mike', 'country': 'USA', 'streak': 60, 'year': 150, 'quarter': 50, 'month': 25},
-        {'rank': 2, 'user': 'Anna', 'country': 'USA', 'streak': 55, 'year': 140, 'quarter': 48, 'month': 22},
-        {'rank': 3, 'user': 'Chris', 'country': 'Canada', 'streak': 50, 'year': 135, 'quarter': 45, 'month': 20},
-      ],
-    },
-  ];
 
   @override
   Widget build(BuildContext context) {
     final double expandedHeight = 180;
     final double collapsedHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
+    return ChangeNotifierProvider(
+      create: (_) {
+        final repo = CheckinboardRepository(CheckinboardApi());
+        return CheckinboardViewModel(
+          getCheckinboardUseCase: GetCheckinboardUseCase(repo),
+          service: CheckinboardService(),
+          getRankingsUseCase: GetCheckinboardRankingsUseCase(repo),
+        );
+      },
+      child: const _CheckinboardContent(),
+    );
+  }
+}
+
+class _CheckinboardContent extends StatefulWidget {
+  const _CheckinboardContent({Key? key}) : super(key: key);
+
+  @override
+  State<_CheckinboardContent> createState() => _CheckinboardContentState();
+}
+
+class _CheckinboardContentState extends State<_CheckinboardContent> {
+  // ViewModel 引用
+  CheckinboardViewModel? _viewModel;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // 延迟初始化，确保在build之后执行
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final viewModel = Provider.of<CheckinboardViewModel>(context, listen: false);
+        _viewModel = viewModel;
+        
+        // 检查是否有缓存数据，如果有则取消清理定时器
+        if (viewModel.hasCachedData) {
+          viewModel.cancelCleanup();
+        } else {
+          // 加载签到板数据
+          viewModel.loadCheckinboards(page: 1, pageSize: 10);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // 智能延迟清理：延迟清理数据以提升用户体验
+    if (_viewModel != null) {
+      _viewModel!.scheduleCleanup();
+    }
+    
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = Provider.of<CheckinboardViewModel>(context);
+    final double expandedHeight = 180;
+    final double collapsedHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: CustomScrollView(
+      body: Stack(
+        children: [
+          CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
@@ -56,7 +92,6 @@ class CheckinboardPage extends StatelessWidget {
             pinned: true,
             elevation: 0,
             automaticallyImplyLeading: false,
-            // 只在收起时显示title
             title: Text(
                     'Checkinboard',
                     style: AppTextStyles.headlineLarge.copyWith(
@@ -89,7 +124,6 @@ class CheckinboardPage extends StatelessWidget {
                 final double t = ((constraints.maxHeight - collapsedHeight) /
                         (expandedHeight - collapsedHeight))
                     .clamp(0.0, 1.0);
-                // 只在展开时显示LOGO
                 if (t < 0.15) return const SizedBox.shrink();
                 return Opacity(
                   opacity: Curves.easeIn.transform(t),
@@ -105,13 +139,42 @@ class CheckinboardPage extends StatelessWidget {
               },
             ),
           ),
-          // 打卡排行榜列表
+              if (viewModel.isLoading)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                )
+              else if (viewModel.hasError)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      'Oops! The check-in gods are napping 😴',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              else if (!viewModel.hasData)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text('No checkinboards yet', style: TextStyle(color: Colors.white70))),
+                )
+              else
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, idx) {
-                  final board = checkinboards[idx];
+                        final board = viewModel.pageData!.items[idx];
                   return GestureDetector(
                     onTap: () {},
                     child: Container(
@@ -131,12 +194,13 @@ class CheckinboardPage extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 活动名和总打卡人数
                           Row(
                             children: [
                               Expanded(
                                 child: Text(
-                                  board['activity'],
+                                        board.activity,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.titleLarge.copyWith(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.bold,
@@ -148,7 +212,7 @@ class CheckinboardPage extends StatelessWidget {
                                   Icon(Icons.people, color: AppColors.primary, size: 18),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '${board['totalCheckins']} check-ins',
+                                          '${board.totalCheckins} check-ins',
                                     style: AppTextStyles.labelMedium.copyWith(
                                       color: AppColors.primary,
                                       fontWeight: FontWeight.w600,
@@ -159,7 +223,6 @@ class CheckinboardPage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          // RANK USER COUNTRY STREAK DAYS THIS YEAR THIS QUARTER THIS MONTH 标题
                           Row(
                             children: [
                               Expanded(
@@ -170,91 +233,68 @@ class CheckinboardPage extends StatelessWidget {
                                 child: Text('USER', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
                               ),
                               Expanded(
-                                child: Text('COUNTRY', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
-                              ),
-                              Expanded(
                                 child: Text('STREAK', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
                               ),
                               Expanded(
                                 child: Text('YEAR', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
                               ),
                               Expanded(
-                                child: Text('QTR', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
-                              ),
-                              Expanded(
-                                child: Text('MONTH', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                                      child: Text('TIME/Min', style: AppTextStyles.labelSmall.copyWith(color: Colors.grey[700], fontWeight: FontWeight.bold)),
                               ),
                             ],
                           ),
                           const SizedBox(height: 8),
-                          // 只展示前三名
-                          ...List.generate(3, (i) {
-                            final r = board['rankings'][i];
+                          ...List.generate(board.rankings.length, (i) {
+                                  final r = board.rankings[i];
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
                               child: Row(
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      '${r['rank']}',
+                                            '${r.rank}',
                                       style: AppTextStyles.bodyMedium.copyWith(
-                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
-                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                              color: r.rank == 1 ? AppColors.primary : Colors.black87,
+                                              fontWeight: r.rank == 1 ? FontWeight.bold : FontWeight.normal,
                                       ),
                                     ),
                                   ),
                                   Expanded(
                                     flex: 2,
                                     child: Text(
-                                      r['user'],
+                                            r.user,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: AppTextStyles.bodyMedium.copyWith(
-                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
-                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                              color: r.rank == 1 ? AppColors.primary : Colors.black87,
+                                              fontWeight: r.rank == 1 ? FontWeight.bold : FontWeight.normal,
                                       ),
                                     ),
                                   ),
                                   Expanded(
                                     child: Text(
-                                      r['country'],
+                                            '${r.streak}',
                                       style: AppTextStyles.bodyMedium.copyWith(
-                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
-                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                              color: r.rank == 1 ? AppColors.primary : Colors.black87,
+                                              fontWeight: r.rank == 1 ? FontWeight.bold : FontWeight.normal,
                                       ),
                                     ),
                                   ),
                                   Expanded(
                                     child: Text(
-                                      '${r['streak']}',
+                                            '${r.year}',
                                       style: AppTextStyles.bodyMedium.copyWith(
-                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
-                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                              color: r.rank == 1 ? AppColors.primary : Colors.black87,
+                                              fontWeight: r.rank == 1 ? FontWeight.bold : FontWeight.normal,
                                       ),
                                     ),
                                   ),
                                   Expanded(
                                     child: Text(
-                                      '${r['year']}',
+                                            '${(r.allTime / 60).round()}',
                                       style: AppTextStyles.bodyMedium.copyWith(
-                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
-                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      '${r['quarter']}',
-                                      style: AppTextStyles.bodyMedium.copyWith(
-                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
-                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      '${r['month']}',
-                                      style: AppTextStyles.bodyMedium.copyWith(
-                                        color: r['rank'] == 1 ? AppColors.primary : Colors.black87,
-                                        fontWeight: r['rank'] == 1 ? FontWeight.bold : FontWeight.normal,
+                                              color: r.rank == 1 ? AppColors.primary : Colors.black87,
+                                              fontWeight: r.rank == 1 ? FontWeight.bold : FontWeight.normal,
                                       ),
                                     ),
                                   ),
@@ -263,39 +303,476 @@ class CheckinboardPage extends StatelessWidget {
                             );
                           }),
                           const SizedBox(height: 10),
-                          // 连续打卡第一的人
                           Row(
                             children: [
                               Icon(Icons.emoji_events, color: AppColors.primary, size: 20),
                               const SizedBox(width: 6),
-                              Text(
-                                'Top Streak: ${board['topUser']['name']} (${board['topUser']['country']})',
+                              Expanded(
+                                child: Text(
+                                      'Time Leader: ${board.topUser.name} (${board.topUser.country ?? '-'})',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.bodyMedium.copyWith(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 10),
-                          // 查看完整checkinboard提示
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              'Tap to view full checkinboard',
-                              style: AppTextStyles.labelMedium.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
                           ),
                         ],
                       ),
                     ),
                   );
                 },
-                childCount: checkinboards.length,
+                      childCount: viewModel.pageData!.items.length,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (viewModel.isFullSheetVisible)
+            _CheckinboardFullSheet(
+              activity: viewModel.currentActivity!,
+              title: viewModel.currentActivityTitle!,
+              onClose: () => viewModel.hideFullSheet(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class LogoContent extends StatelessWidget {
+  final EdgeInsetsGeometry? margin;
+  const LogoContent({this.margin, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: margin,
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.40),
+        borderRadius: BorderRadius.circular(40),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 32,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.white.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+        border: Border.all(color: Colors.black.withOpacity(0.13), width: 1.1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.18),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: SvgPicture.asset(
+                'assets/icons/wiimadhiit-w-red.svg',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Text(
+            'WiiMadHIIT',
+            style: AppTextStyles.headlineMedium.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2.2,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckinboardFullSheet extends StatefulWidget {
+  final String activity;
+  final String title;
+  final VoidCallback onClose;
+
+  const _CheckinboardFullSheet({
+    required this.activity,
+    required this.title,
+    required this.onClose,
+  });
+
+  @override
+  State<_CheckinboardFullSheet> createState() => _CheckinboardFullSheetState();
+}
+
+class _CheckinboardFullSheetState extends State<_CheckinboardFullSheet> {
+  final ScrollController _scrollController = ScrollController();
+  final int _pageSize = 16;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    // 使用 addPostFrameCallback 避免在 build 阶段调用 setState
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.4),
+        child: Column(
+          children: [
+            const Spacer(),
+            Container(
+              height: media.size.height * 0.8,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  _buildGrabber(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.title,
+                            style: AppTextStyles.titleLarge.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: widget.onClose,
+                          icon: const Icon(Icons.close, color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  _buildHeaderRow(),
+                  const SizedBox(height: 6),
+                  Expanded(child: _buildBody()),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGrabber() {
+    return Container(
+      width: 40,
+      height: 4,
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
+  Widget _buildHeaderRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'RANK',
+              style: AppTextStyles.labelSmall.copyWith(
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              'USER',
+              style: AppTextStyles.labelSmall.copyWith(
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'STREAK',
+              textAlign: TextAlign.right,
+              style: AppTextStyles.labelSmall.copyWith(
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'YEAR',
+              textAlign: TextAlign.right,
+              style: AppTextStyles.labelSmall.copyWith(
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'TIME/Min',
+              textAlign: TextAlign.right,
+              style: AppTextStyles.labelSmall.copyWith(
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError(BuildContext context, String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red),
+          const SizedBox(height: 8),
+          Text(message, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: () {
+              _loadInitialData();
+            },
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Text(
+        'No rankings yet',
+        style: AppTextStyles.bodyMedium.copyWith(color: Colors.grey[700]),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    return Consumer<CheckinboardViewModel>(
+      builder: (context, viewModel, _) {
+        final isLoading = viewModel.isRankingsLoading(widget.activity, null);
+        final isLoadingMore = viewModel.isRankingsLoadingMore(widget.activity, null);
+        final hasError = viewModel.hasRankingsError(widget.activity, null);
+        final errorMessage = viewModel.getRankingsError(widget.activity, null);
+        final items = viewModel.getRankingsItems(widget.activity, null);
+        final total = viewModel.getRankingsTotal(widget.activity, null);
+
+        if (isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (hasError) {
+          return _buildError(context, errorMessage ?? 'Unknown error');
+        }
+        if (items.isEmpty) {
+          return _buildEmpty();
+        }
+
+        return ListView.separated(
+          controller: _scrollController,
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          itemBuilder: (context, index) {
+            if (index >= items.length) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 8),
+                    Text('Loading more...', style: TextStyle(color: Colors.black87)),
+                  ],
+                ),
+              );
+            }
+            final item = items[index];
+            return _RankingRow(item: item);
+          },
+          separatorBuilder: (_, __) => Divider(
+            color: Colors.grey.withOpacity(0.2),
+            height: 10,
+            thickness: 1,
+          ),
+          itemCount: items.length + (isLoadingMore ? 1 : 0),
+        );
+      },
+    );
+  }
+
+  void _onScroll() {
+    final viewModel = Provider.of<CheckinboardViewModel>(context, listen: false);
+    if (viewModel.isRankingsLoadingMore(widget.activity, null) || 
+        viewModel.isRankingsLoading(widget.activity, null)) return;
+    if (!viewModel.hasMoreRankings(widget.activity, null)) return;
+    if (!_scrollController.hasClients) return;
+    
+    final max = _scrollController.position.maxScrollExtent;
+    final offset = _scrollController.offset;
+    if (max - offset < 200) {
+      final nextPage = viewModel.getRankingsCurrentPage(widget.activity, null) + 1;
+      viewModel.loadRankingsPage(
+        activity: widget.activity,
+        page: nextPage,
+        pageSize: _pageSize,
+      );
+    }
+  }
+
+  void _loadInitialData() {
+    final viewModel = Provider.of<CheckinboardViewModel>(context, listen: false);
+    viewModel.loadRankingsPage(
+      activity: widget.activity,
+      page: 1,
+      pageSize: _pageSize,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    
+    try {
+      final viewModel = Provider.of<CheckinboardViewModel>(context, listen: false);
+      viewModel.clearRankingsCache(widget.activity, null);
+    } catch (e) {
+      // 忽略错误，确保 dispose 正常完成
+    }
+    
+    super.dispose();
+  }
+}
+
+class _RankingRow extends StatelessWidget {
+  final CheckinRanking item;
+
+  const _RankingRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isTop = item.rank == 1;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isTop ? AppColors.primary.withOpacity(0.1) : Colors.grey.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${item.rank}',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: isTop ? AppColors.primary : Colors.black87,
+                fontWeight: isTop ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Row(
+              children: [
+                _AvatarPlaceholder(name: item.user),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    item.user,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: isTop ? AppColors.primary : Colors.black87,
+                      fontWeight: isTop ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '${item.streak}',
+              textAlign: TextAlign.right,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: isTop ? AppColors.primary : Colors.black87,
+                fontWeight: isTop ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '${item.year}',
+              textAlign: TextAlign.right,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: isTop ? AppColors.primary : Colors.black87,
+                fontWeight: isTop ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '${(item.allTime / 60).round()}',
+              textAlign: TextAlign.right,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: isTop ? AppColors.primary : Colors.black87,
+                fontWeight: isTop ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ),
@@ -305,32 +782,31 @@ class CheckinboardPage extends StatelessWidget {
   }
 }
 
-// 用于内容区大标题的渐隐动画，只在LOGO完全展开时显示
-class _FadeHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final double minExtent;
-  final double maxExtent;
-  final Widget child;
+class _AvatarPlaceholder extends StatelessWidget {
+  final String name;
 
-  _FadeHeaderDelegate({
-    required this.minExtent,
-    required this.maxExtent,
-    required this.child,
-  });
+  const _AvatarPlaceholder({required this.name});
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    // 只在LOGO完全展开时显示
-    final double t = (1 - (shrinkOffset / (maxExtent - minExtent))).clamp(0.0, 1.0);
-    return Opacity(
-      opacity: t > 0.98 ? 1.0 : 0.0,
-      child: child,
+  Widget build(BuildContext context) {
+    final String initial = name.isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [AppColors.primary.withOpacity(0.6), AppColors.primary.withOpacity(0.3)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: Colors.grey.withOpacity(0.2), width: 1),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: AppTextStyles.labelSmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+      ),
     );
-  }
-
-  @override
-  bool shouldRebuild(_FadeHeaderDelegate oldDelegate) {
-    return oldDelegate.child != child ||
-        oldDelegate.minExtent != minExtent ||
-        oldDelegate.maxExtent != maxExtent;
   }
 }

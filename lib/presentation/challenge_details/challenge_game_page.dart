@@ -2,35 +2,95 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 import '../../widgets/floating_logo.dart';
+import '../../widgets/elegant_error_display.dart';
 import '../../core/theme/app_colors.dart';
-import '../../widgets/training_portrait_layout.dart';
-import '../../widgets/training_landscape_layout.dart';
+import '../../core/theme/app_text_styles.dart';
+import '../../core/auth/auth_guard_mixin.dart';
+import '../../widgets/challenge_portrait_layout.dart';
+import '../../widgets/challenge_landscape_layout.dart';
 import '../../widgets/circle_progress_painter.dart';
 import '../../widgets/layout_bg_type.dart';
 import '../../widgets/tiktok_wheel_picker.dart';
-import '../../widgets/history_ranking_widget.dart';
+import '../../widgets/challenge_history_ranking_widget.dart';
 import '../../widgets/microphone_permission_manager.dart';
+import '../../widgets/training_setup_dialog.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
-
 import 'package:flutter_sound/flutter_sound.dart';
 import 'dart:io' show Platform;
 
+// 🎯 导入challenge_game领域实体
+import '../../domain/entities/challenge_game/challenge_game_history_item.dart';
+import '../../domain/entities/challenge_game/challenge_game_result.dart';
+import '../../domain/entities/challenge_game/challenge_game_session_config.dart';
 
-class ChallengeGamePage extends StatefulWidget {
-  final String challengeId;
-  const ChallengeGamePage({Key? key, required this.challengeId}) : super(key: key);
+// 🎯 导入challenge_game ViewModel
+import 'challenge_game_viewmodel.dart';
+
+// 🎯 导入challenge_game用例
+import '../../domain/usecases/get_challenge_game_data_and_video_config_usecase.dart';
+import '../../domain/services/challenge_game_service.dart';
+import '../../data/repository/challenge_game_repository.dart';
+import '../../data/api/challenge_game_api.dart';
+
+class ChallengeGamePage extends StatelessWidget {
+  final String challengeId; // 🎯 修改：使用challengeId
+  final int? totalRounds; // 🎯 新增：接收总轮次数
+  final int? roundDuration; // 🎯 新增：接收每轮时长
+  final int? allowedTimes; // 🎯 新增：接收剩余挑战次数
+  
+  const ChallengeGamePage({
+    Key? key, 
+    required this.challengeId,
+    this.totalRounds,
+    this.roundDuration,
+    this.allowedTimes, // 🎯 新增：接收剩余挑战次数
+  }) : super(key: key);
 
   @override
-  State<ChallengeGamePage> createState() => _ChallengeGamePageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (context) => ChallengeGameViewModel(
+        getChallengeGameDataAndVideoConfigUseCase: GetChallengeGameDataAndVideoConfigUseCase(
+          ChallengeGameRepositoryImpl(ChallengeGameApi()),
+        ),
+        submitChallengeGameResultUseCase: SubmitChallengeGameResultUseCase(
+          ChallengeGameRepositoryImpl(ChallengeGameApi()),
+        ),
+        challengeGameService: ChallengeGameService(),
+      ),
+      child: _ChallengeGamePageContent(
+        challengeId: challengeId,
+        totalRounds: totalRounds,
+        roundDuration: roundDuration,
+        allowedTimes: allowedTimes, // 🎯 新增：传递剩余挑战次数
+      ),
+    );
+  }
 }
 
-class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProviderStateMixin, WidgetsBindingObserver {
-  Map<String, dynamic>? currentResult;
-  int totalRounds = 1;
-  int roundDuration = 60; // 单位：秒（修改为秒）
+class _ChallengeGamePageContent extends StatefulWidget {
+  final String challengeId;
+  final int? totalRounds;
+  final int? roundDuration;
+  final int? allowedTimes; // 🎯 新增：接收剩余挑战次数
+  
+  const _ChallengeGamePageContent({
+    required this.challengeId,
+    this.totalRounds,
+    this.roundDuration,
+    this.allowedTimes, // 🎯 新增：接收剩余挑战次数
+  });
+
+  @override
+  State<_ChallengeGamePageContent> createState() => _ChallengeGamePageState();
+}
+
+class _ChallengeGamePageState extends State<_ChallengeGamePageContent> with TickerProviderStateMixin, WidgetsBindingObserver, AuthGuardMixin {
+  // 🎯 移除本地状态管理，改为从 ViewModel 获取
   int currentRound = 1;
   int countdown = 0; // 秒
   int counter = 0;
@@ -44,6 +104,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   int _lastBounceTime = 0;
   bool showResultOverlay = false;
   bool _isSetupDialogOpen = false;
+  
   // 1. 在State中添加controller
   DraggableScrollableController? _portraitController;
   DraggableScrollableController? _landscapeController;
@@ -51,46 +112,31 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
   // 新增：Timer管理
   Timer? _preCountdownTimer;
 
+  // 背景切换相关
+  LayoutBgType bgType = LayoutBgType.color;
+  late AnimationController _videoFadeController;
+
   // 新增：动画状态管理
   bool _isAnimating = false;
   Timer? _animationDebounceTimer;
 
-
-
-  // 背景切换相关
-  LayoutBgType bgType = LayoutBgType.color;
-  late AnimationController _videoFadeController;
-  late VideoPlayerController _videoController;
+  // 🎯 双默认视频控制器：横屏和竖屏各一个
+  VideoPlayerController? _portraitDefaultVideoController;
+  VideoPlayerController? _landscapeDefaultVideoController;
+  
+  // 🎯 当前使用的视频控制器（可能是默认的或远程的）
+  VideoPlayerController? _videoController;
   bool _videoReady = false;
+  
   CameraController? _cameraController;
-  Future<void>? _cameraInitFuture;
   bool _cameraPermissionGranted = false; // 新增：相机权限状态
   bool _isInitializingCamera = false; // 新增：相机初始化状态
-  bool _isSubmittingResult = false; // 新增：API请求状态
+
+  // 🎯 新增：提交结果状态管理
+  bool _isSubmittingResult = false;
   
   // 声音检测相关 - 使用权限管理器
   MicrophonePermissionManager? _permissionManager;
-  
-
-
-  // 历史排名数据 - 从API获取
-  List<Map<String, dynamic>> history = [];
-  
-  // 历史数据加载状态
-  bool _isLoadingHistory = false;
-  String? _historyError;
-
-  // 视频配置相关
-  String? _portraitVideoUrl; // 竖屏视频URL
-  String? _landscapeVideoUrl; // 横屏视频URL
-  bool _isLoadingVideoConfig = false; // 视频配置加载状态
-  String? _videoConfigError; // 视频配置错误
-  
-  // 临时结果 - 存储每个round的数据
-  List<Map<String, dynamic>> tmpResult = [];
-  
-  // 最终结果 - 用于API请求
-  Map<String, dynamic> finalResult = {};
 
   @override
   void initState() {
@@ -100,56 +146,33 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     WidgetsBinding.instance.addObserver(this);
     
     try {
-      bounceController = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 180),
-        lowerBound: 1.0,
-        upperBound: 1.18,
-      );
-      bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
-      pageController = PageController();
-      _portraitController = DraggableScrollableController();
-      _landscapeController = DraggableScrollableController();
-      
-      // 安全初始化视频控制器
-      _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
-        ..setLooping(true)
-        ..setVolume(0.0)
-        ..initialize().then((_) {
-          if (mounted) {
-            setState(() {
-              _videoReady = true;
-            });
-            _videoController.play();
-          }
-        }).catchError((e) {
-          print('❌ Video initialization error: $e');
-        });
-        
-      _videoFadeController = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 500),
-        value: 1.0,
-      );
-      
-      // 初始化finalResult
-      finalResult = {
-        "challengeId": widget.challengeId,
-        "totalRounds": totalRounds,
-        "roundDuration": roundDuration,
-        "timestamp": DateTime.now().millisecondsSinceEpoch,
-        "maxCounts": 0
-      };
-      
-      // 🎯 加载历史训练数据和视频配置（不依赖权限，优先加载）
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (mounted) {
-          await _loadTrainingDataAndVideoConfig();
-        }
-      });
-      
-      // 🎯 初始化权限管理器
+      _initializeControllers();
+      _initializeVideoController();
       _initializePermissionManager();
+      
+                // 🎯 苹果级优化：智能加载历史挑战游戏数据和视频配置
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (mounted) {
+              // 通过 ViewModel 加载数据
+              final viewModel = context.read<ChallengeGameViewModel>();
+              
+              // 🎯 如果从路由参数接收到了配置参数，直接设置到ViewModel
+              if (widget.totalRounds != null && widget.roundDuration != null) {
+                viewModel.updateChallengeGameConfig(
+                  totalRounds: widget.totalRounds!,
+                  roundDuration: widget.roundDuration!,
+                  allowedTimes: widget.allowedTimes, // 🎯 新增：设置初始剩余挑战次数
+                );
+                print('🎯 Set challenge config from route params: ${widget.totalRounds} rounds, ${widget.roundDuration}s, ${widget.allowedTimes} attempts');
+              }
+              
+              // 🎯 使用智能加载策略：避免不必要的重复请求
+              await viewModel.smartLoadChallengeGameData(
+                widget.challengeId, // 🎯 修改：使用challengeId
+                limit: 20,
+              );
+            }
+          });
       
     } catch (e) {
       print('❌ Error in initState: $e');
@@ -160,69 +183,99 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     }
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final orientation = MediaQuery.of(context).orientation;
-    if (orientation == Orientation.portrait && _portraitController == null) {
+  /// 初始化所有控制器
+  void _initializeControllers() {
+      bounceController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 180),
+        lowerBound: 1.0,
+        upperBound: 1.18,
+      );
+      bounceAnim = CurvedAnimation(parent: bounceController, curve: Curves.easeOut);
+      pageController = PageController();
       _portraitController = DraggableScrollableController();
-    }
-    if (orientation == Orientation.landscape && _landscapeController == null) {
       _landscapeController = DraggableScrollableController();
-    }
+        
+      _videoFadeController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 500),
+        value: 1.0,
+      );
+  }
+
+  /// 🎯 初始化双默认视频控制器
+  void _initializeVideoController() {
+    // 🎯 初始化竖屏默认视频控制器
+    _portraitDefaultVideoController = VideoPlayerController.asset('assets/video/video1.mp4')
+      ..setLooping(true)
+      ..setVolume(0.0);
     
-    // 监听屏幕方向变化，重新初始化视频
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _videoReady && !_isLoadingVideoConfig) {
-        _onOrientationChanged();
+    _portraitDefaultVideoController!.initialize().then((_) {
+        if (mounted) {
+        print('✅ Portrait default video controller initialized');
+        _setDefaultVideoController();
       }
+    }).catchError((e) {
+      print('❌ Portrait default video initialization error: $e');
+    });
+    
+    // 🎯 初始化横屏默认视频控制器
+    _landscapeDefaultVideoController = VideoPlayerController.asset('assets/video/video2.mp4')
+      ..setLooping(true)
+      ..setVolume(0.0);
+    
+    _landscapeDefaultVideoController!.initialize().then((_) {
+      if (mounted) {
+        print('✅ Landscape default video controller initialized');
+        _setDefaultVideoController();
+      }
+    }).catchError((e) {
+      print('❌ Landscape default video initialization error: $e');
     });
   }
-
-  @override
-  void dispose() {
-    // 🎤 Apple-level Resource Cleanup
-    // 立即停止所有动画和定时器
-    _stopAllAnimationsAndTimers();
+  
+  /// 🎯 根据当前屏幕方向设置默认视频控制器
+  void _setDefaultVideoController() {
+    if (!mounted) return;
     
-    // 🎯 移除应用生命周期监听
-    WidgetsBinding.instance.removeObserver(this);
+    final orientation = MediaQuery.of(context).orientation;
+    // 🎯 直接获取目标控制器引用，不创建额外变量
+    final targetController = orientation == Orientation.portrait 
+        ? _portraitDefaultVideoController 
+        : _landscapeDefaultVideoController;
     
-    // 🎯 清理权限管理器
-    _permissionManager?.dispose();
-    _permissionManager = null;
-    
-    // 释放所有控制器资源
-    bounceController.dispose();
-    pageController.dispose();
-    _portraitController?.dispose();
-    _landscapeController?.dispose();
-    _videoController.dispose();
-    _videoFadeController.dispose();
-    _cameraController?.stopImageStream();
-    _cameraController?.dispose();
-    
-    print('🎤 All resources cleaned up successfully');
-    super.dispose();
-  }
-
-  /// 🎯 新增：应用生命周期状态变化处理
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    _permissionManager?.handleAppLifecycleStateChange(state);
+    // 只有当目标控制器已初始化且与当前控制器不同时才切换
+    if (targetController != null && 
+        targetController.value.isInitialized && 
+        _videoController != targetController) {
+      
+      // 停止当前视频
+      if (_videoController?.value.isPlaying == true) {
+        _videoController!.pause();
+      }
+      
+      // 切换到默认视频控制器
+      _videoController = targetController;
+      _videoReady = true;
+      
+      // 开始播放
+      _videoController!.play();
+      
+      print('🎯 Switched to ${orientation == Orientation.portrait ? 'portrait' : 'landscape'} default video');
+      setState(() {});
+    }
   }
 
   /// 🎯 初始化权限管理器
   void _initializePermissionManager() {
     _permissionManager = MicrophonePermissionManager();
     
-    // 设置回调函数
-    _permissionManager!.onPermissionGranted = () {
-      if (mounted) {
-        _showSetupDialog();
-      }
-    };
+                    // 设置回调函数
+                _permissionManager!.onPermissionGranted = () {
+                  if (mounted) {
+                    _showSetupDialog();
+                  }
+                };
     
     _permissionManager!.onPermissionDenied = () {
       if (mounted) {
@@ -231,7 +284,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     };
     
     _permissionManager!.onAudioDetectionReady = () {
-      print('🎤 Voice detection ready');
+      print('🎯 Audio detection ready');
     };
     
     _permissionManager!.onStrikeDetected = () {
@@ -251,7 +304,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
         if (!mounted) return;
         
         try {
-          print('🎤 Starting voice permission check...');
+          print('🎯 Starting permission check...');
           bool permissionGranted = await _permissionManager!.requestMicrophonePermissionDirectly();
           
           // 只有在权限未授予时才启动权限状态监听
@@ -266,6 +319,125 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
         }
       });
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final orientation = MediaQuery.of(context).orientation;
+    if (orientation == Orientation.portrait && _portraitController == null) {
+      _portraitController = DraggableScrollableController();
+    }
+    if (orientation == Orientation.landscape && _landscapeController == null) {
+      _landscapeController = DraggableScrollableController();
+    }
+    
+    // 监听屏幕方向变化，重新初始化视频
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _videoReady) {
+        _onOrientationChanged();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // 🎯 Apple-level Resource Cleanup
+    // 立即停止所有动画和定时器
+    _stopAllAnimationsAndTimers();
+    
+    // 🎯 移除应用生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
+    
+    // 🎯 清理权限管理器
+    _permissionManager?.dispose();
+    _permissionManager = null;
+    
+    // 🎯 释放所有控制器资源
+    bounceController.dispose();
+    pageController.dispose();
+    _portraitController?.dispose();
+    _landscapeController?.dispose();
+    _videoFadeController.dispose();
+    _cameraController?.stopImageStream();
+    _cameraController?.dispose();
+    
+    // 🎯 释放视频控制器资源
+    _disposeVideoControllers();
+    
+    // 🎯 新增：清理ViewModel中的内存数据
+    _cleanupViewModelData();
+    
+    print('🎯 All resources cleaned up successfully');
+    super.dispose();
+  }
+  
+  /// 🎯 释放所有视频控制器资源
+  void _disposeVideoControllers() {
+    try {
+      // 停止当前视频控制器
+      if (_videoController?.value.isPlaying == true) {
+        _videoController!.pause();
+      }
+      
+      // 释放当前视频控制器（如果不是默认控制器）
+      if (_videoController != null && 
+          _videoController != _portraitDefaultVideoController && 
+          _videoController != _landscapeDefaultVideoController) {
+        _videoController!.dispose();
+        _videoController = null;
+      }
+      
+      // 🎯 释放竖屏默认视频控制器
+      if (_portraitDefaultVideoController != null) {
+        if (_portraitDefaultVideoController!.value.isPlaying) {
+          _portraitDefaultVideoController!.pause();
+        }
+        _portraitDefaultVideoController!.dispose();
+        _portraitDefaultVideoController = null;
+        print('🎯 Portrait default video controller disposed');
+      }
+      
+      // 🎯 释放横屏默认视频控制器
+      if (_landscapeDefaultVideoController != null) {
+        if (_landscapeDefaultVideoController!.value.isPlaying) {
+          _landscapeDefaultVideoController!.pause();
+        }
+        _landscapeDefaultVideoController!.dispose();
+        _landscapeDefaultVideoController = null;
+        print('🎯 Landscape default video controller disposed');
+      }
+      
+      // 🎯 重置视频状态
+      _videoReady = false;
+      
+      print('🎯 All video controllers disposed successfully');
+    } catch (e) {
+      print('❌ Error disposing video controllers: $e');
+    }
+  }
+  
+  /// 🎯 苹果级优化：清理ViewModel中的内存数据
+  void _cleanupViewModelData() {
+    try {
+      if (mounted) {
+        final viewModel = context.read<ChallengeGameViewModel>();
+        
+        // 🎯 使用智能清理策略：保留核心数据，避免重新请求API
+        viewModel.smartCleanup();
+        
+        print('🎯 ChallengeGameViewModel smart cleanup completed');
+      }
+    } catch (e) {
+      print('⚠️ Warning: Error cleaning up ViewModel data: $e');
+    }
+  }
+
+  /// 🎯 新增：应用生命周期状态变化处理
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    _permissionManager?.handleAppLifecycleStateChange(state);
   }
 
   /// 停止所有动画和定时器，释放内存
@@ -286,33 +458,155 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     _isAnimating = false;
     
     // 停止视频播放
-    if (_videoController.value.isPlaying) {
-      _videoController.pause();
+    if (_videoController?.value.isPlaying == true) {
+      _videoController!.pause();
     }
     
-    // 停止相机流
-    try {
-      _cameraController?.stopImageStream();
-    } catch (e) {
-      // 忽略相机停止错误
+    // 🎯 停止相机流并释放资源
+    if (_cameraController != null) {
+      try {
+        if (_cameraController!.value.isInitialized) {
+          _cameraController!.stopImageStream();
+        }
+        _cameraController!.dispose();
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+        _isInitializingCamera = false;
+      } catch (e) {
+        print('Warning: Error disposing camera controller: $e');
+      }
     }
     
-    // 停止音频检测（简化 - 不需要检查 isAudioDetectionRunning）
+    // 停止音频检测
     _permissionManager?.stopAudioDetectionForRound();
     
     print('All animations and timers stopped, memory cleaned up');
   }
 
-
-
-
-
-
-
-
+  /// 🎯 Apple-level Challenge Game Reset with Audio Detection Management
+  void _resetTraining() async {
+    // 🎯 Stop audio detection before reset 
+    await _permissionManager?.stopAudioDetectionForRound();
+    
+    setState(() {
+      showResultOverlay = false;
+      currentRound = 1;
+      counter = 0;
+      isStarted = false;
+      isCounting = false;
+      showPreCountdown = false;
+    });
+    
+    print('🎯 Challenge game reset completed with stream audio detection cleanup');
+    _startPreCountdown();
+  }
 
   // 新增：请求相机权限并初始化相机
   Future<bool> _requestCameraPermissionAndInitialize() async {
+    if (Platform.isIOS) {
+      // iOS: 通过实际调用相机API触发权限弹窗
+      return await _requestCameraPermissionForIOS();
+    } else {
+      // Android: 使用原有逻辑
+      return await _requestCameraPermissionForAndroid();
+    }
+  }
+
+  /// 🍎 Apple-level iOS-Specific Camera Permission Request
+  Future<bool> _requestCameraPermissionForIOS() async {
+    if (_cameraPermissionGranted && _cameraController != null) {
+      return true;
+    }
+
+    if (_isInitializingCamera) {
+        return false;
+      }
+
+    setState(() {
+      _isInitializingCamera = true;
+    });
+
+    try {
+      // 🎯 先释放旧的相机控制器，防止内存泄漏
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing old camera controller: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
+
+      // 检查可用相机
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        _showCameraErrorDialog();
+        return false;
+      }
+
+      // 查找前置摄像头
+      final frontCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras[0],
+      );
+
+      // 创建相机控制器
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      // 初始化相机（这会触发iOS权限弹窗）
+      await _cameraController!.initialize();
+      
+      // 🎯 启动图像流以保持相机活跃
+      await _cameraController!.startImageStream((image) {
+        // 保持摄像头活跃，但不处理图像数据
+      });
+
+      if (mounted) {
+        setState(() {
+          _cameraPermissionGranted = true;
+          _isInitializingCamera = false;
+        });
+      }
+
+      return true;
+    } catch (e) {
+      print('iOS Camera initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _isInitializingCamera = false;
+        });
+      }
+      
+      // 🎯 出错时清理相机控制器
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing camera controller after error: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
+      
+      if (e.toString().contains('permission')) {
+        _showCameraPermissionDeniedDialog();
+      } else {
+        _showCameraErrorDialog();
+      }
+      
+      return false;
+    }
+  }
+
+  /// 🍎 Apple-level Android Camera Permission Request
+  Future<bool> _requestCameraPermissionForAndroid() async {
     if (_cameraPermissionGranted && _cameraController != null) {
       return true;
     }
@@ -321,15 +615,29 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       return false; // 正在初始化中，避免重复请求
     }
 
+    if (mounted) {
     setState(() {
       _isInitializingCamera = true;
     });
+    }
 
     try {
+      // 🎯 先释放旧的相机控制器，防止内存泄漏
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing old camera controller: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
+
       // 检查可用相机
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        _showCameraErrorDialog('No cameras available on this device.');
+        _showCameraErrorDialog();
         return false;
       }
 
@@ -349,28 +657,44 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       // 初始化相机（这会触发权限请求）
       await _cameraController!.initialize();
       
-      // 启动图像流以保持相机活跃
+      // 🎯 启动图像流以保持相机活跃
       await _cameraController!.startImageStream((image) {
-        // 保持摄像头活跃
+        // 保持摄像头活跃，但不处理图像数据
       });
 
+      if (mounted) {
       setState(() {
         _cameraPermissionGranted = true;
         _isInitializingCamera = false;
       });
+      }
 
       return true;
     } catch (e) {
       print('Camera initialization error: $e');
+      if (mounted) {
       setState(() {
         _isInitializingCamera = false;
       });
+      }
+      
+      // 🎯 出错时清理相机控制器
+      if (_cameraController != null) {
+        try {
+          await _cameraController!.stopImageStream();
+          _cameraController!.dispose();
+        } catch (e) {
+          print('Warning: Error disposing camera controller after error: $e');
+        }
+        _cameraController = null;
+        _cameraPermissionGranted = false;
+      }
       
       // 根据错误类型显示不同的提示
       if (e.toString().contains('permission')) {
         _showCameraPermissionDeniedDialog();
       } else {
-        _showCameraErrorDialog('Failed to initialize camera. Please try again.');
+        _showCameraErrorDialog();
       }
       
       return false;
@@ -403,668 +727,419 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     );
   }
 
-
-
   // 新增：显示相机错误对话框
-  void _showCameraErrorDialog(String message) {
+  void _showCameraErrorDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Camera Error'),
-        content: Text(message),
+        title: Text('Camera Permission Required'),
+        content: Text(
+          'To use the selfie background feature, please grant camera permission in your device settings.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // 可以在这里添加跳转到设置页面的逻辑
+            },
+            child: Text('Open Settings'),
           ),
         ],
       ),
     );
   }
 
-
-
   void _showSetupDialog() async {
-    setState(() {
-      _isSetupDialogOpen = true;
-    });
+    final viewModel = context.read<ChallengeGameViewModel>();
     
-    int tempRounds = totalRounds;
-    int tempMinutes = roundDuration ~/ 60; // 从秒转换为分钟
-    int tempSeconds = roundDuration % 60; // 从秒转换为秒数
+    if (mounted) {
+      setState(() {
+        _isSetupDialogOpen = true;
+      });
+    }
     
-    final result = await showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
+      barrierDismissible: true,
+      builder: (context) => OrientationBuilder(
+        builder: (context, orientation) {
+          // 🎯 实时响应屏幕方向变化
+          if (orientation == Orientation.landscape) {
+            // 横屏时显示横屏布局
+            return _buildLandscapeDialogContent(viewModel);
+          } else {
+            // 竖屏时显示竖屏布局
+            return _buildPortraitDialogContent(viewModel);
+          }
+        },
+      ),
+    );
+    
+    if (mounted) {
+      setState(() {
+        _isSetupDialogOpen = false;
+      });
+    }
+  }
+  
+  // 辅助方法：构建简洁的配置行
+  Widget _buildSimpleConfigRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+            ),
+          ),
+          Text(
+            value,
+            style: AppTextStyles.titleMedium.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// 🎯 构建竖屏对话框内容
+  Widget _buildPortraitDialogContent(ChallengeGameViewModel viewModel) {
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      elevation: 0,
       backgroundColor: Colors.transparent,
-      isDismissible: true,
-      builder: (context) {
-        return OrientationBuilder(
-          builder: (context, orientation) {
-            // 如果方向改变为横屏，关闭当前对话框并打开横屏对话框
-            if (orientation == Orientation.landscape) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                setState(() {
-                  _isSetupDialogOpen = false;
-                });
-                Navigator.of(context).pop();
-                _showSetupDialogLandscape();
-              });
-            }
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 300,
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 简洁的头部
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.sports_esports,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Challenge Setup',
+                    style: AppTextStyles.titleMedium.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
             
-            return StatefulBuilder(
-              builder: (context, setStateModal) {
-                final totalSeconds = tempRounds * (tempMinutes * 60 + tempSeconds);
-                final totalMinutes = totalSeconds ~/ 60;
-                final remainingSeconds = totalSeconds % 60;
-                
-                return Container(
-                  padding: EdgeInsets.only(
-                    left: 24, right: 24,
-                    top: 16,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.10),
-                        blurRadius: 32,
-                        offset: Offset(0, -8),
-                      ),
-                    ],
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+            // 简洁的内容区域
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 配置信息 - 更简洁的布局
+                  _buildSimpleConfigRow('Rounds', '${viewModel.totalRounds}'),
+                  _buildSimpleConfigRow('Duration', '${viewModel.roundDuration}s'),
+                  _buildSimpleConfigRow('Attempts', viewModel.allowedTimes > 0 ? '${viewModel.allowedTimes}' : 'None'),
+                  
+                  const SizedBox(height: 10),
+                  
+                  // 简洁的规则说明
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
                       children: [
-                        Container(
-                          width: 40, height: 4,
-                          margin: EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[300],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                        Icon(
+                          Icons.emoji_events,
+                          color: Colors.orange,
+                          size: 18,
                         ),
-                        Text(
-                          'Set Rounds & Time',
-                          style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1,
-                          ),
-                                                ),
-                        SizedBox(height: 16),
-                        
-                        // 设置区域 - 轮次和时间并排
-                      Row(
-                        children: [
-                          // 轮次设置
-                          Expanded(
-                            child: Container(
-                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.orange.withOpacity(0.1), width: 1),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    'Rounds',
-                                    style: TextStyle(
-                                      fontSize: 15, 
-                                      fontWeight: FontWeight.w600, 
-                                      color: Colors.orange.shade700,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  TikTokWheelPicker(
-                                    label: '',
-                                    value: tempRounds,
-                                    min: 1,
-                                    max: 10,
-                                    onChanged: (v) => setStateModal(() => tempRounds = v),
-                                    color: Colors.orange,
-                                    compact: true,
-                                  ),
-                                ],
-                              ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Best round performance determines your final score',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: Colors.grey[700],
+                              height: 1.2,
+                              fontSize: 11,
                             ),
                           ),
-                          
-                          SizedBox(width: 16),
-                          
-                          // 时间设置
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // 按钮
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        'Got it',
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// 🎯 构建横屏对话框内容
+  Widget _buildLandscapeDialogContent(ChallengeGameViewModel viewModel) {
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // 左侧简洁信息
+            Expanded(
+              flex: 1,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.sports_esports,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Challenge\nSetup',
+                      style: AppTextStyles.titleMedium.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // 右侧简洁内容
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // 配置信息 - 横屏简洁布局
+                    _buildSimpleConfigRow('Rounds', '${viewModel.totalRounds}'),
+                    _buildSimpleConfigRow('Duration', '${viewModel.roundDuration}s'),
+                    _buildSimpleConfigRow('Attempts', viewModel.allowedTimes > 0 ? '${viewModel.allowedTimes}' : 'None'),
+                    
+                    const SizedBox(height: 16),
+                    
+                    // 简洁规则说明
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.emoji_events,
+                            color: Colors.orange,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: Container(
-                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.deepPurple.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.deepPurple.withOpacity(0.1), width: 1),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    'Duration',
-                                    style: TextStyle(
-                                      fontSize: 15, 
-                                      fontWeight: FontWeight.w600, 
-                                      color: Colors.deepPurple.shade700,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      // 分钟选择器
-                                      Expanded(
-                                        child: TikTokWheelPicker(
-                                          label: 'Min',
-                                          value: tempMinutes,
-                                          min: 0,
-                                          max: 60,
-                                          onChanged: (v) => setStateModal(() => tempMinutes = v),
-                                          color: Colors.deepPurple,
-                                          compact: true,
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: EdgeInsets.symmetric(horizontal: 6),
-                                        child: Text(
-                                          ':',
-                                          style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.deepPurple.shade400,
-                                          ),
-                                        ),
-                                      ),
-                                      // 秒选择器
-                                      Expanded(
-                                        child: TikTokWheelPicker(
-                                          label: 'Sec',
-                                          value: tempSeconds,
-                                          min: 0,
-                                          max: 59,
-                                          onChanged: (v) => setStateModal(() => tempSeconds = v),
-                                          color: Colors.deepPurple,
-                                          compact: true,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                            child: Text(
+                              'Best round performance determines your final score',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: Colors.grey[700],
+                                height: 1.2,
+                                fontSize: 11,
                               ),
                             ),
                           ),
                         ],
                       ),
-                      
-                      SizedBox(height: 16),
-                      
-                      // 总时间显示
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black.withOpacity(0.1), width: 1),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.timer_outlined,
-                              size: 20,
-                              color: Colors.black54,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              '${tempRounds} Rounds × ${tempMinutes.toString().padLeft(2, '0')}:${tempSeconds.toString().padLeft(2, '0')} = ${totalMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}',
-                              style: TextStyle(
-                                color: Colors.black87, 
-                                fontWeight: FontWeight.w600, 
-                                fontSize: 16,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      SizedBox(height: 20),
-                      
-                      // 确认按钮
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              totalRounds = tempRounds;
-                              roundDuration = tempMinutes * 60 + tempSeconds; // 转换为秒
-                              currentRound = 1;
-                              countdown = roundDuration; // 直接使用roundDuration（已经是秒）
-                              _isSetupDialogOpen = false;
-                            });
-                            Navigator.of(context).pop();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 8,
-                          ),
-                          child: Text(
-                            'OK', 
-                            style: TextStyle(
-                              fontSize: 18, 
-                              fontWeight: FontWeight.bold, 
-                              letterSpacing: 1.2
-                            )
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                     ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-    
-    // 对话框关闭后重置状态
-    setState(() {
-      _isSetupDialogOpen = false;
-    });
-  }
-
-  void _showSetupDialogLandscape() async {
-    setState(() {
-      _isSetupDialogOpen = true;
-    });
-    
-    int tempRounds = totalRounds;
-    int tempMinutes = roundDuration ~/ 60; // 从秒转换为分钟
-    int tempSeconds = roundDuration % 60; // 从秒转换为秒数
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double dialogWidth = screenWidth > 468 ? 420 : screenWidth - 48;
-    final bool isFinalResult = showResultOverlay;
-    
-    final result = await showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return OrientationBuilder(
-          builder: (context, orientation) {
-            // 如果方向改变为竖屏，关闭当前对话框并打开竖屏对话框
-            if (orientation == Orientation.portrait) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                setState(() {
-                  _isSetupDialogOpen = false;
-                });
-                Navigator.of(context).pop();
-                _showSetupDialog();
-              });
-            }
-            
-            return Center(
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  width: dialogWidth,
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.10),
-                        blurRadius: 28,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: StatefulBuilder(
-                    builder: (context, setStateModal) {
-                      final totalSeconds = tempRounds * (tempMinutes * 60 + tempSeconds);
-                      final totalMinutes = totalSeconds ~/ 60;
-                      final remainingSeconds = totalSeconds % 60;
-                      
-                      return ConstrainedBox(
-                        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
-                        child: Stack(
-                          children: [
-                            // 右上角关闭按钮
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: IconButton(
-                                icon: Icon(Icons.close_rounded, color: Colors.black54),
-                                onPressed: () {
-                                  setState(() {
-                                    _isSetupDialogOpen = false;
-                                  });
-                                  Navigator.of(context).pop();
-                                  if (isFinalResult) {
-                                    Navigator.of(context).maybePop();
-                                  }
-                                },
-                              ),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SizedBox(height: 2),
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Text(
-                                    'Set Rounds & Time',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.1),
-                                  ),
-                                ),
-                                
-                                // 设置区域 - 轮次和时间并排
-                                Row(
-                                  children: [
-                                    // 轮次设置
-                                    Expanded(
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.withOpacity(0.05),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.orange.withOpacity(0.1), width: 1),
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Text(
-                                              'Rounds',
-                                              style: TextStyle(
-                                                fontSize: 13, 
-                                                fontWeight: FontWeight.w600, 
-                                                color: Colors.orange.shade700,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            TikTokWheelPicker(
-                                              label: '',
-                                              value: tempRounds,
-                                              min: 1,
-                                              max: 10,
-                                              onChanged: (v) => setStateModal(() => tempRounds = v),
-                                              color: Colors.orange,
-                                              compact: true,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    
-                                    SizedBox(width: 12),
-                                    
-                                    // 时间设置
-                                    Expanded(
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.deepPurple.withOpacity(0.05),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.deepPurple.withOpacity(0.1), width: 1),
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Text(
-                                              'Duration',
-                                              style: TextStyle(
-                                                fontSize: 13, 
-                                                fontWeight: FontWeight.w600, 
-                                                color: Colors.deepPurple.shade700,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                // 分钟选择器
-                                                Expanded(
-                                                  child: TikTokWheelPicker(
-                                                    label: 'Min',
-                                                    value: tempMinutes,
-                                                    min: 0,
-                                                    max: 60,
-                                                    onChanged: (v) => setStateModal(() => tempMinutes = v),
-                                                    color: Colors.deepPurple,
-                                                    compact: true,
-                                                  ),
-                                                ),
-                                                Container(
-                                                  padding: EdgeInsets.symmetric(horizontal: 4),
-                                                  child: Text(
-                                                    ':',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.deepPurple.shade400,
-                                                    ),
-                                                  ),
-                                                ),
-                                                // 秒选择器
-                                                Expanded(
-                                                  child: TikTokWheelPicker(
-                                                    label: 'Sec',
-                                                    value: tempSeconds,
-                                                    min: 0,
-                                                    max: 59,
-                                                    onChanged: (v) => setStateModal(() => tempSeconds = v),
-                                                    color: Colors.deepPurple,
-                                                    compact: true,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                
-                                SizedBox(height: 8),
-                                
-                                // 总时间显示
-                                Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.black.withOpacity(0.1), width: 1),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.timer_outlined,
-                                        size: 16,
-                                        color: Colors.black54,
-                                      ),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        '${tempRounds} × ${tempMinutes.toString().padLeft(2, '0')}:${tempSeconds.toString().padLeft(2, '0')} = ${totalMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}',
-                                        style: TextStyle(
-                                          color: Colors.black87, 
-                                          fontWeight: FontWeight.w600, 
-                                          fontSize: 13,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                SizedBox(height: 12),
-                                
-                                // 确认按钮
-                                SizedBox(
-                                  width: 120,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        totalRounds = tempRounds;
-                                        roundDuration = tempMinutes * 60 + tempSeconds; // 转换为秒
-                                        currentRound = 1;
-                                        countdown = roundDuration; // 直接使用roundDuration（已经是秒）
-                                        _isSetupDialogOpen = false;
-                                      });
-                                      Navigator.of(context).pop();
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.black,
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                      elevation: 8,
-                                    ),
-                                    child: Text(
-                                      'OK', 
-                                      style: TextStyle(
-                                        fontSize: 15, 
-                                        fontWeight: FontWeight.bold, 
-                                        letterSpacing: 1.1
-                                      )
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                    
+                    const SizedBox(height: 16),
+                    
+                    // 按钮
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                      );
-                    },
-                  ),
+                        child: Text(
+                          'Got it',
+                          style: AppTextStyles.labelLarge.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            );
-          },
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
-    
-    // 对话框关闭后重置状态
-    setState(() {
-      _isSetupDialogOpen = false;
-    });
   }
-
-
-
-    void _startPreCountdown() {
+  
+  void _startPreCountdown() {
+    final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
+    
     // 取消之前的Timer（如果存在）
     _preCountdownTimer?.cancel();
     
-    countdown = roundDuration;
+    countdown = viewModel.roundDuration; // 🎯 修改：使用viewModel.roundDuration
     setState(() {
       showPreCountdown = true;
       preCountdown = 3;
     });
     _preCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        _preCountdownTimer = null;
+        return;
+      }
+      
       if (preCountdown > 1) {
         setState(() => preCountdown--);
       } else {
         timer.cancel();
         _preCountdownTimer = null; // 清空引用
+        if (mounted) {
         setState(() {
           showPreCountdown = false;
         });
         _startRound();
+        }
       }
     });
   }
 
   void _startRound() {
+    final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
+    
     setState(() {
       isStarted = true;
       isCounting = true;
-      countdown = roundDuration; // 直接使用秒，不需要乘以60
+      countdown = viewModel.roundDuration; // 🎯 修改：使用viewModel.roundDuration
       counter = 0;
     });
     
-    // 如果是第一个round，初始化tmpResult
+    // 🎯 如果是第一个round，初始化tmpResult
     if (currentRound == 1) {
-      tmpResult.clear();
+      viewModel.clearTmpResult(); // 🎯 修改：使用viewModel.clearTmpResult
     }
     
-    // 🎤 Apple-level Voice Detection Integration
-    // 直接启动语音检测，内部已有状态检查
-    print('🎤 Starting round $currentRound');
+    // 🎯 Apple-level Audio Detection Integration
+    // 直接启动音频检测，内部已有状态检查
+    print('🎯 Starting round $currentRound');
     _permissionManager?.startAudioDetectionForRound();
     
     // 🎯 新增：打印音频检测状态
     _permissionManager?.printAudioDetectionStatus();
     
     _tick();
-  }
-
-  /// 🎤 Apple-level Training Reset with Voice Detection Management
-  void _resetTraining() async {
-    // 🎤 Stop voice detection before reset (simplified - no need to check isAudioDetectionRunning)
-    await _permissionManager?.stopAudioDetectionForRound();
-    
-    setState(() {
-      showResultOverlay = false;
-      currentRound = 1;
-      counter = 0;
-      isStarted = false;
-      isCounting = false;
-      showPreCountdown = false;
-    });
-    
-    print('🎤 Training reset completed with voice detection cleanup');
-    _startPreCountdown();
-  }
-
-  void _insertRoundResult(int counts, {bool isFinal = false}) {
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
-    // 清空所有note
-    for (var e in history) {
-      e["note"] = "";
-    }
-    final result = {
-      "date": dateStr,
-      "counts": counts,
-      "note": "current",
-    };
-    history.insert(0, result);
-    // 排序并赋rank
-  history.sort((a, b) => b["counts"].compareTo(a["counts"]));
-  for (int i = 0; i < history.length; i++) {
-    history[i]["rank"] = i + 1;
-    }
-  // 把note为current的移到首位，其余按rank排序
-  final idx = history.indexWhere((e) => e["note"] == "current");
-  if (idx > 0) {
-    final current = history.removeAt(idx);
-    history.insert(0, current);
-    }
   }
 
   void _tick() async {
@@ -1085,16 +1160,13 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       // 当前round结束，记录结果到tmpResult
       _addRoundToTmpResult(counter);
       
-      // setState(() {
-      //   _insertRoundResult(counter, isFinal: currentRound == totalRounds);
-      // });
-      
-      if (currentRound < totalRounds) {
+      final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
+      if (currentRound < viewModel.totalRounds) { // 🎯 修改：使用viewModel.totalRounds
         setState(() {
           currentRound++;
         });
         pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
-        Future.delayed(const Duration(milliseconds: 600), _startPreCountdown);
+        Future.delayed(Duration(milliseconds: 600), _startPreCountdown);
       } else {
         // 所有round结束，立即显示结果，然后异步提交
         await _showImmediateResult();
@@ -1103,56 +1175,18 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     }
   }
 
-  // 立即显示训练结果（排名为null，等待API返回）
+  // 立即显示挑战游戏结果（排名为null，等待API返回）
   Future<void> _showImmediateResult() async {
-    // 找出最大counts的round
-    int maxCounts = 0;
-    for (var round in tmpResult) {
-      if (round["counts"] > maxCounts) {
-        maxCounts = round["counts"];
-      }
-    }
+    final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
     
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final dateStr = "${months[now.month - 1]} ${now.day}, ${now.year}";
+    // 🎯 使用ViewModel中的方法获取最大counts
+    final maxCounts = viewModel.getMaxCountsFromTmpResult(); // 🎯 修改：使用viewModel.getMaxCountsFromTmpResult
     
-    // 清空所有note
-    for (var e in history) {
-      e["note"] = "";
-    }
-    
-    // 立即添加结果到history，rank为null表示正在加载
-    final result = {
-      "rank": null, // 暂时为null，等待API返回
-      "date": dateStr,
-      "counts": maxCounts,
-      "note": "current",
-      "totalRounds": totalRounds,
-      "roundDuration": roundDuration,
-      "id": "temp_${DateTime.now().millisecondsSinceEpoch}", // Temporary ID
-      "challengeId": widget.challengeId,
-    };
-    
-    history.insert(0, result);
-    
-    // 排序并赋rank（除了当前结果）
-    history.sort((a, b) => b["counts"].compareTo(a["counts"]));
-    for (int i = 0; i < history.length; i++) {
-      if (history[i]["rank"] != null) { // 只更新非当前结果的rank
-        history[i]["rank"] = i + 1;
-      }
-    }
-    
-    // 把当前结果移到首位
-    final idx = history.indexWhere((e) => e["note"] == "current");
-    if (idx > 0) {
-      final current = history.removeAt(idx);
-      history.insert(0, current);
-    }
+    // 🎯 关键修改：不提交到后端，而是创建临时记录插入到历史数据的第一位
+    viewModel.createTemporaryCurrentChallengeGameRecord(
+      challengeId: widget.challengeId, // 🎯 修改：使用challengeId
+      maxCounts: maxCounts,
+    );
     
     setState(() {
       showResultOverlay = true;
@@ -1161,310 +1195,163 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     
     // 自动收起榜单
     Future.delayed(Duration(milliseconds: 50), () {
+      if (mounted) {
       final orientation = MediaQuery.of(context).orientation;
       final targetSize = orientation == Orientation.landscape ? 1.0 : 0.12;
       final controller = orientation == Orientation.portrait ? _portraitController : _landscapeController;
       controller?.animateTo(targetSize, duration: Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+      }
     });
   }
 
   // 添加round结果到临时结果列表
   void _addRoundToTmpResult(int counts) {
-    final now = DateTime.now();
+    final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
     
-    final roundResult = {
-      "roundNumber": currentRound,
-      "counts": counts,
-      "timestamp": now.millisecondsSinceEpoch,
-      "roundDuration": roundDuration,
-    };
-    
-    tmpResult.add(roundResult);
-    print('Added round $currentRound result: $counts counts to tmpResult');
+    // 🎯 使用ViewModel中的方法添加round结果
+    viewModel.addRoundToTmpResult(currentRound, counts); // 🎯 修改：使用viewModel.addRoundToTmpResult
   }
 
   // 清理临时结果数据
   void _clearTmpResult() {
-    tmpResult.clear();
-    print('Cleared tmpResult after final submission');
+    final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
+    
+    // 🎯 使用ViewModel中的方法清理临时结果
+    viewModel.clearTmpResult(); // 🎯 修改：使用viewModel.clearTmpResult
   }
 
-  // 获取历史训练数据和视频配置
-  Future<void> _loadTrainingDataAndVideoConfig() async {
-    if (_isLoadingHistory || _isLoadingVideoConfig) return; // 防止重复请求
-    
-    setState(() {
-      _isLoadingHistory = true;
-      _isLoadingVideoConfig = true;
-      _historyError = null;
-      _videoConfigError = null;
-    });
-
-    try {
-      print('🔄 Loading training data and video config for challengeId: ${widget.challengeId}');
-      
-      // 模拟API请求延迟
-      await Future.delayed(Duration(milliseconds: 800));
-      
-      // 模拟API返回的历史数据和视频配置
-      final apiResponse = await _getTrainingDataAndVideoConfigApi();
-      
-      if (mounted) {
-        setState(() {
-          history = apiResponse['history'];
-          _portraitVideoUrl = apiResponse['videoConfig']['portraitUrl'];
-          _landscapeVideoUrl = apiResponse['videoConfig']['landscapeUrl'];
-          _isLoadingHistory = false;
-          _isLoadingVideoConfig = false;
-        });
-        
-        // 根据当前屏幕方向初始化视频
-        await _initializeVideoBasedOnOrientation();
-        
-        print('✅ Training data and video config loaded successfully: ${history.length} records');
-      }
-    } catch (e) {
-      print('❌ Error loading training data and video config: $e');
-      if (mounted) {
-        setState(() {
-          _historyError = e.toString();
-          _videoConfigError = e.toString();
-          _isLoadingHistory = false;
-          _isLoadingVideoConfig = false;
-        });
-        
-        // 使用默认视频配置
-        await _initializeDefaultVideo();
-      }
-    }
-  }
-
-  // 模拟获取历史数据和视频配置的API请求
-  Future<Map<String, dynamic>> _getTrainingDataAndVideoConfigApi() async {
-    // 模拟网络请求
-    await Future.delayed(Duration(milliseconds: 500));
-    
-    // 根据challengeId返回不同的模拟数据
-    final now = DateTime.now();
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    
-    // 模拟历史数据
-    final mockHistoryData = [
-      {
-        "id": "662553355",
-        "rank": 1,
-        "timestamp": now.subtract(Duration(days: 2)).millisecondsSinceEpoch,
-        "counts": 25,
-        "note": "",
-      },
-      {
-        "id": "662553356",
-        "rank": 2,
-        "timestamp": now.subtract(Duration(days: 5)).millisecondsSinceEpoch,
-        "counts": 22,
-        "note": "",
-      },
-      {
-        "id": "662553357",
-        "rank": 3,
-        "timestamp": now.subtract(Duration(days: 8)).millisecondsSinceEpoch,
-        "counts": 19,
-        "note": "",
-      },
-      {
-        "id": "662553358",
-        "rank": 4,
-        "timestamp": now.subtract(Duration(days: 12)).millisecondsSinceEpoch,
-        "counts": 18,
-        "note": "",
-      },
-      {
-        "id": "662553359",
-        "rank": 5,
-        "timestamp": now.subtract(Duration(days: 15)).millisecondsSinceEpoch,
-        "counts": 16,
-        "note": "",
-      },
-    ];
-    
-    // 模拟视频配置数据
-    final mockVideoConfig = {
-      "portraitUrl": "https://example.com/videos/challenge_portrait.mp4", // 远程竖屏视频URL
-      "landscapeUrl": "https://example.com/videos/challenge_landscape.mp4", // 远程横屏视频URL
-    };
-    
-    // 转换为UI显示格式
-    final historyData = mockHistoryData.map((item) {
-      final date = DateTime.fromMillisecondsSinceEpoch(item["timestamp"] as int);
-      final dateStr = "${months[date.month - 1]} ${date.day}, ${date.year}";
-      
-      return {
-        "rank": item["rank"],
-        "date": dateStr,
-        "counts": item["counts"],
-        "note": item["note"],
-        "id": item["id"],
-      };
-    }).toList();
-    
-    // 返回历史数据和视频配置
-    return {
-      "history": historyData,
-      "videoConfig": mockVideoConfig,
-    };
-  }
-
-  // 刷新历史数据
+  // 🎯 苹果级优化：智能刷新历史数据
   Future<void> _refreshHistory() async {
-    if (_isLoadingHistory) return;
-    await _loadTrainingDataAndVideoConfig();
+    final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
+    
+    // 🎯 使用智能加载策略，避免不必要的重复请求
+    await viewModel.smartLoadChallengeGameData(
+      widget.challengeId, // 🎯 修改：使用challengeId
+      limit: 20,
+      forceReload: true, // 🎯 强制刷新时使用完整加载
+    );
   }
 
   // 根据屏幕方向初始化视频
   Future<void> _initializeVideoBasedOnOrientation() async {
     try {
       final orientation = MediaQuery.of(context).orientation;
+      final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
       String? videoUrl;
       
       if (orientation == Orientation.portrait) {
-        videoUrl = _portraitVideoUrl;
+        videoUrl = viewModel.portraitVideoUrl; // 🎯 修改：使用viewModel.portraitVideoUrl
         print('📱 Using portrait video URL: $videoUrl');
       } else {
-        videoUrl = _landscapeVideoUrl;
+        videoUrl = viewModel.landscapeVideoUrl; // 🎯 修改：使用viewModel.landscapeVideoUrl
         print('🖥️ Using landscape video URL: $videoUrl');
       }
       
-      // 如果远程URL可用，尝试使用远程视频
+      // 🎯 先确保默认视频正在播放
+      _setDefaultVideoController();
+      
+      // 🎯 如果远程URL可用，异步尝试加载远程视频
       if (videoUrl != null && videoUrl.isNotEmpty && videoUrl != 'null') {
-        await _initializeRemoteVideo(videoUrl);
+        print('🌐 Starting async remote video loading: $videoUrl');
+        _initializeRemoteVideoAsync(videoUrl);
       } else {
-        // 使用默认本地视频
-        await _initializeDefaultVideo();
+        print('📁 No remote video URL, keeping default video');
       }
     } catch (e) {
       print('❌ Error initializing video based on orientation: $e');
-      await _initializeDefaultVideo();
+      // 出错时确保默认视频播放
+      _setDefaultVideoController();
     }
   }
 
-  // 初始化远程视频
-  Future<void> _initializeRemoteVideo(String videoUrl) async {
+  // 🎯 异步初始化远程视频 - 不阻塞默认视频播放
+  void _initializeRemoteVideoAsync(String videoUrl) async {
+    VideoPlayerController? remoteController;
+    
     try {
-      print('🌐 Initializing remote video: $videoUrl');
-      
-      // 停止当前视频
-      if (_videoController.value.isPlaying) {
-        await _videoController.pause();
-      }
-      
-      // 释放当前控制器
-      await _videoController.dispose();
+      print('🌐 Starting async remote video initialization: $videoUrl');
       
       // 创建新的远程视频控制器
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
+      remoteController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
         ..setLooping(true)
         ..setVolume(0.0);
       
-      // 初始化远程视频
-      await _videoController.initialize();
+      // 异步初始化远程视频
+      await remoteController.initialize();
       
       if (mounted) {
-        setState(() {
-          _videoReady = true;
-        });
-        _videoController.play();
-        print('✅ Remote video initialized successfully');
+        print('✅ Remote video initialized successfully, switching from default video');
+        
+        // 停止默认视频
+        if (_videoController?.value.isPlaying == true) {
+          _videoController!.pause();
+        }
+        
+        // 切换到远程视频
+        _videoController = remoteController;
+        _videoReady = true;
+        
+        // 开始播放远程视频
+        _videoController!.play();
+        
+        setState(() {});
+        print('🎯 Successfully switched to remote video');
+        
+        // 🎯 重要：将 remoteController 设为 null，避免重复释放
+        remoteController = null;
+      } else {
+        // 组件已销毁，释放远程视频控制器
+        _disposeController(remoteController);
       }
     } catch (e) {
       print('❌ Error initializing remote video: $e');
-      // 远程视频失败，回退到默认视频
-      await _initializeDefaultVideo();
+      // 远程视频失败，保持默认视频播放
+      print('🔄 Keeping default video due to remote video failure');
+      
+      // 🎯 确保释放失败的远程视频控制器
+      if (remoteController != null) {
+        _disposeController(remoteController);
+      }
     }
   }
-
-  // 初始化默认本地视频
-  Future<void> _initializeDefaultVideo() async {
+  
+  /// 🎯 安全释放视频控制器
+  void _disposeController(VideoPlayerController? controller) {
+    if (controller == null) return;
+    
     try {
-      print('📁 Initializing default local video');
-      
-      final orientation = MediaQuery.of(context).orientation;
-      String defaultVideoPath;
-      
-      if (orientation == Orientation.portrait) {
-        defaultVideoPath = 'assets/video/video1.mp4'; // 竖屏默认视频
-        print('📱 Using default portrait video: $defaultVideoPath');
-      } else {
-        defaultVideoPath = 'assets/video/video2.mp4'; // 横屏默认视频
-        print('🖥️ Using default landscape video: $defaultVideoPath');
+      if (controller.value.isPlaying) {
+        controller.pause();
       }
-      
-      // 停止当前视频
-      if (_videoController.value.isPlaying) {
-        await _videoController.pause();
-      }
-      
-      // 释放当前控制器
-      await _videoController.dispose();
-      
-      // 创建新的本地视频控制器
-      _videoController = VideoPlayerController.asset(defaultVideoPath)
-        ..setLooping(true)
-        ..setVolume(0.0);
-      
-      // 初始化本地视频
-      await _videoController.initialize();
-      
-      if (mounted) {
-        setState(() {
-          _videoReady = true;
-        });
-        _videoController.play();
-        print('✅ Default local video initialized successfully');
-      }
+      controller.dispose();
+      print('🎯 Video controller disposed successfully');
     } catch (e) {
-      print('❌ Error initializing default video: $e');
-      // 如果连默认视频都失败，尝试使用video1.mp4作为最后的回退
-      try {
-        await _videoController.dispose();
-        _videoController = VideoPlayerController.asset('assets/video/video1.mp4')
-          ..setLooping(true)
-          ..setVolume(0.0);
-        await _videoController.initialize();
-        if (mounted) {
-          setState(() {
-            _videoReady = true;
-          });
-          _videoController.play();
-          print('✅ Fallback video initialized successfully');
-        }
-      } catch (fallbackError) {
-        print('❌ Error initializing fallback video: $fallbackError');
-      }
+      print('❌ Error disposing failed video controller: $e');
     }
   }
 
-  // 屏幕方向改变时重新初始化视频
+  // 🎯 屏幕方向改变时重新初始化视频
   void _onOrientationChanged() {
-    if (_videoReady) {
+    // 🎯 检查当前是否在播放远程视频
+    final isPlayingRemoteVideo = _videoController != _portraitDefaultVideoController && 
+                                 _videoController != _landscapeDefaultVideoController;
+    
+    if (isPlayingRemoteVideo) {
+      print('🎯 Currently playing remote video, not switching to default video');
+      // 🎯 如果正在播放远程视频，只尝试加载对应方向的远程视频
+      if (mounted) {
       _initializeVideoBasedOnOrientation();
     }
+    } else {
+      // 🎯 如果播放的是默认视频，先切换到对应方向的默认视频
+      _setDefaultVideoController();
+      
+      // 🎯 然后异步加载远程视频（如果可用）
+      if (mounted) {
+        _initializeVideoBasedOnOrientation();
+      }
+    }
   }
-
-  // 获取历史训练数据（保持向后兼容）
-  Future<void> _loadTrainingHistory() async {
-    await _loadTrainingDataAndVideoConfig();
-  }
-
-  // 模拟获取历史数据的API请求（保持向后兼容）
-  Future<List<Map<String, dynamic>>> _getTrainingHistoryApi() async {
-    final response = await _getTrainingDataAndVideoConfigApi();
-    return response['history'];
-  }
-
-
 
   // 提交最终结果到后端
   Future<void> _submitFinalResult() async {
@@ -1475,47 +1362,40 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     });
 
     try {
-      // 找出最大counts的round
-      int maxCounts = 0;
-      Map<String, dynamic>? bestRound;
+      final viewModel = context.read<ChallengeGameViewModel>(); // 🎯 修改：使用ChallengeGameViewModel
       
-      for (var round in tmpResult) {
-        if (round["counts"] > maxCounts) {
-          maxCounts = round["counts"];
-          bestRound = round;
-        }
-      }
+      // 🎯 使用ViewModel中的方法获取最大counts
+      final maxCounts = viewModel.getMaxCountsFromTmpResult(); // 🎯 修改：使用viewModel.getMaxCountsFromTmpResult
       
-      // 更新finalResult
-      finalResult["challengeId"] = widget.challengeId;
-      finalResult["totalRounds"] = totalRounds;
-      finalResult["roundDuration"] = roundDuration;
-      finalResult["maxCounts"] = maxCounts;
-      finalResult["timestamp"] = DateTime.now().millisecondsSinceEpoch;
-
+      // 创建挑战游戏结果实体
+      final challengeGameResult = ChallengeGameResult.create( // 🎯 修改：使用ChallengeGameResult.create
+        challengeId: widget.challengeId, // 🎯 修改：使用challengeId
+        maxCounts: maxCounts,
+      );
       
-      print('Submitting final result: $finalResult');
+      print('Submitting challenge game result: $challengeGameResult');
       
-      // 模拟API请求
-      final apiResult = await _submitChallengeResult(finalResult);
+      // 🎯 关键修改：使用返回的提交结果，而不是重新请求历史数据
+      final response = await viewModel.submitChallengeGameResult(challengeGameResult); // 🎯 修改：使用viewModel.submitChallengeGameResult
       
-      if (mounted) {
-        setState(() {
-          // 只更新当前结果的rank
-          final currentIdx = history.indexWhere((e) => e["note"] == "current");
-          if (currentIdx >= 0) {
-            history[currentIdx]["rank"] = apiResult["rank"];
-            history[currentIdx]["id"] = apiResult["id"]; // Update with real ID
-          }
-          
-          _isSubmittingResult = false;
-        });
+      if (mounted && response != null) {
+        // ✅ 提交成功，数据已经在ViewModel中更新，无需重新请求
+        print('✅ Challenge game result submitted successfully with rank: ${response.rank}');
         
         // 清理临时结果数据
         _clearTmpResult();
+        
+        // 🎯 不再需要调用refreshHistory，因为数据已经在ViewModel中更新
+        // await viewModel.refreshHistory(widget.challengeId);
       }
     } catch (e) {
       print('Error submitting result: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit result: $e')),
+        );
+      }
+    } finally {
       if (mounted) {
         setState(() {
           _isSubmittingResult = false;
@@ -1524,27 +1404,23 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     }
   }
 
-  // 模拟API请求
-  Future<Map<String, dynamic>> _submitChallengeResult(Map<String, dynamic> result) async {
-    // 模拟网络延迟
-    await Future.delayed(Duration(milliseconds: 1500));
-    
-    // 模拟进行API请求，返回结果
-    final apiRespondData = {
-      "id": "662553355",
-      "rank": 1, // 这里应该是从后端返回的实际排名
-      "totalRounds": result["totalRounds"],
-      "roundDuration": result["roundDuration"],
-    };
-    
-    return apiRespondData;
-  }
-
   void _onStartPressed() {
+    final viewModel = context.read<ChallengeGameViewModel>();
+    
+    // 🎯 检查剩余挑战次数
+    if (viewModel.allowedTimes <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No attempts left! Check results in Profile > Challenges.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    
     _startPreCountdown();
   }
-
-
 
   void _onCountPressed() {
     if (!isCounting || !mounted) return;
@@ -1652,7 +1528,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                Text('Choose Background', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                Text('Background', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                 SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1708,12 +1584,14 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
         }
         
         Navigator.of(context).pop();
+        if (mounted) {
         setState(() {
           bgType = type;
         });
-        if (type == LayoutBgType.video && _videoReady) {
-          _videoController.play();
+          if (type == LayoutBgType.video && _videoReady && _videoController != null) {
+            _videoController!.play();
           _videoFadeController.forward();
+          }
         }
       },
       child: Column(
@@ -1755,6 +1633,7 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
       ),
     );
   }
+  
   // 背景色 绿色 0xFF00FF7F #00FF7F
   // 绿色 0xFF34C759 #34C759
   // 蓝色 0xFF007AFF  #007AFF
@@ -1785,13 +1664,103 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
+    // 从 ViewModel 获取数据
+    final viewModel = context.watch<ChallengeGameViewModel>();
+
+    // 🎯 优先检查加载状态和错误状态，避免不必要的资源创建
+    if (viewModel.isLoading) {
+      return Scaffold(
+        body: Stack(
+          children: [
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Warming up your challenge game… One more breath.'),
+                ],
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 16,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  splashRadius: 22,
+                  tooltip: 'Back',
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (viewModel.error != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // 错误显示组件
+            Center(
+              child: ElegantErrorDisplay(
+                error: viewModel.error ?? 'An unknown error occurred',
+                onRetry: () {
+                  viewModel.clearError();
+                  _refreshHistory();
+                },
+              ),
+            ),
+            // 返回按钮
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 16,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  splashRadius: 22,
+                  tooltip: 'Back',
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 🎯 只有在没有错误和加载状态时才创建主内容
     final double diameter = MediaQuery.of(context).size.width * 3 / 4;
     final orientation = MediaQuery.of(context).orientation;
     final bool isPortrait = orientation == Orientation.portrait;
     final DraggableScrollableController controller =
         isPortrait ? _portraitController! : _landscapeController!;
 
-    final Widget videoWidget = _videoReady
+    // 🎯 视频组件：优先显示默认视频，避免黑屏
+    final Widget videoWidget = _videoReady && _videoController != null
         ? FadeTransition(
             opacity: _videoFadeController,
             child: Container(
@@ -1800,14 +1769,21 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
               child: FittedBox(
                 fit: BoxFit.cover,
                 child: SizedBox(
-                  width: _videoController.value.size.width,
-                  height: _videoController.value.size.height,
-                  child: VideoPlayer(_videoController),
+                  width: _videoController!.value.size.width,
+                  height: _videoController!.value.size.height,
+                  child: VideoPlayer(_videoController!),
                 ),
               ),
             ),
           )
-        : Container(color: Colors.black);
+        : Container(
+            color: Colors.black,
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: AppColors.primary,
+              ),
+            ),
+          );
 
     final Widget selfieWidget = (_cameraController != null && _cameraController!.value.isInitialized && _cameraPermissionGranted)
         ? LayoutBuilder(
@@ -1882,8 +1858,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
           );
 
     final Widget mainContent = isPortrait
-        ? TrainingPortraitLayout(
-            totalRounds: totalRounds,
+        ? ChallengePortraitLayout(
+            totalRounds: viewModel.totalRounds,
             currentRound: currentRound,
             counter: counter,
             countdown: countdown,
@@ -1902,9 +1878,9 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
             selfieWidget: selfieWidget,
             diameter: diameter,
             formatTime: _formatTime,
-            roundDuration: roundDuration, // 新增
+            roundDuration: viewModel.roundDuration,
             showResultOverlay: showResultOverlay,
-            history: history,
+            history: _convertHistoryToMapList(viewModel.history),
             draggableController: controller,
             buildHistoryRanking: _buildHistoryRanking,
             onResultOverlayTap: () {
@@ -1918,11 +1894,12 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
             onResultBack: () {
               Navigator.pop(context);
             },
-            onResultSetup: _showSetupDialog,
-            isSubmittingResult: _isSubmittingResult, // 新增
+                              onResultSetup: _showSetupDialog,
+            isSubmittingResult: viewModel.isSubmitting,
+            allowedTimes: viewModel.allowedTimes, // 🎯 新增：传递剩余尝试次数
           )
-        : TrainingLandscapeLayout(
-            totalRounds: totalRounds,
+        : ChallengeLandscapeLayout(
+            totalRounds: viewModel.totalRounds,
             currentRound: currentRound,
             counter: counter,
             countdown: countdown,
@@ -1940,9 +1917,9 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
             selfieWidget: selfieWidget,
             diameter: diameter,
             formatTime: _formatTime,
-            roundDuration: roundDuration, // 新增
+            roundDuration: viewModel.roundDuration,
             showResultOverlay: showResultOverlay,
-            history: history,
+            history: _convertHistoryToMapList(viewModel.history),
             draggableController: controller,
             buildHistoryRanking: _buildHistoryRanking,
             onResultOverlayTap: () {
@@ -1957,7 +1934,8 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
               Navigator.pop(context);
             },
             onResultSetup: _showSetupDialog,
-            isSubmittingResult: _isSubmittingResult, // 新增
+            isSubmittingResult: viewModel.isSubmitting,
+            allowedTimes: viewModel.allowedTimes, // 🎯 新增：传递剩余尝试次数
           );
 
     return Scaffold(
@@ -1965,21 +1943,35 @@ class _ChallengeGamePageState extends State<ChallengeGamePage> with TickerProvid
     );
   }
 
+  /// 将领域实体转换为布局组件期望的Map格式
+  List<Map<String, dynamic>> _convertHistoryToMapList(List<ChallengeGameHistoryItem> history) {
+    return history.map((item) => {
+      'rank': item.rank,
+      'date': item.displayDate,
+      'counts': item.counts,
+      'note': item.note ?? '',
+      'additionalData': item,
+    }).toList();
+  }
+
   Widget _buildHistoryRanking(ScrollController scrollController) {
-    // 将原始数据转换为通用组件的数据格式
-    final rankingItems = history.map((e) => HistoryRankingItem(
-      rank: e["rank"],
-      date: e["date"] ?? "",
-      counts: e["counts"] ?? 0,
-      note: e["note"],
-      additionalData: e,
+    final viewModel = context.read<ChallengeGameViewModel>();
+    
+    // 将领域实体转换为挑战游戏专用组件的数据格式
+    final rankingItems = viewModel.history.map((e) => ChallengeHistoryRankingItem(
+      rank: e.rank,
+      date: e.displayDate,
+      counts: e.counts,
+      note: e.note ?? "",
+      name: e.name, // 添加名字字段
+      additionalData: e.toMap(), // 转换为Map格式
     )).toList();
 
-    return HistoryRankingWidget(
+    return ChallengeHistoryRankingWidget(
       history: rankingItems,
       scrollController: scrollController,
-      config: const HistoryRankingConfig(
-        title: 'TOP SCORES',
+      config: const ChallengeHistoryRankingConfig(
+        title: 'CHALLENGE RANKINGS',
         currentItemColor: Colors.redAccent,
       ),
     );
