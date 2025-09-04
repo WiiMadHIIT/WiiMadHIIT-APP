@@ -91,9 +91,6 @@ flutter:
     # Configuration files
     - assets/configs/
     
-    # Font files
-    - assets/fonts/
-    
     # Icon files
     - assets/icons/
     - assets/icons/wiimadhiit-w-red.svg
