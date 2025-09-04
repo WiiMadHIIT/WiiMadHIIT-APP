@@ -56,6 +56,11 @@ class ProfilePageState extends State<ProfilePage> {
   void smartRefreshProfileData() {
     _contentKey.currentState?.smartRefreshProfileData();
   }
+
+  /// 清理分页数据（用于离开Profile tab时）
+  void cleanupPaginatedData() {
+    _contentKey.currentState?.cleanupPaginatedData();
+  }
 }
 
 class ProfilePageContent extends StatefulWidget {
@@ -119,6 +124,20 @@ class ProfilePageContentState extends State<ProfilePageContent>
       }
     } catch (e) {
       print('🔐 ProfilePage: 智能刷新失败: $e');
+    }
+  }
+
+  /// 清理分页数据（用于离开Profile tab时）
+  void cleanupPaginatedData() {
+    try {
+      // 通过 Provider 获取 ViewModel
+      final viewModel = Provider.of<ProfileViewModel>(context, listen: false);
+      
+      // 调用 ViewModel 的清理方法
+      viewModel.cleanupPaginatedData();
+      print('🔐 ProfilePage: 分页数据清理完成');
+    } catch (e) {
+      print('🔐 ProfilePage: 分页数据清理失败: $e');
     }
   }
 
@@ -491,6 +510,8 @@ class ProfilePageContentState extends State<ProfilePageContent>
         ongoingStatusColor: Color(0xFF00C851),
         ongoingBackgroundColor: Color(0xFFF0FFF4),
       ),
+      hasMore: viewModel.hasMoreChallenges,
+      onLoadMore: viewModel.loadMoreChallenges,
     );
   }
 
@@ -613,6 +634,8 @@ class ProfilePageContentState extends State<ProfilePageContent>
           fontWeight: FontWeight.w400,
         ),
       ),
+      hasMore: viewModel.hasMoreCheckins,
+      onLoadMore: viewModel.loadMoreCheckins,
     );
   }
 
@@ -1422,8 +1445,8 @@ class _SmartAvatar extends StatefulWidget {
 }
 
 class _SmartAvatarState extends State<_SmartAvatar> {
-  bool _hasError = false;
   bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -1435,8 +1458,8 @@ class _SmartAvatarState extends State<_SmartAvatar> {
   void didUpdateWidget(_SmartAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.avatarUrl != widget.avatarUrl) {
-      _hasError = false;
       _isLoading = true;
+      _hasError = false;
       _loadAvatar();
     }
   }
@@ -1450,36 +1473,69 @@ class _SmartAvatarState extends State<_SmartAvatar> {
       return;
     }
 
-    // 预加载网络图片
-    NetworkImage(widget.avatarUrl)
-        .resolve(ImageConfiguration.empty)
-        .addListener(
-          ImageStreamListener(
-            (info, _) {
-              if (mounted) {
-                setState(() {
-                  _isLoading = false;
-                  _hasError = false;
-                });
-              }
-            },
-            onError: (exception, stackTrace) {
-              if (mounted) {
-                setState(() {
-                  _isLoading = false;
-                  _hasError = true;
-                });
-                print('Failed to load avatar: $exception');
-              }
-            },
-          ),
-        );
+    // 检查URL类型并处理
+    String processedUrl = _processAvatarUrl(widget.avatarUrl);
+    
+    if (processedUrl.startsWith('http')) {
+      // 预加载网络图片，处理成功和失败情况
+      NetworkImage(processedUrl)
+          .resolve(ImageConfiguration.empty)
+          .addListener(
+            ImageStreamListener(
+              (info, _) {
+                if (mounted) {
+                  setState(() {
+                    _isLoading = false;
+                    _hasError = false;
+                  });
+                }
+              },
+              onError: (exception, stackTrace) {
+                if (mounted) {
+                  setState(() {
+                    _isLoading = false;
+                    _hasError = true;
+                  });
+                  print('🔐 _SmartAvatar: 网络图片加载失败: $exception');
+                }
+              },
+            ),
+          );
+    } else {
+      // 本地资源，直接设置为加载完成
+      setState(() {
+        _isLoading = false;
+        _hasError = false;
+      });
+    }
+  }
+
+  /// 处理头像URL，确保http转换为https，非http URL使用默认头像
+  String _processAvatarUrl(String url) {
+    if (url.isEmpty) {
+      return widget.fallbackImage;
+    }
+    
+    // 如果是http开头，转换为https
+    if (url.startsWith('http://')) {
+      return url.replaceFirst('http://', 'https://');
+    }
+    
+    // 如果已经是https开头，直接返回
+    if (url.startsWith('https://')) {
+      return url;
+    }
+    
+    // 如果不是http/https开头，使用默认头像
+    return widget.fallbackImage;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.avatarUrl.isEmpty || _hasError) {
-      // 使用默认头像
+    String processedUrl = _processAvatarUrl(widget.avatarUrl);
+    
+    // 如果URL为空、不是HTTP URL、或者加载失败，使用默认头像
+    if (widget.avatarUrl.isEmpty || !processedUrl.startsWith('http') || _hasError) {
       return CircleAvatar(
         radius: widget.radius,
         backgroundColor: Colors.white,
@@ -1503,7 +1559,7 @@ class _SmartAvatarState extends State<_SmartAvatar> {
     return CircleAvatar(
       radius: widget.radius,
       backgroundColor: Colors.white,
-      backgroundImage: NetworkImage(widget.avatarUrl),
+      backgroundImage: NetworkImage(processedUrl),
     );
   }
 }

@@ -6,8 +6,8 @@ class GetProfileUseCase {
 
   GetProfileUseCase(this.repository);
 
-  Future<Profile> execute() {
-    return repository.getProfile();
+  Future<Profile> execute({Profile? existingProfile}) {
+    return repository.getProfile(existingProfile: existingProfile);
   }
 
   // 新增：获取激活分页

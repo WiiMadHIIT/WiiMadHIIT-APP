@@ -64,31 +64,77 @@ class _BonusActivityDetailSheetState extends State<BonusActivityDetailSheet> {
     }
   }
 
-  /// 🎯 在浏览器中打开活动链接
+  /// 🎯 智能打开活动链接（支持多种格式）
   Future<void> _openActivityUrl() async {
-    if (widget.activity.activityUrl?.isNotEmpty == true) {
-      final Uri url = Uri.parse(widget.activity.activityUrl!);
+    if (widget.activity.activityUrl?.isNotEmpty != true) return;
+    
+    final String urlString = widget.activity.activityUrl!;
+    
+    try {
+      // 智能判断链接格式
+      Uri url;
+      if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
+        // 标准HTTP/HTTPS链接
+        url = Uri.parse(urlString);
+      } else if (urlString.startsWith('www.')) {
+        // 以www开头的链接，自动添加https://
+        url = Uri.parse('https://$urlString');
+      } else if (urlString.contains('.') && !urlString.contains(' ')) {
+        // 看起来像域名的链接，自动添加https://
+        url = Uri.parse('https://$urlString');
+      } else {
+        // 其他格式，尝试直接解析
+        url = Uri.parse(urlString);
+      }
+      
+      // 验证URL是否有效
+      if (url.scheme.isEmpty || (!url.scheme.startsWith('http'))) {
+        throw Exception('Invalid URL format');
+      }
+      
+      // 尝试打开链接
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
+        
+        // 🎯 苹果风格：静默成功，不显示提示
+        print('✅ 活动链接已打开: ${url.toString()}');
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Text('Cannot open link'),
-                ],
-              ),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
-        }
+        throw Exception('Cannot launch URL');
       }
+    } catch (e) {
+      if (mounted) {
+        // 🎯 苹果风格：优雅的错误提示
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.link_off, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Unable to open link',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.withOpacity(0.9),
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            action: SnackBarAction(
+              label: 'Copy',
+              textColor: Colors.white,
+              onPressed: () => _copyActivityUrl(),
+            ),
+          ),
+        );
+      }
+      print('❌ 无法打开活动链接: $e');
     }
   }
 
@@ -96,6 +142,44 @@ class _BonusActivityDetailSheetState extends State<BonusActivityDetailSheet> {
     if (timestamp == null) return '';
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  /// 🎯 格式化URL用于显示（苹果风格：简洁优雅）
+  String _formatUrlForDisplay(String url) {
+    if (url.isEmpty) return '';
+    
+    try {
+      // 移除协议前缀，让显示更简洁
+      String displayUrl = url;
+      if (displayUrl.startsWith('https://')) {
+        displayUrl = displayUrl.substring(8);
+      } else if (displayUrl.startsWith('http://')) {
+        displayUrl = displayUrl.substring(7);
+      }
+      
+      // 如果URL太长，截取主要部分
+      if (displayUrl.length > 35) {
+        final uri = Uri.tryParse('https://$displayUrl');
+        if (uri != null && uri.host.isNotEmpty) {
+          // 显示域名 + 路径的前几个字符
+          final host = uri.host;
+          final path = uri.path;
+          if (path.length > 1) {
+            final shortPath = path.length > 15 ? '${path.substring(0, 15)}...' : path;
+            return '$host$shortPath';
+          }
+          return host;
+        }
+        
+        // 如果解析失败，简单截取
+        return '${displayUrl.substring(0, 32)}...';
+      }
+      
+      return displayUrl;
+    } catch (e) {
+      // 如果格式化失败，返回原URL的截取版本
+      return url.length > 35 ? '${url.substring(0, 32)}...' : url;
+    }
   }
 
   @override
@@ -354,8 +438,11 @@ class _BonusActivityDetailSheetState extends State<BonusActivityDetailSheet> {
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
+                        // 先关闭弹窗
                         Navigator.of(context).pop();
+                        // 然后打开活动链接
+                        await _openActivityUrl();
                       },
                       icon: const Icon(Icons.rocket_launch, size: 18),
                       label: const Text('Join Activity'),
@@ -605,12 +692,14 @@ class _BonusActivityDetailSheetState extends State<BonusActivityDetailSheet> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      content,
+                      _formatUrlForDisplay(content),
                       style: AppTextStyles.bodyMedium.copyWith(
                         color: Colors.black87,
                         fontFamily: 'monospace',
                         fontSize: 13,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -663,15 +752,22 @@ class _BonusActivityDetailSheetState extends State<BonusActivityDetailSheet> {
                 child: GestureDetector(
                   onTap: onOpen,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(10),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.blue.shade600,
+                          Colors.blue.shade500,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.blue.withOpacity(0.3),
+                          color: Colors.blue.withOpacity(0.25),
                           blurRadius: 8,
-                          offset: const Offset(0, 2),
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
@@ -679,16 +775,17 @@ class _BonusActivityDetailSheetState extends State<BonusActivityDetailSheet> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.open_in_new,
+                          Icons.launch_rounded,
                           color: Colors.white,
                           size: 18,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         Text(
                           'Open',
                           style: AppTextStyles.labelSmall.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ],

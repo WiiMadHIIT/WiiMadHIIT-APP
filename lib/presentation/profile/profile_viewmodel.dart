@@ -40,17 +40,19 @@ class ProfileViewModel extends ChangeNotifier {
   int activateCurrentPage = 1;
   int activatePageSize = 10;
 
-  // 新增：打卡分页加载状态
+  // 新增：打卡加载状态
   bool isLoadingCheckins = false;
   int checkinTotal = 0;
   int checkinCurrentPage = 1;
   int checkinPageSize = 10;
+  bool hasMoreCheckins = true;
 
-  // 新增：挑战分页加载状态
+  // 新增：挑战加载状态
   bool isLoadingChallenges = false;
   int challengeTotal = 0;
   int challengeCurrentPage = 1;
   int challengePageSize = 10;
+  bool hasMoreChallenges = true;
 
   ProfileViewModel({
     required this.getProfileUseCase,
@@ -74,7 +76,7 @@ class ProfileViewModel extends ChangeNotifier {
 
     try {
       print('🔍 ProfileViewModel: 调用UseCase执行数据加载');
-      profile = await getProfileUseCase.execute();
+      profile = await getProfileUseCase.execute(existingProfile: profile);
       error = null; // 确保成功时清除错误
       print('🔍 ProfileViewModel: Profile数据加载成功');
     } catch (e) {
@@ -140,7 +142,7 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  // 新增：仅加载打卡分页数据，并合并进现有 Profile
+  // 新增：加载打卡数据（支持下滑加载）
   Future<bool> loadCheckins({int page = 1, int size = 10}) async {
     if (isLoadingCheckins) return false;
     
@@ -159,13 +161,33 @@ class ProfileViewModel extends ChangeNotifier {
       checkinCurrentPage = pageResult.currentPage;
       checkinPageSize = pageResult.pageSize;
 
-      // 合并数据到现有 Profile
-      profile = profileService.mergeCheckinsIntoProfile(profile!, pageResult);
+      if (page == 1) {
+        // 第一页：替换数据
+        profile = profileService.mergeCheckinsIntoProfile(profile!, pageResult);
+      } else {
+        // 后续页：追加数据
+        final existingRecords = profile!.checkinRecords;
+        final combinedRecords = [...existingRecords, ...pageResult.checkinRecords];
+        
+        // 创建新的分页结果，包含合并的记录
+        final combinedPageResult = CheckinPage(
+          checkinRecords: combinedRecords,
+          total: pageResult.total,
+          currentPage: pageResult.currentPage,
+          pageSize: pageResult.pageSize,
+        );
+        
+        profile = profileService.mergeCheckinsIntoProfile(profile!, combinedPageResult);
+      }
+
+      // 检查是否还有更多数据
+      hasMoreCheckins = checkinRecords.length < checkinTotal;
 
       isLoadingCheckins = false;
       notifyListeners();
 
       print('🔍 ProfileViewModel: 打卡数据加载成功，共 ${pageResult.checkinRecords.length} 条记录');
+      print('🔍 ProfileViewModel: 总记录数: $checkinTotal, 当前记录数: ${checkinRecords.length}, 还有更多: $hasMoreCheckins');
       return true;
     } catch (e) {
       error = e.toString();
@@ -176,7 +198,15 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  // 新增：仅加载挑战分页数据，并合并进现有 Profile
+  // 新增：加载更多打卡数据
+  Future<bool> loadMoreCheckins() async {
+    if (isLoadingCheckins || !hasMoreCheckins) return false;
+    final nextPage = checkinCurrentPage + 1;
+    print('🔍 ProfileViewModel: 加载更多打卡数据，页码: $nextPage');
+    return await loadCheckins(page: nextPage, size: checkinPageSize);
+  }
+
+  // 新增：加载挑战数据（支持下滑加载）
   Future<bool> loadChallenges({int page = 1, int size = 10}) async {
     if (isLoadingChallenges) return false;
     
@@ -195,13 +225,33 @@ class ProfileViewModel extends ChangeNotifier {
       challengeCurrentPage = pageResult.currentPage;
       challengePageSize = pageResult.pageSize;
 
-      // 合并数据到现有 Profile
-      profile = profileService.mergeChallengesIntoProfile(profile!, pageResult);
+      if (page == 1) {
+        // 第一页：替换数据
+        profile = profileService.mergeChallengesIntoProfile(profile!, pageResult);
+      } else {
+        // 后续页：追加数据
+        final existingRecords = profile!.challengeRecords;
+        final combinedRecords = [...existingRecords, ...pageResult.challengeRecords];
+        
+        // 创建新的分页结果，包含合并的记录
+        final combinedPageResult = ChallengePage(
+          challengeRecords: combinedRecords,
+          total: pageResult.total,
+          currentPage: pageResult.currentPage,
+          pageSize: pageResult.pageSize,
+        );
+        
+        profile = profileService.mergeChallengesIntoProfile(profile!, combinedPageResult);
+      }
+
+      // 检查是否还有更多数据
+      hasMoreChallenges = challengeRecords.length < challengeTotal;
 
       isLoadingChallenges = false;
       notifyListeners();
 
       print('🔍 ProfileViewModel: 挑战数据加载成功，共 ${pageResult.challengeRecords.length} 条记录');
+      print('🔍 ProfileViewModel: 总记录数: $challengeTotal, 当前记录数: ${challengeRecords.length}, 还有更多: $hasMoreChallenges');
       return true;
     } catch (e) {
       error = e.toString();
@@ -212,6 +262,16 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
+  // 新增：加载更多挑战数据
+  Future<bool> loadMoreChallenges() async {
+    if (isLoadingChallenges || !hasMoreChallenges) return false;
+    
+    final nextPage = challengeCurrentPage + 1;
+    print('🔍 ProfileViewModel: 加载更多挑战数据，页码: $nextPage');
+    
+    return await loadChallenges(page: nextPage, size: challengePageSize);
+  }
+
   Future<void> refreshProfile() async {
     print('🔍 ProfileViewModel: 开始刷新Profile数据');
     
@@ -219,8 +279,23 @@ class ProfileViewModel extends ChangeNotifier {
     isLoading = false;
     error = null;
     
-    // 重新加载数据
+    // 重新加载基础Profile数据
     await loadProfile();
+    
+    // 如果Profile加载成功，同时刷新打卡和挑战数据
+    if (profile != null) {
+      print('🔍 ProfileViewModel: Profile数据加载成功，开始刷新打卡和挑战数据');
+      
+      // 并行刷新打卡和挑战数据（第一页）
+      await Future.wait([
+        loadCheckins(page: 1, size: checkinPageSize),
+        loadChallenges(page: 1, size: challengePageSize),
+      ]);
+      
+      print('🔍 ProfileViewModel: 打卡和挑战数据刷新完成');
+    } else {
+      print('🔍 ProfileViewModel: Profile数据加载失败，跳过打卡和挑战数据刷新');
+    }
   }
 
   // 计算属性
@@ -657,6 +732,46 @@ class ProfileViewModel extends ChangeNotifier {
   void clearAccountDeletionState() {
     accountDeletionError = null;
     accountDeletionSuccessMessage = null;
+    notifyListeners();
+  }
+
+  /// 清理分页数据（用于离开Profile tab时）
+  void cleanupPaginatedData() {
+    print('🔍 ProfileViewModel: 开始清理分页数据');
+    
+    if (profile == null) {
+      print('🔍 ProfileViewModel: Profile为空，无需清理分页数据');
+      return;
+    }
+    
+    // 清理打卡数据：保留第一页，清理后续页
+    if (checkinRecords.length > checkinPageSize) {
+      final firstPageRecords = checkinRecords.take(checkinPageSize).toList();
+      profile = profile!.copyWith(checkinRecords: firstPageRecords);
+      print('🔍 ProfileViewModel: 打卡数据已清理，保留 ${firstPageRecords.length} 条记录');
+    }
+    
+    // 清理挑战数据：保留第一页，清理后续页
+    if (challengeRecords.length > challengePageSize) {
+      final firstPageRecords = challengeRecords.take(challengePageSize).toList();
+      profile = profile!.copyWith(challengeRecords: firstPageRecords);
+      print('🔍 ProfileViewModel: 挑战数据已清理，保留 ${firstPageRecords.length} 条记录');
+    }
+    
+    // 重置分页状态到第一页
+    checkinCurrentPage = 1;
+    challengeCurrentPage = 1;
+    hasMoreCheckins = checkinRecords.length < checkinTotal;
+    hasMoreChallenges = challengeRecords.length < challengeTotal;
+    
+    // 重置加载状态
+    isLoadingCheckins = false;
+    isLoadingChallenges = false;
+    
+    print('🔍 ProfileViewModel: 分页数据清理完成');
+    print('🔍 ProfileViewModel: 打卡记录数: ${checkinRecords.length}, 挑战记录数: ${challengeRecords.length}');
+    
+    // 通知监听器更新UI
     notifyListeners();
   }
 

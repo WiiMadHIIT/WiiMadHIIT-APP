@@ -1708,7 +1708,7 @@ class _LoginPageContentState extends State<_LoginPageContent> with TickerProvide
   }
 
   Future<void> _launchOfficialWebsite() async {
-    final Uri url = Uri.parse('https://www.wiimadhiit.com/');
+    final Uri url = Uri.parse('https://www.wiimadhiit.com/?utm_source=WiiMadHIIT_APP_login&utm_medium=app_official_link&utm_campaign=WiiMadHIIT_APP');
     try {
       final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {
@@ -1724,7 +1724,7 @@ class _LoginPageContentState extends State<_LoginPageContent> with TickerProvide
   }
 
   Future<void> _launchShopPage() async {
-    final Uri url = Uri.parse('https://www.wiimadhiit.com/equipment');
+    final Uri url = Uri.parse('https://www.wiimadhiit.com/equipment/?utm_source=WiiMadHIIT_APP_login&utm_medium=app_shop_link&utm_campaign=WiiMadHIIT_APP');
     try {
       final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {

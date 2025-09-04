@@ -2,17 +2,11 @@ class ProfileApiModel {
   final UserApiModel user;
   final UserStatsApiModel stats;
   final List<HonorApiModel> honors;
-  final List<ChallengeRecordApiModel> challengeRecords;
-  final List<CheckinRecordApiModel> checkinRecords;
-  final List<ActivateApiModel> activate;
 
   ProfileApiModel({
     required this.user,
     required this.stats,
     required this.honors,
-    required this.challengeRecords,
-    required this.checkinRecords,
-    required this.activate,
   });
 
   factory ProfileApiModel.fromJson(Map<String, dynamic> json) {
@@ -22,15 +16,6 @@ class ProfileApiModel {
       honors: (json['honors'] as List<dynamic>)
           .map((e) => HonorApiModel.fromJson(e as Map<String, dynamic>))
           .toList(),
-      challengeRecords: (json['challengeRecords'] as List<dynamic>)
-          .map((e) => ChallengeRecordApiModel.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      checkinRecords: (json['checkinRecords'] as List<dynamic>)
-          .map((e) => CheckinRecordApiModel.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      activate: (json['activate'] as List<dynamic>)
-          .map((e) => ActivateApiModel.fromJson(e as Map<String, dynamic>))
-          .toList(),
     );
   }
 
@@ -38,9 +23,6 @@ class ProfileApiModel {
     'user': user.toJson(),
     'stats': stats.toJson(),
     'honors': honors.map((e) => e.toJson()).toList(),
-    'challengeRecords': challengeRecords.map((e) => e.toJson()).toList(),
-    'checkinRecords': checkinRecords.map((e) => e.toJson()).toList(),
-    'activate': activate.map((e) => e.toJson()).toList(),
   };
 }
 

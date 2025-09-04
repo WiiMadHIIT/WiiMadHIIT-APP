@@ -71,7 +71,7 @@ class _CodeReminderSheetState extends State<CodeReminderSheet>
   }
 
   Future<void> _launchShopPage() async {
-    final Uri url = Uri.parse('https://www.wiimadhiit.com/equipment');
+    final Uri url = Uri.parse('https://www.wiimadhiit.com/equipment/?utm_source=WiiMadHIIT_APP_profile&utm_medium=app_shop_link&utm_campaign=WiiMadHIIT_APP');
     try {
       final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {

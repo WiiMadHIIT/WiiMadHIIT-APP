@@ -526,7 +526,7 @@ class _ActivateProductSheetState extends State<ActivateProductSheet>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                                                       Text(
+                  Text(
                     'Activation Code',
                     style: AppTextStyles.labelLarge.copyWith(
                       fontWeight: FontWeight.w600,

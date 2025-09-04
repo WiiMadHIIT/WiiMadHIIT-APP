@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../core/theme/app_text_styles.dart';
 import '../core/theme/app_colors.dart';
 import 'dart:async'; // Added for Timer
@@ -151,6 +152,12 @@ class ChallengeRecordListWidget extends StatefulWidget {
   
   /// 加载状态组件
   final Widget? loadingWidget;
+  
+  /// 是否还有更多数据
+  final bool hasMore;
+  
+  /// 加载更多回调
+  final VoidCallback? onLoadMore;
 
   const ChallengeRecordListWidget({
     Key? key,
@@ -163,6 +170,8 @@ class ChallengeRecordListWidget extends StatefulWidget {
     this.emptyWidget,
     this.isLoading = false,
     this.loadingWidget,
+    this.hasMore = false,
+    this.onLoadMore,
   }) : super(key: key);
 
   @override
@@ -171,16 +180,32 @@ class ChallengeRecordListWidget extends StatefulWidget {
 
 class _ChallengeRecordListWidgetState extends State<ChallengeRecordListWidget> {
   Timer? _timer;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     // 启动定时器，每秒更新一次倒计时
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _safeUpdateState();
+    });
+  }
+
+  /// 安全地更新状态，避免在布局过程中调用setState
+  void _safeUpdateState() {
+    if (!mounted) return;
+    
+    // 使用SchedulerBinding来确保在下一帧更新，避免在布局过程中调用setState
+    SchedulerBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        setState(() {
-          // 触发重建以更新倒计时显示
-        });
+        try {
+          setState(() {
+            // 触发重建以更新倒计时显示
+          });
+        } catch (e) {
+          // 忽略setState错误，避免应用崩溃
+          debugPrint('setState error in challenge_record_list_widget: $e');
+        }
       }
     });
   }
@@ -188,14 +213,24 @@ class _ChallengeRecordListWidgetState extends State<ChallengeRecordListWidget> {
   @override
   void dispose() {
     _timer?.cancel();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  void _handleLoadMore() {
+    if (widget.onLoadMore != null && widget.hasMore && !widget.isLoading) {
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+        widget.onLoadMore!();
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final style = widget.style ?? const ChallengeRecordListStyle();
     
-    if (widget.isLoading) {
+    if (widget.isLoading && widget.records.isEmpty) {
       return widget.loadingWidget ?? _buildLoadingWidget();
     }
     
@@ -206,8 +241,13 @@ class _ChallengeRecordListWidgetState extends State<ChallengeRecordListWidget> {
     return ListView.builder(
       key: const PageStorageKey('challengeList'),
       padding: widget.padding,
-      itemCount: widget.records.length,
+      itemCount: widget.records.length + (widget.hasMore ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index == widget.records.length) {
+          // Load More 按钮
+          return _buildLoadMoreButton();
+        }
+        
         final record = widget.records[index];
         return _buildRecordItem(record, style);
       },
@@ -216,12 +256,15 @@ class _ChallengeRecordListWidgetState extends State<ChallengeRecordListWidget> {
 
   /// 构建单个记录项
   Widget _buildRecordItem(ChallengeRecord record, ChallengeRecordListStyle style) {
-    if (record.status == 'ongoing') {
-      return _buildOngoingCard(record, style);
-    } else if (record.status == 'ready') {
-      return _buildReadyCard(record, style);
-    } else {
-      return _buildEndedCard(record, style);
+    switch (record.status) {
+      case 'ongoing':
+        return _buildOngoingCard(record, style);
+      case 'ready':
+        return _buildReadyCard(record, style);
+      case 'ended':
+        return _buildEndedCard(record, style);
+      default:
+        return _buildEndedCard(record, style);
     }
   }
 
@@ -763,6 +806,26 @@ class _ChallengeRecordListWidgetState extends State<ChallengeRecordListWidget> {
     );
   }
 
+  /// 构建加载更多按钮
+  Widget _buildLoadMoreButton() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      child: ElevatedButton(
+        onPressed: _handleLoadMore,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 2,
+        ),
+        child: const Text('Load More'),
+      ),
+    );
+  }
+
   /// 构建加载状态组件
   Widget _buildLoadingWidget() {
     return const Center(
@@ -909,6 +972,7 @@ class _ChallengeRecordListWidgetState extends State<ChallengeRecordListWidget> {
       return 'Tap to join!'; // 正常提示
     }
   }
+
 }
 
 /// 挑战记录列表样式配置
@@ -984,11 +1048,9 @@ class ChallengeRecordListStyle {
   }
 }
 
-/// 便捷创建挑战记录列表的扩展方法
+/// 扩展方法：将Map列表转换为ChallengeRecord列表
 extension ChallengeRecordListExtension on List<Map<String, dynamic>> {
-  /// 转换为 ChallengeRecord 列表
   List<ChallengeRecord> toChallengeRecords({void Function(Map<String, dynamic>)? onTap}) {
     return map((map) => ChallengeRecord.fromMap(map, onTap: onTap)).toList();
   }
 }
-

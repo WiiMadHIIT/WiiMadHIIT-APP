@@ -94,7 +94,7 @@
 
 ## 📊 建议的 API 数据结构
 
-### 获取用户资料接口
+### 获取用户资料接口（基础信息，不含列表）
 **接口地址**: `GET /api/profile/list`
 
 ```json
@@ -127,111 +127,6 @@
         "label": "Best Streak",
         "description": "60-Day Check-in Streak",
         "timestep": 1700006400000  // 2023-11-15 获得时间
-      }
-    ],
-    "challengeRecords": [
-      {
-        "id": "challenge_001",
-        "challengeId": "challenge_001",
-        "index": 1,
-        "name": "HIIT 7-Day Challenge",
-        "status": "ended",
-        "timestep": 1709251200000,  // 3天前
-        "rank": "2nd"
-      },
-      {
-        "id": "challenge_002",
-        "challengeId": "challenge_002",
-        "index": 2,
-        "name": "Yoga Masters Cup",
-        "status": "ended",
-        "timestep": 1708665600000,  // 7天前
-        "rank": "1st"
-      },
-       {
-            "id": "challenge_003",
-            "challengeId": "challenge_003",
-            "index": 3,
-            "name": "Summer Fitness Sprint",
-            "status": "ongoing",
-            "timestep": 1709344800000,  // 现在（进行中）
-            "rank": "N/A"
-          },
-          {
-            "id": "challenge_004",
-            "challengeId": "challenge_004",
-            "index": 4,
-            "name": "Winter Strength Challenge",
-            "status": "ready",
-            "timestep": 1709431200000,  // 明天（准备就绪）
-            "rank": "N/A"
-          },
-          {
-            "id": "challenge_005",
-            "challengeId": "challenge_005",
-            "index": 5,
-            "name": "Cardio Endurance Test",
-            "status": "ready",
-            "timestep": 1709364000000,  // 6小时后（准备就绪）
-            "rank": "N/A"
-          }
-    ],
-    "checkinRecords": [
-      {
-        "id": "checkin_001",
-        "productId": "product_001",
-        "index": 1,
-        "name": "HIIT Pro",
-        "status": "ended",
-        "timestep": 1709344800000,  // 2小时前
-        "rank": "2nd"
-      },
-      {
-        "id": "checkin_002",
-        "productId": "product_002",
-        "index": 2,
-        "name": "Yoga Flex",
-        "status": "ended",
-        "timestep": 1709337600000,  // 4小时前
-        "rank": "2nd"
-      },
-                {
-            "id": "checkin_003",
-            "productId": "product_003",
-            "index": 3,
-            "name": "Cardio Blast",
-            "status": "ongoing",
-            "timestep": 1709352000000,  // 2小时后（进行中）
-            "rank": "N/A"
-          },
-          {
-            "id": "checkin_004",
-            "productId": "product_004",
-            "index": 4,
-            "name": "Strength Training",
-            "status": "ready",
-            "timestep": 1709364000000,  // 6小时后（准备就绪）
-            "rank": "N/A"
-          }
-    ],
-    "activate": [
-      {
-        "challengeId": "challenge_001",
-        "challengeName": "HIIT 7-Day Challenge",
-        "productId": "product_001",
-        "productName": "HIIT Pro Training Kit"
-      },
-      {
-        "challengeId": "challenge_002", 
-        "challengeName": "Yoga Masters Cup",
-        "productId": "product_002",
-        "productName": "Premium Yoga Mat Set"
-      },
-      {
-        "challengeId": "challenge_003",
-        "challengeName": "Summer Fitness Sprint",
-        "productId": "product_003",
-        "productName": "Fitness Tracker Pro"
       }
     ]
   }
@@ -687,11 +582,11 @@ class ProfileService {
 - 保持代码结构简洁，便于维护和扩展
 - 符合 DRY（Don't Repeat Yourself）原则，避免重复代码
 
-### 获取激活关联分页接口（新增）
+### 获取激活关联分页接口（独立）
 
-为便于前端单独获取 Profile 中的 "activate" 列表，新增独立分页接口，数据结构参考 `ActivateGeneralPageDto`（不包含 `equipmentIds` 字段）。
+为便于前端单独获取 Profile 中的 "activate" 列表，提供独立分页接口，数据结构参考 `ActivateGeneralPageDto`（不包含 `equipmentIds` 字段）。
 
-- 接口地址: `GET /api/activate/list`
+- 接口地址: `GET /api/profile/activate/list`
 - 请求参数:
   - `page` 整数，页码（从1开始，默认1）
   - `size` 整数，每页大小（默认10）
@@ -736,11 +631,11 @@ class ProfileService {
 - 备注:
   - 该接口仅返回分页所需信息，不包含 `equipmentIds` 聚合字段；若需要批量设备详情，可调用设备服务的批量查询接口（如 `/equipment/map-by-ids`）。
 
-### 获取打卡记录分页接口（新增）
+### 获取打卡记录分页接口（独立）
 
-为便于前端单独获取 Profile 中的 "checkinRecords" 列表，新增独立分页接口，数据结构参考 `GET /api/profile/list` 中的 `checkinRecords`（仅分页所需字段）。
+为便于前端单独获取 Profile 中的 "checkinRecords" 列表，提供独立分页接口，数据结构与 Profile 主接口解耦（仅分页所需字段）。
 
-- 接口地址: `GET /api/checkin/list`
+- 接口地址: `GET /api/profile/checkin/list`
 - 请求参数:
   - `page` 整数，页码（从1开始，默认1）
   - `size` 整数，每页大小（默认10）
@@ -795,11 +690,11 @@ class ProfileService {
   - 该接口仅返回分页所需的打卡记录列表与分页元数据；
   - 如需批量补充产品详情（如缩略图、描述），建议调用设备服务的批量查询接口进行聚合。
 
-### 获取挑战记录分页接口（新增）
+### 获取挑战记录分页接口（独立）
 
-为便于前端单独获取 Profile 中的 "challengeRecords" 列表，新增独立分页接口，数据结构参考 `GET /api/profile/list` 中的 `challengeRecords`（仅分页所需字段）。
+为便于前端单独获取 Profile 中的 "challengeRecords" 列表，提供独立分页接口，数据结构与 Profile 主接口解耦（仅分页所需字段）。
 
-- 接口地址: `GET /api/challenge/list`
+- 接口地址: `GET /api/profile/challenge/list`
 - 请求参数:
   - `page` 整数，页码（从1开始，默认1）
   - `size` 整数，每页大小（默认10）

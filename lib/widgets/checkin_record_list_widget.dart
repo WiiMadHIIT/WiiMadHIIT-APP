@@ -151,6 +151,12 @@ class CheckinRecordListWidget extends StatefulWidget {
   
   /// 加载状态组件
   final Widget? loadingWidget;
+  
+  /// 是否还有更多数据
+  final bool hasMore;
+  
+  /// 加载更多回调
+  final VoidCallback? onLoadMore;
 
   const CheckinRecordListWidget({
     Key? key,
@@ -163,6 +169,8 @@ class CheckinRecordListWidget extends StatefulWidget {
     this.emptyWidget,
     this.isLoading = false,
     this.loadingWidget,
+    this.hasMore = false,
+    this.onLoadMore,
   }) : super(key: key);
 
   @override
@@ -171,6 +179,7 @@ class CheckinRecordListWidget extends StatefulWidget {
 
 class _CheckinRecordListWidgetState extends State<CheckinRecordListWidget> {
   Timer? _timer;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -188,14 +197,25 @@ class _CheckinRecordListWidgetState extends State<CheckinRecordListWidget> {
   @override
   void dispose() {
     _timer?.cancel();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  /// 防抖动的加载更多方法
+  void _loadMoreWithDebounce() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (widget.onLoadMore != null && widget.hasMore && !widget.isLoading) {
+        widget.onLoadMore!();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final style = widget.style ?? const CheckinRecordListStyle();
     
-    if (widget.isLoading) {
+    if (widget.isLoading && widget.records.isEmpty) {
       return widget.loadingWidget ?? _buildLoadingWidget();
     }
     
@@ -206,8 +226,13 @@ class _CheckinRecordListWidgetState extends State<CheckinRecordListWidget> {
     return ListView.builder(
       key: const PageStorageKey('checkinList'),
       padding: widget.padding,
-      itemCount: widget.records.length,
+      itemCount: widget.records.length + (widget.hasMore ? 1 : 0),
       itemBuilder: (context, index) {
+        // 如果是最后一项且还有更多数据，显示加载更多按钮
+        if (index == widget.records.length && widget.hasMore) {
+          return _buildLoadMoreButton();
+        }
+        
         final record = widget.records[index];
         return _buildRecordItem(record, style);
       },
@@ -751,6 +776,49 @@ class _CheckinRecordListWidgetState extends State<CheckinRecordListWidget> {
     );
   }
 
+  /// 构建加载更多按钮
+  Widget _buildLoadMoreButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      child: Center(
+        child: widget.isLoading 
+          ? Column(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Loading more records... 📊',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            )
+          : ElevatedButton(
+              onPressed: _loadMoreWithDebounce,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Load More'),
+            ),
+      ),
+    );
+  }
+
   /// 构建加载状态组件
   Widget _buildLoadingWidget() {
     return const Center(
@@ -851,83 +919,87 @@ class _CheckinRecordListWidgetState extends State<CheckinRecordListWidget> {
   }
 }
 
-/// 打卡记录列表样式配置
-class CheckinRecordListStyle {
-  /// 索引背景色
-  final Color indexBackgroundColor;
-  
-  /// 索引文本样式
-  final TextStyle indexTextStyle;
-  
-  /// 标题文本样式
-  final TextStyle titleTextStyle;
-  
-  /// 排名文本样式
-  final TextStyle rankTextStyle;
+ /// 打卡记录列表样式配置
+ class CheckinRecordListStyle {
+   /// 索引背景色
+   final Color indexBackgroundColor;
+   
+   /// 索引文本样式
+   final TextStyle indexTextStyle;
+   
+   /// 标题文本样式
+   final TextStyle titleTextStyle;
+   
+   /// 排名文本样式
+   final TextStyle rankTextStyle;
 
-  /// 时间文本样式
-  final TextStyle timeTextStyle;
+   /// 时间文本样式
+   final TextStyle timeTextStyle;
 
-  /// 进行中状态的颜色 - 采用苹果风格的鲜明绿色
-  final Color ongoingStatusColor;
+   /// 进行中状态的颜色 - 采用苹果风格的鲜明绿色
+   final Color ongoingStatusColor;
 
-  /// 进行中状态的背景色 - 采用苹果风格的浅绿色渐变基础
-  final Color ongoingBackgroundColor;
+   /// 进行中状态的背景色 - 采用苹果风格的浅绿色渐变基础
+   final Color ongoingBackgroundColor;
 
-  const CheckinRecordListStyle({
-    this.indexBackgroundColor = AppColors.primary,
-    this.indexTextStyle = const TextStyle(
-      color: Colors.white,
-      fontWeight: FontWeight.bold,
-      fontSize: 16,
-    ),
-    this.titleTextStyle = const TextStyle(
-      fontSize: 16,
-      fontWeight: FontWeight.bold,
-      color: Colors.black87,
-    ),
-    this.rankTextStyle = const TextStyle(
-      fontSize: 14,
-      color: AppColors.primary,
-      fontWeight: FontWeight.w600,
-    ),
-    this.timeTextStyle = const TextStyle(
-      fontSize: 12,
-      color: Colors.grey,
-      fontWeight: FontWeight.w400,
-    ),
-    // 苹果风格的鲜明绿色，用于进行中的打卡
-    this.ongoingStatusColor = const Color(0xFF34C759), // 苹果系统绿色
-    // 苹果风格的浅绿色背景，提供柔和的视觉基础
-    this.ongoingBackgroundColor = const Color(0xFFF2FCF5), // 非常浅的绿色
-  });
+   const CheckinRecordListStyle({
+     this.indexBackgroundColor = AppColors.primary,
+     this.indexTextStyle = const TextStyle(
+       color: Colors.white,
+       fontWeight: FontWeight.bold,
+       fontSize: 16,
+     ),
+     this.titleTextStyle = const TextStyle(
+       fontSize: 16,
+       fontWeight: FontWeight.bold,
+       color: Colors.black87,
+     ),
+     this.rankTextStyle = const TextStyle(
+       fontSize: 14,
+       color: AppColors.primary,
+       fontWeight: FontWeight.w600,
+     ),
+     this.timeTextStyle = const TextStyle(
+       fontSize: 12,
+       color: Colors.grey,
+       fontWeight: FontWeight.w400,
+     ),
+     // 苹果风格的鲜明绿色，用于进行中的打卡
+     this.ongoingStatusColor = const Color(0xFF34C759), // 苹果系统绿色
+     // 苹果风格的浅绿色背景，提供柔和的视觉基础
+     this.ongoingBackgroundColor = const Color(0xFFF2FCF5), // 非常浅的绿色
+   });
 
-  /// 创建深色主题样式
-  CheckinRecordListStyle copyWith({
-    Color? indexBackgroundColor,
-    TextStyle? indexTextStyle,
-    TextStyle? titleTextStyle,
-    TextStyle? rankTextStyle,
-    TextStyle? timeTextStyle,
-    Color? ongoingStatusColor,
-    Color? ongoingBackgroundColor,
-  }) {
-    return CheckinRecordListStyle(
-      indexBackgroundColor: indexBackgroundColor ?? this.indexBackgroundColor,
-      indexTextStyle: indexTextStyle ?? this.indexTextStyle,
-      titleTextStyle: titleTextStyle ?? this.titleTextStyle,
-      rankTextStyle: rankTextStyle ?? this.rankTextStyle,
-      timeTextStyle: timeTextStyle ?? this.timeTextStyle,
-      ongoingStatusColor: ongoingStatusColor ?? this.ongoingStatusColor,
-      ongoingBackgroundColor: ongoingBackgroundColor ?? this.ongoingBackgroundColor,
-    );
-  }
-}
+   /// 创建深色主题样式
+   CheckinRecordListStyle copyWith({
+     Color? indexBackgroundColor,
+     TextStyle? indexTextStyle,
+     TextStyle? titleTextStyle,
+     TextStyle? rankTextStyle,
+     TextStyle? timeTextStyle,
+     Color? ongoingStatusColor,
+     Color? ongoingBackgroundColor,
+   }) {
+     return CheckinRecordListStyle(
+       indexBackgroundColor: indexBackgroundColor ?? this.indexBackgroundColor,
+       indexTextStyle: indexTextStyle ?? this.indexTextStyle,
+       titleTextStyle: titleTextStyle ?? this.titleTextStyle,
+       rankTextStyle: rankTextStyle ?? this.rankTextStyle,
+       timeTextStyle: timeTextStyle ?? this.timeTextStyle,
+       ongoingStatusColor: ongoingStatusColor ?? this.ongoingStatusColor,
+       ongoingBackgroundColor: ongoingBackgroundColor ?? this.ongoingBackgroundColor,
+     );
+   }
+ }
 
-/// 便捷创建打卡记录列表的扩展方法
-extension CheckinRecordListExtension on List<Map<String, dynamic>> {
-  /// 转换为 CheckinRecord 列表
-  List<CheckinRecord> toCheckinRecords({void Function(Map<String, dynamic>)? onTap}) {
-    return map((map) => CheckinRecord.fromMap(map, onTap: onTap)).toList();
-  }
-}
+ /// 便捷创建打卡记录列表的扩展方法
+ extension CheckinRecordListExtension on List<Map<String, dynamic>> {
+   /// 转换为 CheckinRecord 列表
+   List<CheckinRecord> toCheckinRecords({void Function(Map<String, dynamic>)? onTap}) {
+     return map((map) => CheckinRecord.fromMap(map, onTap: onTap)).toList();
+   }
+ }
+
+
+
+   

@@ -8,9 +8,9 @@ class ProfileRepository {
 
   ProfileRepository(this._profileApi);
 
-  Future<Profile> getProfile() async {
+  Future<Profile> getProfile({Profile? existingProfile}) async {
     final ProfileApiModel apiModel = await _profileApi.fetchProfile();
-    return _convertApiModelToProfile(apiModel);
+    return _convertApiModelToProfile(apiModel, existingProfile: existingProfile);
   }
 
   // 新增：获取激活分页并转换为业务实体列表
@@ -112,8 +112,8 @@ class ProfileRepository {
     }
   }
 
-  // 转换API模型为业务实体
-  Profile _convertApiModelToProfile(ProfileApiModel apiModel) {
+  // 转换API模型为业务实体（仅基础信息）
+  Profile _convertApiModelToProfile(ProfileApiModel apiModel, {Profile? existingProfile}) {
     return Profile(
       user: User(
         userId: apiModel.user.userId,
@@ -135,36 +135,10 @@ class ProfileRepository {
                 timestep: e.timestep,
               ))
           .toList(),
-      challengeRecords: apiModel.challengeRecords
-          .map((e) => ChallengeRecord(
-                id: e.id,
-                challengeId: e.challengeId,
-                index: e.index,
-                name: e.name,
-                status: e.status,
-                timestep: e.timestep,
-                rank: e.rank,
-              ))
-          .toList(),
-      checkinRecords: apiModel.checkinRecords
-          .map((e) => CheckinRecord(
-                id: e.id,
-                productId: e.productId,
-                index: e.index,
-                name: e.name,
-                status: e.status,
-                timestep: e.timestep,
-                rank: e.rank,
-              ))
-          .toList(),
-      activate: apiModel.activate
-          .map((e) => Activate(
-                challengeId: e.challengeId,
-                challengeName: e.challengeName,
-                productId: e.productId,
-                productName: e.productName,
-              ))
-          .toList(),
+      // 保持现有数据，避免清空已加载的分页数据
+      challengeRecords: existingProfile?.challengeRecords ?? [],
+      checkinRecords: existingProfile?.checkinRecords ?? [],
+      activate: existingProfile?.activate ?? [],
     );
   }
 

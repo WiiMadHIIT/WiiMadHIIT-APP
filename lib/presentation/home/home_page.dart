@@ -31,7 +31,7 @@ class _HomePageContent extends StatelessWidget {
   const _HomePageContent({Key? key}) : super(key: key);
 
   Future<void> _launchOfficialWebsite() async {
-    final Uri url = Uri.parse('https://www.wiimadhiit.com/');
+    final Uri url = Uri.parse('https://www.wiimadhiit.com/?utm_source=WiiMadHIIT_APP_home&utm_medium=app_official_link&utm_campaign=WiiMadHIIT_APP');
     try {
       final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!ok) {

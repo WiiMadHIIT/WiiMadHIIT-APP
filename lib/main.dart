@@ -240,6 +240,12 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
   void _handlePageChange(int newIndex) async {
     final int previousIndex = _currentIndex;
     
+    // 大厂级别：离开Profile页面时，清理分页数据防止内存爆炸
+    if (previousIndex == 4 && newIndex != 4) {
+      print('🔐 MainTabPage: 离开Profile页面，开始清理分页数据');
+      _profilePageKey.currentState?.cleanupPaginatedData();
+    }
+    
     // 大厂级别：Profile页面需要认证检查
     if (newIndex == 4) { // Profile tab
       final isAuthenticated = await _authManager.checkPageAuth(AppRoutes.profile);
