@@ -4,7 +4,8 @@ class AppConfig {
   /// 后端 API 基础地址
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.166:8080', // 本地/临时开放环境
+    defaultValue: 'http://170.106.73.145',
+    // defaultValue: 'http://192.168.1.166:8080', // 本地/临时开放环境
   );
 
   /// 其他可扩展配置（如超时时间、环境名等）
