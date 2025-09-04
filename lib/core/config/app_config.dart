@@ -4,7 +4,8 @@ class AppConfig {
   /// 后端 API 基础地址
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://170.106.73.145',
+    defaultValue: 'https://api.wiimadhiit.com',
+    // defaultValue: 'http://170.106.73.145',
     // defaultValue: 'http://192.168.1.166:8080', // 本地/临时开放环境
   );
 

@@ -53,5 +53,24 @@
 	<string>Photo library access is not used by this app. Your privacy is protected.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Photo library access is not used by this app. Your privacy is protected.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>api.wiimadhiit.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app needs network access to connect to the WiiMadHIIT API services.</string>
 </dict>
 </plist>
