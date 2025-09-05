@@ -18,7 +18,7 @@ class HomePage extends StatefulWidget {
 }
 
 class HomePageState extends State<HomePage> {
-  
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
@@ -99,7 +99,7 @@ class _HomePageContent extends StatelessWidget {
   }
 
   Future<void> _launchYouTube() async {
-    final Uri url = Uri.parse('https://www.youtube.com/@wiimadhiit');
+    final Uri url = Uri.parse('https://www.youtube.com/@WiiMadHIIT');
     try {
       final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!ok) {
