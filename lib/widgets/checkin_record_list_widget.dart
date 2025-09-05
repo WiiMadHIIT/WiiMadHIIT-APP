@@ -226,6 +226,7 @@ class _CheckinRecordListWidgetState extends State<CheckinRecordListWidget> {
     return ListView.builder(
       key: const PageStorageKey('checkinList'),
       padding: widget.padding,
+      physics: const AlwaysScrollableScrollPhysics(), // 确保始终可滚动，支持下拉刷新
       itemCount: widget.records.length + (widget.hasMore ? 1 : 0),
       itemBuilder: (context, index) {
         // 如果是最后一项且还有更多数据，显示加载更多按钮

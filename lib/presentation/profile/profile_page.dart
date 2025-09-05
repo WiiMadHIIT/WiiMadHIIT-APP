@@ -74,6 +74,7 @@ class ProfilePageContentState extends State<ProfilePageContent>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver, AuthGuardMixin {
   late TabController _tabController;
   final GlobalKey<ProfileFunctionGridState> _functionGridKey = GlobalKey<ProfileFunctionGridState>();
+  final ScrollController _scrollController = ScrollController();
   
   // 认证状态管理器
   late final AuthStateManager _authManager = AuthStateManager();
@@ -88,6 +89,7 @@ class ProfilePageContentState extends State<ProfilePageContent>
   @override
   void dispose() {
     _tabController.dispose();
+    _scrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -106,8 +108,9 @@ class ProfilePageContentState extends State<ProfilePageContent>
     _functionGridKey.currentState?.resetScrollHint();
   }
 
-  /// 大厂级别：智能刷新Profile数据
-  /// 有数据时不刷新，无数据时才刷新
+  /// 大厂级别：智能刷新Profile数据（结合时间检查）
+  /// 如果距离上次完整刷新超过24小时，执行完整刷新
+  /// 否则执行智能刷新（有数据时跳过）
   void smartRefreshProfileData() {
     try {
       // 通过 Provider 获取 ViewModel
@@ -119,9 +122,11 @@ class ProfilePageContentState extends State<ProfilePageContent>
         print('🔐 ProfilePage: 无数据，执行刷新');
         viewModel.loadProfile();
       } else {
-        // 有数据时，不刷新，只记录日志
-        print('🔐 ProfilePage: 已有数据，跳过刷新');
+        // 调用新的智能时间检查刷新方法
+        print('🔐 ProfilePage: 调用智能时间检查刷新');
+        viewModel.smartRefreshWithTimeCheck();
       }
+
     } catch (e) {
       print('🔐 ProfilePage: 智能刷新失败: $e');
     }
@@ -138,6 +143,17 @@ class ProfilePageContentState extends State<ProfilePageContent>
       print('🔐 ProfilePage: 分页数据清理完成');
     } catch (e) {
       print('🔐 ProfilePage: 分页数据清理失败: $e');
+    }
+  }
+
+  /// 滚动到顶部
+  void _scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
@@ -471,47 +487,50 @@ class ProfilePageContentState extends State<ProfilePageContent>
 
     final records = viewModel.challengeRecordsForUI;
     
-    return ChallengeRecordListWidget(
-      records: records.toChallengeRecords(
-        onTap: (record) {
-          final status = record['status'] as String;
-          final challengeId = record['challengeId'] as String?;
-          final challengeName = record['name'] as String;
-          
-          if (status == 'ongoing' && challengeId != null) {
-            // 显示挑战装备激活提示弹窗
-            _showChallengeEquipmentActivatedDialog(context, challengeName, challengeId);
-          } else if (status == 'ready' && challengeId != null) {
-            // 显示挑战装备资格获得提示弹窗
-            _showChallengeEquipmentQualifiedDialog(context, challengeName, challengeId);
-          } else {
-            // 其他状态的普通点击处理
-            print('Clicked challenge record: ${record['name']} (ID: ${record['id']}, ChallengeID: ${record['challengeId']})');
-          }
-        },
+    return RefreshIndicator(
+      onRefresh: () => viewModel.refreshChallenges(),
+      child: ChallengeRecordListWidget(
+        records: records.toChallengeRecords(
+          onTap: (record) {
+            final status = record['status'] as String;
+            final challengeId = record['challengeId'] as String?;
+            final challengeName = record['name'] as String;
+            
+            if (status == 'ongoing' && challengeId != null) {
+              // 显示挑战装备激活提示弹窗
+              _showChallengeEquipmentActivatedDialog(context, challengeName, challengeId);
+            } else if (status == 'ready' && challengeId != null) {
+              // 显示挑战装备资格获得提示弹窗
+              _showChallengeEquipmentQualifiedDialog(context, challengeName, challengeId);
+            } else {
+              // 其他状态的普通点击处理
+              print('Clicked challenge record: ${record['name']} (ID: ${record['id']}, ChallengeID: ${record['challengeId']})');
+            }
+          },
+        ),
+        style: const ChallengeRecordListStyle(
+          indexBackgroundColor: AppColors.primary,
+          titleTextStyle: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+          rankTextStyle: TextStyle(
+            fontSize: 14,
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+          ),
+          timeTextStyle: TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+            fontWeight: FontWeight.w400,
+          ),
+          ongoingStatusColor: Color(0xFF00C851),
+          ongoingBackgroundColor: Color(0xFFF0FFF4),
+        ),
+        hasMore: viewModel.hasMoreChallenges,
+        onLoadMore: viewModel.loadMoreChallenges,
       ),
-      style: const ChallengeRecordListStyle(
-        indexBackgroundColor: AppColors.primary,
-        titleTextStyle: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
-        rankTextStyle: TextStyle(
-          fontSize: 14,
-          color: AppColors.primary,
-          fontWeight: FontWeight.w600,
-        ),
-        timeTextStyle: TextStyle(
-          fontSize: 12,
-          color: Colors.grey,
-          fontWeight: FontWeight.w400,
-        ),
-        ongoingStatusColor: Color(0xFF00C851),
-        ongoingBackgroundColor: Color(0xFFF0FFF4),
-      ),
-      hasMore: viewModel.hasMoreChallenges,
-      onLoadMore: viewModel.loadMoreChallenges,
     );
   }
 
@@ -600,42 +619,45 @@ class ProfilePageContentState extends State<ProfilePageContent>
 
     final records = viewModel.checkinRecordsForUI;
     
-    return CheckinRecordListWidget(
-      records: records.toCheckinRecords(
-        onTap: (record) {
-          final status = record['status'] as String;
-          final productId = record['productId'] as String?;
-          final productName = record['name'] as String;
-          
-          if (status == 'ready' && productId != null) {
-            // 显示装备激活提示弹窗
-            _showEquipmentActivatedDialog(context, productName, productId);
-          } else {
-            // 其他状态的普通点击处理
-            print('Clicked checkin record: ${record['name']} (ID: ${record['id']}, ProductID: ${record['productId']})');
-          }
-        },
+    return RefreshIndicator(
+      onRefresh: () => viewModel.refreshCheckins(),
+      child: CheckinRecordListWidget(
+        records: records.toCheckinRecords(
+          onTap: (record) {
+            final status = record['status'] as String;
+            final productId = record['productId'] as String?;
+            final productName = record['name'] as String;
+            
+            if (status == 'ready' && productId != null) {
+              // 显示装备激活提示弹窗
+              _showEquipmentActivatedDialog(context, productName, productId);
+            } else {
+              // 其他状态的普通点击处理
+              print('Clicked checkin record: ${record['name']} (ID: ${record['id']}, ProductID: ${record['productId']})');
+            }
+          },
+        ),
+        style: const CheckinRecordListStyle(
+          indexBackgroundColor: AppColors.primary,
+          titleTextStyle: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+          rankTextStyle: TextStyle(
+            fontSize: 14,
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+          ),
+          timeTextStyle: TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        hasMore: viewModel.hasMoreCheckins,
+        onLoadMore: viewModel.loadMoreCheckins,
       ),
-      style: const CheckinRecordListStyle(
-        indexBackgroundColor: AppColors.primary,
-        titleTextStyle: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
-        rankTextStyle: TextStyle(
-          fontSize: 14,
-          color: AppColors.primary,
-          fontWeight: FontWeight.w600,
-        ),
-        timeTextStyle: TextStyle(
-          fontSize: 12,
-          color: Colors.grey,
-          fontWeight: FontWeight.w400,
-        ),
-      ),
-      hasMore: viewModel.hasMoreCheckins,
-      onLoadMore: viewModel.loadMoreCheckins,
     );
   }
 
@@ -651,6 +673,7 @@ class ProfilePageContentState extends State<ProfilePageContent>
           body: RefreshIndicator(
             onRefresh: () => viewModel.refreshProfile(),
             child: NestedScrollView(
+              controller: _scrollController,
               headerSliverBuilder: (context, innerBoxIsScrolled) => [
                 SliverAppBar(
                   expandedHeight: 320,
@@ -787,63 +810,66 @@ class ProfilePageContentState extends State<ProfilePageContent>
                           left: 0,
                           right: 0,
                           bottom: 90,
-                          child: viewModel.isLoading 
-                            ? const Column(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 48,
-                                    backgroundColor: Colors.white,
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                  SizedBox(height: 12),
-                                  Text('Loading...',
-                                    style: TextStyle(
-                                      color: Colors.black, 
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
+                          child: GestureDetector(
+                            onTap: _scrollToTop,
+                            child: viewModel.isLoading 
+                              ? const Column(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 48,
+                                      backgroundColor: Colors.white,
+                                      child: CircularProgressIndicator(),
                                     ),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                children: [
-                                  // 用户头像
-                                  _SmartAvatar(
-                                    radius: 48,
-                                    avatarUrl: viewModel.avatarUrl,
-                                    fallbackImage: 'assets/images/avatar_default.png',
-                                  ),
-                                  const SizedBox(height: 12),
-                                  // 用户昵称
-                                  Text(viewModel.username,
-                                    style: AppTextStyles.headlineMedium.copyWith(
-                                      color: Colors.black, 
-                                      fontWeight: FontWeight.bold,
+                                    SizedBox(height: 12),
+                                    Text('Loading...',
+                                      style: TextStyle(
+                                        color: Colors.black, 
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  // 用户ID
-                                  Text('User ID: ${viewModel.userId}',
-                                    style: AppTextStyles.bodySmall.copyWith(color: Colors.grey[700]),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 10),
-                                  // 运动天数统计
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      _StatBlock(label: 'Current Streak', value: viewModel.currentStreakText),
-                                      const SizedBox(width: 18),
-                                      _StatBlock(label: 'Days This Year', value: viewModel.daysThisYearText),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    // 用户头像
+                                    _SmartAvatar(
+                                      radius: 48,
+                                      avatarUrl: viewModel.avatarUrl,
+                                      fallbackImage: 'assets/images/avatar_default.png',
+                                    ),
+                                    const SizedBox(height: 12),
+                                    // 用户昵称
+                                    Text(viewModel.username,
+                                      style: AppTextStyles.headlineMedium.copyWith(
+                                        color: Colors.black, 
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // 用户ID
+                                    Text('User ID: ${viewModel.userId}',
+                                      style: AppTextStyles.bodySmall.copyWith(color: Colors.grey[700]),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    // 运动天数统计
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        _StatBlock(label: 'Current Streak', value: viewModel.currentStreakText),
+                                        const SizedBox(width: 18),
+                                        _StatBlock(label: 'Days This Year', value: viewModel.daysThisYearText),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                          ),
                         ),
                         // 荣誉墙
                         Positioned(

@@ -19,8 +19,15 @@ import '../../data/api/bonus_api.dart';
 import '../../core/page_visibility_manager.dart';
 import 'bonus_viewmodel.dart';
 
-class BonusPage extends StatelessWidget {
+class BonusPage extends StatefulWidget {
   const BonusPage({Key? key}) : super(key: key);
+
+  @override
+  State<BonusPage> createState() => BonusPageState();
+}
+
+class BonusPageState extends State<BonusPage> {
+  final GlobalKey<_BonusPageContentState> _contentKey = GlobalKey<_BonusPageContentState>();
 
   @override
   Widget build(BuildContext context) {
@@ -31,8 +38,31 @@ class BonusPage extends StatelessWidget {
         ),
         bonusService: BonusService(),
       )..loadBonusActivities(page: 1, size: 10),
-      child: const _BonusPageContent(),
+      child: _BonusPageContent(key: _contentKey),
     );
+  }
+
+  /// 大厂级别：智能刷新Bonus数据（结合时间检查）
+  /// 如果距离上次完整刷新超过2小时，执行完整刷新
+  /// 否则执行智能刷新（有数据时跳过）
+  void smartRefreshBonusData() {
+    try {
+      // 通过 Provider 获取 ViewModel
+      final viewModel = Provider.of<BonusViewModel>(context, listen: false);
+      
+      // 检查是否有数据
+      if (viewModel.activities.isEmpty) {
+        // 无数据时，执行刷新
+        print('🔐 BonusPage: 无数据，执行刷新');
+        viewModel.loadBonusActivities(page: 1, size: 10);
+      } else {
+        // 调用新的智能时间检查刷新方法
+        print('🔐 BonusPage: 调用智能时间检查刷新');
+        viewModel.smartRefreshWithTimeCheck();
+      }
+    } catch (e) {
+      print('🔐 BonusPage: 智能刷新失败: $e');
+    }
   }
 }
 
@@ -528,31 +558,31 @@ class _BonusPageContentState extends State<_BonusPageContent>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // 活动卡片区域
-                      Container(
-                        constraints: BoxConstraints(
-                          minHeight: math.min(200, MediaQuery.of(context).size.height * 0.28),
-                          maxHeight: math.max(200, MediaQuery.of(context).size.height * 0.28),
-                        ),
+                      SizedBox(
+                        height: 220, // 与 checkin_page.dart 和 challenge_page.dart 保持一致
                         child: PageView.builder(
                           controller: _pageController,
                           itemCount: viewModel.filteredActivities.length + 1, // 添加1个用于刷新按钮
                           physics: const PageScrollPhysics(),
                           onPageChanged: _onPageChanged,
                           itemBuilder: (context, index) {
-                            // 最后一个item显示为刷新按钮
+                            // 最后一个item显示为智能追加加载按钮
                             if (index == viewModel.filteredActivities.length) {
+                              // 调试信息
+                              print('🔍 BonusPage: 刷新按钮状态 - canAppendLoad: ${viewModel.canAppendLoad}, hasNextPage: ${viewModel.hasNextPage}, appendLoadCount: ${viewModel.appendLoadCount}');
+                              
                               return AnimatedScale(
                                 scale: viewModel.currentIndex == index ? 1.0 : 0.92,
                                 duration: const Duration(milliseconds: 300),
                                 child: ElegantRefreshButton(
                                   onRefresh: () async {
-                                    // 🎯 显示加载状态
-                                    viewModel.refresh();
+                                    // 🎯 使用智能追加加载（后端控制是否真正执行）
+                                    await viewModel.smartAppendLoad();
                                     
-                                    // 🎯 等待数据刷新完成
+                                    // 🎯 等待数据加载完成
                                     await Future.delayed(const Duration(milliseconds: 800));
                                     
-                                    // 🎯 刷新完成后回到第一页
+                                    // 🎯 加载完成后回到第一页
                                     if (mounted && _pageController.hasClients) {
                                       _pageController.animateToPage(
                                         0,
@@ -561,8 +591,12 @@ class _BonusPageContentState extends State<_BonusPageContent>
                                       );
                                     }
                                   },
-                                  size: 200,
+                                  size: 220, // 与卡片区域高度保持一致
                                   refreshDuration: const Duration(milliseconds: 800),
+                                  // 智能提示文字
+                                  hintText: viewModel.canAppendLoad 
+                                      ? "Tap to load more" 
+                                      : "No more content",
                                 ),
                               );
                             }

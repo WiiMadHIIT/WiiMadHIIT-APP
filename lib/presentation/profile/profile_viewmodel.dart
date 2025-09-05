@@ -54,6 +54,10 @@ class ProfileViewModel extends ChangeNotifier {
   int challengePageSize = 10;
   bool hasMoreChallenges = true;
 
+  // 新增：时间戳跟踪（用于基于时间的刷新）
+  DateTime? _lastFullRefreshTime;
+  static const Duration _refreshInterval = Duration(hours: 24);
+
   ProfileViewModel({
     required this.getProfileUseCase,
     required this.submitActivationUseCase,
@@ -295,6 +299,82 @@ class ProfileViewModel extends ChangeNotifier {
       print('🔍 ProfileViewModel: 打卡和挑战数据刷新完成');
     } else {
       print('🔍 ProfileViewModel: Profile数据加载失败，跳过打卡和挑战数据刷新');
+    }
+  }
+
+  /// 专门用于Check-ins列表的下拉刷新
+  Future<void> refreshCheckins() async {
+    print('🔍 ProfileViewModel: 开始刷新Check-ins数据');
+    
+    // 先确保Profile数据存在
+    if (profile == null) {
+      print('🔍 ProfileViewModel: Profile数据不存在，先加载Profile');
+      await loadProfile();
+    }
+    
+    // 如果Profile加载成功，只刷新打卡数据
+    if (profile != null) {
+      print('🔍 ProfileViewModel: 开始刷新打卡数据');
+      await loadCheckins(page: 1, size: checkinPageSize);
+      print('🔍 ProfileViewModel: 打卡数据刷新完成');
+    } else {
+      print('🔍 ProfileViewModel: Profile数据加载失败，跳过打卡数据刷新');
+    }
+  }
+
+  /// 专门用于Challenges列表的下拉刷新
+  Future<void> refreshChallenges() async {
+    print('🔍 ProfileViewModel: 开始刷新Challenges数据');
+    
+    // 先确保Profile数据存在
+    if (profile == null) {
+      print('🔍 ProfileViewModel: Profile数据不存在，先加载Profile');
+      await loadProfile();
+    }
+    
+    // 如果Profile加载成功，只刷新挑战数据
+    if (profile != null) {
+      print('🔍 ProfileViewModel: 开始刷新挑战数据');
+      await loadChallenges(page: 1, size: challengePageSize);
+      print('🔍 ProfileViewModel: 挑战数据刷新完成');
+    } else {
+      print('🔍 ProfileViewModel: Profile数据加载失败，跳过挑战数据刷新');
+    }
+  }
+
+  /// 智能刷新：结合时间检查和数据存在性检查
+  /// 如果距离上次完整刷新超过24小时，执行完整刷新
+  /// 否则执行智能刷新（有数据时跳过）
+  Future<void> smartRefreshWithTimeCheck() async {
+    print('🔍 ProfileViewModel: 开始智能时间检查刷新');
+    
+    final now = DateTime.now();
+    final shouldFullRefresh = _lastFullRefreshTime == null || 
+        now.difference(_lastFullRefreshTime!) >= _refreshInterval;
+    
+    if (shouldFullRefresh) {
+      print('🔍 ProfileViewModel: 距离上次完整刷新超过24小时，执行完整刷新');
+      await refreshProfile();
+      _lastFullRefreshTime = now;
+      print('🔍 ProfileViewModel: 完整刷新完成，更新时间戳: $_lastFullRefreshTime');
+    } else {
+      print('🔍 ProfileViewModel: 距离上次完整刷新未超过24小时，执行智能刷新');
+      await smartRefreshProfile();
+    }
+  }
+
+  /// 智能刷新Profile数据（有数据时不刷新，无数据时才刷新）
+  Future<void> smartRefreshProfile() async {
+    print('🔍 ProfileViewModel: 开始智能刷新Profile数据');
+    
+    // 检查是否有数据
+    if (profile == null) {
+      // 无数据时，执行刷新
+      print('🔍 ProfileViewModel: 无数据，执行刷新');
+      await loadProfile();
+    } else {
+      // 有数据时，不刷新，只记录日志
+      print('🔍 ProfileViewModel: 已有数据，跳过刷新');
     }
   }
 
@@ -804,6 +884,9 @@ class ProfileViewModel extends ChangeNotifier {
     checkinCurrentPage = 1;
     challengeTotal = 0;
     challengeCurrentPage = 1;
+    
+    // 清理时间戳
+    _lastFullRefreshTime = null;
     
     // 重置加载状态
     isLoading = false;

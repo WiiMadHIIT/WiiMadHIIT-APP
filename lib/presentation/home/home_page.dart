@@ -10,9 +10,15 @@ import '../../data/api/home_api.dart';
 import '../../domain/usecases/get_home_dashboard_usecase.dart';
 import 'home_viewmodel.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
 
+  @override
+  State<HomePage> createState() => HomePageState();
+}
+
+class HomePageState extends State<HomePage> {
+  
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
@@ -24,6 +30,31 @@ class HomePage extends StatelessWidget {
       )..loadAllData(), // 使用新的并行加载方法
       child: const _HomePageContent(),
     );
+  }
+
+  /// 大厂级别：智能刷新Home数据（结合时间检查）
+  /// 如果距离上次完整刷新超过20小时，执行完整刷新
+  /// 否则执行智能刷新（有数据时跳过）
+  void smartRefreshHomeData() {
+    try {
+      // 通过 Provider 获取 ViewModel
+      final viewModel = Provider.of<HomeViewModel>(context, listen: false);
+      
+      // 检查是否有任何数据
+      final hasAnyData = viewModel.hasAnnouncements || viewModel.hasChampions || viewModel.hasActiveUsers;
+      
+      if (!hasAnyData) {
+        // 无数据时，执行刷新
+        print('🔐 HomePage: 无数据，执行刷新');
+        viewModel.loadAllData();
+      } else {
+        // 调用新的智能时间检查刷新方法
+        print('🔐 HomePage: 调用智能时间检查刷新');
+        viewModel.smartRefreshWithTimeCheck();
+      }
+    } catch (e) {
+      print('🔐 HomePage: 智能刷新失败: $e');
+    }
   }
 }
 

@@ -47,6 +47,10 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   final GlobalKey<ProfilePageState> _profilePageKey = GlobalKey<ProfilePageState>();
+  final GlobalKey<CheckinPageState> _checkinPageKey = GlobalKey<CheckinPageState>();
+  final GlobalKey<ChallengePageState> _challengePageKey = GlobalKey<ChallengePageState>();
+  final GlobalKey<BonusPageState> _bonusPageKey = GlobalKey<BonusPageState>();
+  final GlobalKey<HomePageState> _homePageKey = GlobalKey<HomePageState>();
   
   // 统一认证状态管理器
   late final AuthStateManager _authManager = AuthStateManager();
@@ -69,10 +73,10 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
     ));
     
     _pages = [
-      HomePage(),
-      ChallengePage(),
-      CheckinPage(),
-      BonusPage(),
+      HomePage(key: _homePageKey),
+      ChallengePage(key: _challengePageKey),
+      CheckinPage(key: _checkinPageKey),
+      BonusPage(key: _bonusPageKey),
       ProfilePage(key: _profilePageKey),
     ];
     
@@ -267,8 +271,40 @@ class _MainTabPageState extends State<MainTabPage> with TickerProviderStateMixin
       _currentIndex = newIndex;
     });
     
+    // 大厂级别：当切换到Home页面时，智能刷新数据
+    if (newIndex == 0) { // Home tab (index 0)
+      Future.delayed(const Duration(milliseconds: 100), () {
+        // 大厂级别：调用HomePage的内部方法进行智能刷新
+        _homePageKey.currentState?.smartRefreshHomeData();
+      });
+    }
+    
+    // 大厂级别：当切换到Challenge页面时，智能刷新数据
+    if (newIndex == 1) { // Challenge tab (index 1)
+      Future.delayed(const Duration(milliseconds: 100), () {
+        // 大厂级别：调用ChallengePage的内部方法进行智能刷新
+        _challengePageKey.currentState?.smartRefreshChallengeData();
+      });
+    }
+    
+    // 大厂级别：当切换到Checkin页面时，智能刷新数据
+    if (newIndex == 2) { // Checkin tab (index 2)
+      Future.delayed(const Duration(milliseconds: 100), () {
+        // 大厂级别：调用CheckinPage的内部方法进行智能刷新
+        _checkinPageKey.currentState?.smartRefreshCheckinData();
+      });
+    }
+    
+    // 大厂级别：当切换到Bonus页面时，智能刷新数据
+    if (newIndex == 3) { // Bonus tab (index 3)
+      Future.delayed(const Duration(milliseconds: 100), () {
+        // 大厂级别：调用BonusPage的内部方法进行智能刷新
+        _bonusPageKey.currentState?.smartRefreshBonusData();
+      });
+    }
+    
     // 大厂级别：当切换到Profile页面时，智能刷新数据
-    if (newIndex == 4) {
+    if (newIndex == 4) { // Profile tab (index 4)
       Future.delayed(const Duration(milliseconds: 100), () {
         // 重置滑动提示
         _profilePageKey.currentState?.resetScrollHint();

@@ -265,6 +265,85 @@ class _LoginPageContentState extends State<_LoginPageContent> with TickerProvide
     _slideController.forward();
   }
 
+  /// 大厂级别：缓慢动画切换到登录页面
+  Future<void> _transitionToEmailStepWithAnimation() async {
+    // 第一步：淡出当前页面
+    await _fadeController.reverse();
+    await _slideController.reverse();
+    
+    // 等待淡出完成
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    if (!mounted) return;
+    
+    // 第二步：更新页面状态
+    setState(() {
+      _currentStep = LoginStep.email;
+      // 重置登录相关状态
+      _isLoginCodeSent = false;
+      _loginCountdown = 0;
+      _isSendingCode = false;
+      // 保持邮箱验证状态，因为注册时已经同步了邮箱
+      // _isEmailValid 保持当前状态，不需要重置
+    });
+    
+    // 第三步：缓慢淡入新页面
+    await _fadeController.forward();
+    await _slideController.forward();
+    
+    // 第四步：显示欢迎提示
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    if (mounted) {
+      _showTopBanner('Welcome! Please log in with your registered email',
+          bgColor: Colors.blue, icon: Icons.login, duration: const Duration(seconds: 4));
+    }
+  }
+
+  /// 大厂级别：缓慢动画切换到注册页面
+  Future<void> _transitionToRegisterStepWithAnimation() async {
+    // 第一步：显示切换提示
+    _showTopBanner('Redirecting to registration...',
+        bgColor: Colors.orange, icon: Icons.person_add, duration: const Duration(seconds: 2));
+    
+    // 等待用户看到提示
+    await Future.delayed(const Duration(milliseconds: 800));
+    
+    if (!mounted) return;
+    
+    // 第二步：淡出当前页面
+    await _fadeController.reverse();
+    await _slideController.reverse();
+    
+    // 等待淡出完成
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    if (!mounted) return;
+    
+    // 第三步：更新页面状态
+    setState(() {
+      _currentStep = LoginStep.register;
+      // 重置注册相关状态
+      _isRegisterCodeSent = false;
+      _registerCountdown = 0;
+      _isSendingCode = false;
+      // 保持邮箱验证状态，因为登录时已经同步了邮箱
+      // _isEmailValid 保持当前状态，不需要重置
+    });
+    
+    // 第四步：缓慢淡入新页面
+    await _fadeController.forward();
+    await _slideController.forward();
+    
+    // 第五步：显示欢迎提示
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    if (mounted) {
+      _showTopBanner('Ready to create your account! Please enter your email',
+          bgColor: Colors.purple, icon: Icons.person_add, duration: const Duration(seconds: 4));
+    }
+  }
+
   void _transitionToRegisterStep() {
     setState(() {
       _currentStep = LoginStep.register;
@@ -290,9 +369,12 @@ class _LoginPageContentState extends State<_LoginPageContent> with TickerProvide
     try {
       final vm = Provider.of<LoginViewModel>(context, listen: false);
       if (_currentStep == LoginStep.register) {
+        // 注册时同时更新注册邮箱和登录邮箱，方便用户后续登录
         vm.setRegisterEmail(value);
+        vm.setEmail(value);
       } else {
         vm.setEmail(value);
+        vm.setRegisterEmail(value);
       }
     } catch (_) {}
   }
@@ -1156,7 +1238,7 @@ class _LoginPageContentState extends State<_LoginPageContent> with TickerProvide
         
         // 注册链接
         TextButton(
-          onPressed: _onRegisterPressed,
+          onPressed: _transitionToRegisterStepWithAnimation,
           style: TextButton.styleFrom(
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
@@ -1685,7 +1767,7 @@ class _LoginPageContentState extends State<_LoginPageContent> with TickerProvide
         
         // 登录链接
         TextButton(
-          onPressed: _transitionToEmailStep,
+          onPressed: _transitionToEmailStepWithAnimation,
           style: TextButton.styleFrom(
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
@@ -1771,9 +1853,17 @@ class _LoginPageContentState extends State<_LoginPageContent> with TickerProvide
         _isRegisterLoading = false;
       });
       if (success) {
-        _showTopBanner('Account created successfully!',
-            bgColor: Colors.green, icon: Icons.check_circle);
-        _transitionToEmailStep();
+        // 显示成功提示
+        _showTopBanner('Account created successfully! Redirecting to login...',
+            bgColor: Colors.green, icon: Icons.check_circle, duration: const Duration(seconds: 3));
+        
+        // 等待用户看到成功提示
+        await Future.delayed(const Duration(milliseconds: 1500));
+        
+        if (mounted) {
+          // 执行缓慢的页面切换动画
+          await _transitionToEmailStepWithAnimation();
+        }
       } else {
         _showTopBanner('Registration failed: ${vm.errorMessage ?? 'Please check your code and activation.'}',
             bgColor: Colors.red, icon: Icons.error_outline);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import '../core/theme/app_colors.dart';
 
 /// 🎨 苹果风格优雅刷新按钮组件 - 通用模板
@@ -17,6 +18,8 @@ class ElegantRefreshButton extends StatefulWidget {
   final Color? primaryColor;
   final Duration refreshDuration;
   final bool showStatusIndicator;
+  final String? hintText; // 新增：提示文字
+  final bool canRefresh; // 新增：是否可以刷新
 
   const ElegantRefreshButton({
     super.key,
@@ -25,6 +28,8 @@ class ElegantRefreshButton extends StatefulWidget {
     this.primaryColor,
     this.refreshDuration = const Duration(milliseconds: 1500),
     this.showStatusIndicator = true,
+    this.hintText, // 新增：提示文字参数
+    this.canRefresh = true, // 新增：是否可以刷新，默认可以
   });
 
   @override
@@ -136,46 +141,57 @@ class _ElegantRefreshButtonState extends State<ElegantRefreshButton>
       curve: Curves.easeOutBack,
       child: GestureDetector(
         onTap: _handleRefresh,
-        child: Container(
+        child: SizedBox(
           width: buttonSize,
-          height: buttonSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            // 🎨 苹果风格渐变背景
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.15),
-                Colors.white.withOpacity(0.08),
-                Colors.white.withOpacity(0.05),
-              ],
-              stops: const [0.0, 0.6, 1.0],
-            ),
-            // 🎨 精致的边框
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 1.5,
-            ),
-            // 🎨 苹果风格阴影
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-                spreadRadius: 0,
-              ),
-              BoxShadow(
-                color: Colors.white.withOpacity(0.05),
-                blurRadius: 1,
-                offset: const Offset(0, 1),
-                spreadRadius: 0,
-              ),
-            ],
-          ),
+          height: buttonSize, // 恢复原始高度，圆形文字不需要额外空间
           child: Stack(
             alignment: Alignment.center,
             children: [
+              // 🎨 按钮背景装饰
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  width: buttonSize,
+                  height: buttonSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    // 🎨 苹果风格渐变背景
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withOpacity(0.15),
+                        Colors.white.withOpacity(0.08),
+                        Colors.white.withOpacity(0.05),
+                      ],
+                      stops: const [0.0, 0.6, 1.0],
+                    ),
+                    // 🎨 精致的边框
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1.5,
+                    ),
+                    // 🎨 苹果风格阴影
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                        spreadRadius: 0,
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.05),
+                        blurRadius: 1,
+                        offset: const Offset(0, 1),
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
               // 🎨 背景光晕效果
               AnimatedBuilder(
                 animation: _pulseAnimation,
@@ -206,7 +222,7 @@ class _ElegantRefreshButtonState extends State<ElegantRefreshButton>
                 height: iconSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: primaryColor.withOpacity(0.9),
+                  color: primaryColor.withOpacity(0.9), // 始终显示为可刷新状态
                   boxShadow: [
                     BoxShadow(
                       color: primaryColor.withOpacity(0.3),
@@ -243,10 +259,113 @@ class _ElegantRefreshButtonState extends State<ElegantRefreshButton>
                     ),
                   ),
                 ),
+              
+              // 🎨 提示文字 - 围绕主图标容器底部圆弧显示
+              if (widget.hintText != null)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: CircularTextPainter(
+                      text: widget.hintText!,
+                      textColor: Colors.white, // 始终显示为可刷新状态
+                      radius: (buttonSize / 2) * 0.8, // 使用按钮半径的80%，确保在边界内
+                      fontSize: 9, // 稍微减小字体，让文字更紧凑
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
   }
-} 
+}
+
+/// 🎨 圆形文字绘制器
+class CircularTextPainter extends CustomPainter {
+  final String text;
+  final Color textColor;
+  final double radius;
+  final double fontSize;
+
+  CircularTextPainter({
+    required this.text,
+    required this.textColor,
+    required this.radius,
+    required this.fontSize,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 确保圆心在画布中心
+    final center = Offset(size.width / 2, size.height / 2);
+    
+    // 创建文字样式
+    final textStyle = TextStyle(
+      color: textColor,
+      fontSize: fontSize,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.5,
+    );
+    
+    // 创建文字测量器
+    final textPainter = TextPainter(
+      text: TextSpan(text: text, style: textStyle),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    
+    // 计算文字总宽度
+    final textWidth = textPainter.width;
+    final textLength = text.length;
+    
+    // 计算底部圆弧的角度范围（从右侧到左侧）
+    // 使用更小的角度范围，主要集中在底部
+    final startAngle = math.pi * 0.25; // 从约45度开始（右下角）
+    final endAngle = math.pi * 0.75;   // 到约135度结束（左下角）
+    final totalAngle = endAngle - startAngle; // 角度递增
+    
+    // 计算每个字符的角度间隔
+    final anglePerChar = textLength > 1 ? totalAngle / (textLength - 1) : 0.0;
+    
+    // 绘制每个字符
+    for (int i = 0; i < textLength; i++) {
+      final char = text[i];
+      final angle = textLength > 1 ? startAngle + (i * anglePerChar) : startAngle; // 从小到大，让文字从右到左排列
+      
+      // 计算字符位置
+      final x = center.dx + radius * math.cos(angle);
+      final y = center.dy + radius * math.sin(angle);
+      
+      // 创建单个字符的TextPainter
+      final charPainter = TextPainter(
+        text: TextSpan(text: char, style: textStyle),
+        textDirection: TextDirection.ltr,
+      );
+      charPainter.layout();
+      
+      // 保存画布状态
+      canvas.save();
+      
+      // 移动到字符位置
+      canvas.translate(x, y);
+      
+      // 旋转画布使字符正着显示（不朝向圆心）
+      canvas.rotate(angle - math.pi / 2);
+      
+      // 绘制字符
+      charPainter.paint(canvas, Offset(-charPainter.width / 2, -charPainter.height / 2));
+      
+      // 恢复画布状态
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) {
+    return oldDelegate is CircularTextPainter &&
+        (oldDelegate.text != text ||
+            oldDelegate.textColor != textColor ||
+            oldDelegate.radius != radius ||
+            oldDelegate.fontSize != fontSize);
+  }
+}

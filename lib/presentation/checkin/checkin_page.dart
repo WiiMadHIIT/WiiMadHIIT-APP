@@ -22,8 +22,15 @@ import 'checkin_viewmodel.dart';
 
 // 移除旧的ProductCheckin类，使用CheckinProduct实体
 
-class CheckinPage extends StatelessWidget {
+class CheckinPage extends StatefulWidget {
   const CheckinPage({Key? key}) : super(key: key);
+
+  @override
+  State<CheckinPage> createState() => CheckinPageState();
+}
+
+class CheckinPageState extends State<CheckinPage> {
+  final GlobalKey<_CheckinPageContentState> _contentKey = GlobalKey<_CheckinPageContentState>();
 
   @override
   Widget build(BuildContext context) {
@@ -34,8 +41,31 @@ class CheckinPage extends StatelessWidget {
           CheckinService(),
         ),
       )..loadCheckinProducts(page: 1, size: 10), // Initial load with pagination
-      child: const _CheckinPageContent(),
+      child: _CheckinPageContent(key: _contentKey),
     );
+  }
+
+  /// 大厂级别：智能刷新Checkin数据（结合时间检查）
+  /// 如果距离上次完整刷新超过24小时，执行完整刷新
+  /// 否则执行智能刷新（有数据时跳过）
+  void smartRefreshCheckinData() {
+    try {
+      // 通过 Provider 获取 ViewModel
+      final viewModel = Provider.of<CheckinViewModel>(context, listen: false);
+      
+      // 检查是否有数据
+      if (viewModel.products.isEmpty) {
+        // 无数据时，执行刷新
+        print('🔐 CheckinPage: 无数据，执行刷新');
+        viewModel.loadCheckinProducts(page: 1, size: 10);
+      } else {
+        // 调用新的智能时间检查刷新方法
+        print('🔐 CheckinPage: 调用智能时间检查刷新');
+        viewModel.smartRefreshWithTimeCheck();
+      }
+    } catch (e) {
+      print('🔐 CheckinPage: 智能刷新失败: $e');
+    }
   }
 }
 
@@ -552,20 +582,23 @@ class _CheckinPageContentState extends State<_CheckinPageContent>
                       physics: const PageScrollPhysics(), // 强磁吸
                       onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) {
-                        // 最后一个item显示为刷新按钮
+                        // 最后一个item显示为智能追加加载按钮
                         if (index == viewModel.products.length) {
+                          // 调试信息
+                          print('🔍 CheckinPage: 刷新按钮状态 - canAppendLoad: ${viewModel.canAppendLoad}, hasNextPage: ${viewModel.hasNextPage}, appendLoadCount: ${viewModel.appendLoadCount}');
+                          
                           return AnimatedScale(
                             scale: viewModel.currentIndex == index ? 1.0 : 0.92,
                             duration: const Duration(milliseconds: 300),
                             child: ElegantRefreshButton(
                               onRefresh: () async {
-                                // 🎯 显示加载状态
-                                viewModel.refresh();
+                                // 🎯 使用智能追加加载（后端控制是否真正执行）
+                                await viewModel.smartAppendLoad();
                                 
-                                // 🎯 等待数据刷新完成
+                                // 🎯 等待数据加载完成
                                 await Future.delayed(const Duration(milliseconds: 800));
                                 
-                                // 🎯 刷新完成后回到第一页
+                                // 🎯 加载完成后回到第一页
                                 if (mounted && _pageController.hasClients) {
                                   _pageController.animateToPage(
                                     0,
@@ -576,6 +609,10 @@ class _CheckinPageContentState extends State<_CheckinPageContent>
                               },
                               size: 200,
                               refreshDuration: const Duration(milliseconds: 800),
+                              // 移除canRefresh参数，UI始终显示为可刷新状态
+                              hintText: viewModel.canAppendLoad 
+                                  ? "Tap to load more" 
+                                  : "No more content", // 智能提示文字
                             ),
                           );
                         }

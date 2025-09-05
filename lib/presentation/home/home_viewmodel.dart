@@ -24,6 +24,10 @@ class HomeViewModel extends ChangeNotifier {
   bool isChampionsLoading = false;
   bool isActiveUsersLoading = false;
 
+  // 新增：时间戳跟踪（用于基于时间的刷新）
+  DateTime? _lastFullRefreshTime;
+  static const Duration _refreshInterval = Duration(hours: 20);
+
   HomeViewModel({
     required this.getHomeAnnouncementsUseCase,
     required this.getHomeChampionsUseCase,
@@ -106,6 +110,44 @@ class HomeViewModel extends ChangeNotifier {
     ]);
   }
 
+  /// 智能刷新：结合时间检查和数据存在性检查
+  /// 如果距离上次完整刷新超过20小时，执行完整刷新
+  /// 否则执行智能刷新（有数据时跳过）
+  Future<void> smartRefreshWithTimeCheck() async {
+    print('🔍 HomeViewModel: 开始智能时间检查刷新');
+    
+    final now = DateTime.now();
+    final shouldFullRefresh = _lastFullRefreshTime == null || 
+        now.difference(_lastFullRefreshTime!) >= _refreshInterval;
+    
+    if (shouldFullRefresh) {
+      print('🔍 HomeViewModel: 距离上次完整刷新超过20小时，执行完整刷新');
+      await refreshAllData();
+      _lastFullRefreshTime = now;
+      print('🔍 HomeViewModel: 完整刷新完成，更新时间戳: $_lastFullRefreshTime');
+    } else {
+      print('🔍 HomeViewModel: 距离上次完整刷新未超过20小时，执行智能刷新');
+      await smartRefresh();
+    }
+  }
+
+  /// 智能刷新Home数据（有数据时不刷新，无数据时才刷新）
+  Future<void> smartRefresh() async {
+    print('🔍 HomeViewModel: 开始智能刷新Home数据');
+    
+    // 检查是否有任何数据
+    final hasAnyData = hasAnnouncements || hasChampions || hasActiveUsers;
+    
+    if (!hasAnyData) {
+      // 无数据时，执行刷新
+      print('🔍 HomeViewModel: 无数据，执行刷新');
+      await loadAllData();
+    } else {
+      // 有数据时，不刷新，只记录日志
+      print('🔍 HomeViewModel: 已有数据，跳过刷新');
+    }
+  }
+
   // 计算属性 - 新架构
   bool get hasAnnouncements => announcements != null && announcements!.isNotEmpty;
   bool get hasChampions => recentChampions != null && recentChampions!.isNotEmpty;
@@ -160,6 +202,34 @@ class HomeViewModel extends ChangeNotifier {
     announcementsError = null;
     championsError = null;
     activeUsersError = null;
+    notifyListeners();
+  }
+
+  /// 清理所有数据（用于退出登录时）
+  void clearAllData() {
+    print('🔍 HomeViewModel: 清理所有数据');
+    
+    // 清理数据
+    announcements = null;
+    recentChampions = null;
+    activeUsers = null;
+    
+    // 清理错误状态
+    announcementsError = null;
+    championsError = null;
+    activeUsersError = null;
+    
+    // 清理时间戳
+    _lastFullRefreshTime = null;
+    
+    // 重置加载状态
+    isAnnouncementsLoading = false;
+    isChampionsLoading = false;
+    isActiveUsersLoading = false;
+    
+    print('🔍 HomeViewModel: 所有数据已清理完成');
+    
+    // 通知监听器更新UI
     notifyListeners();
   }
 }

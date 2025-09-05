@@ -241,6 +241,7 @@ class _ChallengeRecordListWidgetState extends State<ChallengeRecordListWidget> {
     return ListView.builder(
       key: const PageStorageKey('challengeList'),
       padding: widget.padding,
+      physics: const AlwaysScrollableScrollPhysics(), // 确保始终可滚动，支持下拉刷新
       itemCount: widget.records.length + (widget.hasMore ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == widget.records.length) {
